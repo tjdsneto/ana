@@ -22,9 +22,10 @@ surface on top. This is the client-facing door.
 Insert the root node (`status = queued`) from a brief; return the `production_id` immediately. Does
 **not** run the production — the engine worker picks it up (spec 02).
 
-- in: `{ brief: string, session_id: string, options?: {...} }`
+- in: `{ brief: string, session_id: string, options?: {...} }` — no `account_id` in v0; the server
+  resolves `Store.defaultAccount()` and stamps the root. (v1: auth maps the caller to its account.)
 - out: `{ production_id: string, status: "queued" }`
-- Store: `createProduction(...)`.
+- Store: `defaultAccount()` then `createProduction({ accountId, ... })`.
 
 ### `get_status` — DIRECT
 
@@ -36,12 +37,13 @@ Read production + node/version progress.
 
 ### `inbox` — DIRECT
 
-The pending **interaction** queue for this production (spec 01), typed. This is how the client learns
-there is something to `present` (MCP can't push — spec 02 "the nudge").
+The pending **`human_output`** queue for this production (spec 01) — everything the engine needs the
+user to see, typed. This is how the client learns there is something to `present` (MCP can't push —
+spec 02 "the nudge").
 
 - in: `{ production_id: string }`
-- out: `{ interactions: [{ id, type, node_id, version_id, prompt, options }] }`
-- Store: `pendingInteractions(...)`.
+- out: `{ outputs: [{ id, type, node_id, version_id, prompt, options }] }`
+- Store: `pendingOutputs(...)`.
 
 ### `get_deliverable` — DIRECT
 
@@ -53,21 +55,22 @@ Read a produced version's artifact (the drafts/renders the loop wrote).
 
 ### `approve` — DIRECT
 
-Resolve a `present` interaction with approval → version + node `approved`; the worker rolls up on its
-next pass.
+Record an `approve` `human_input` against a `present` output → version + node `approved`; the output
+resolves; the worker rolls up on its next pass.
 
-- in: `{ interaction_id: string }` (or `{ version_id }`)
+- in: `{ output_id: string }` (or `{ version_id }`)
 - out: `{ ok: true }`
-- Store: `resolveInteraction(..., "approve")` + `updateVersion`/`updateNodeStatus`.
+- Store: `recordInput({ kind: "approve", responds_to })` + `resolveOutput` + `updateVersion`/`updateNodeStatus`.
 
 ### `submit_feedback` — DIRECT
 
-Resolve a `present` with feedback → version `denied`, feedback stored (→ a learned rule), node back to
-`pending`; the worker redoes on its next pass, fed the feedback (spec 02).
+Record a `feedback` `human_input` → version `denied`, the feedback event stored (→ a learned rule,
+persisted separately per spec 01), node back to `pending`; the worker redoes on its next pass, fed the
+feedback (spec 02).
 
-- in: `{ interaction_id: string, body: string }` (or `{ production_id, target, body }`)
+- in: `{ output_id: string, body: string }` (or `{ production_id, target, body }` for unsolicited feedback — `responds_to` null)
 - out: `{ ok: true }`
-- Store: `resolveInteraction`, `addFeedback`, status updates.
+- Store: `recordInput({ kind: "feedback", responds_to?, body })` + `resolveOutput` (when answering an output) + status updates.
 
 ### `approve_budget` — DIRECT
 
@@ -77,9 +80,10 @@ Flip the money-gate flag so the worker may proceed past a render-spend gate.
 - out: `{ ok: true }`
 - Store: `approveBudget(...)`.
 
-> **v0 interaction scope:** the worker emits `present` only; `ask` / `notify` are schema-supported but
-> unused. `inbox` already returns them typed, so adding `ask`/`notify` later needs no tool change —
-> only client handling.
+> **v0 human-contact scope:** the worker emits `present` `human_output` only (+ the matching
+> `approve`/`feedback` `human_input`); `ask` / `notify` / `answer` are schema-supported but unused.
+> `inbox` already returns outputs typed, so adding `ask`/`notify` later needs no tool change — only
+> client handling.
 
 ## Transport
 

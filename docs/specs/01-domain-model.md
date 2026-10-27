@@ -16,6 +16,7 @@ sub-project, or a single work item. A node has a **type**; the loop resolves the
 ```
 node {
   id
+  account_id             // root only: the account (tenant) that owns this production — see Accounts below
   production_id          // groups one tree; the root's own id
   parent_id              // null = root = the production
   type                   // resolved against the type registry (see below)
@@ -35,6 +36,28 @@ Two orthogonal axes (do not conflate):
 - **children = measuring progress (decomposition).** Vertical. A node *with* children is a
   **sub-project** — its status derives from its children. A node *without* children is a **leaf** — it
   progresses through its **versions**.
+
+## Account — the tenant seam
+
+An **account** owns productions. It is the brand/tenant the design calls out as a v1 concern
+(`key-decisions.md` D1, `lisa-loop-design.md` §36 note). We pull the abstraction forward **now** — not
+the multi-tenancy, just the seam — so nothing has to be retrofitted later.
+
+```
+account {
+  id
+  name
+  created_at
+}
+```
+
+- **PoC runs single-account.** One **default** account is seeded at init; every production is created
+  under it. Code never hardcodes "there is one account" — it always reads/writes `account_id`, which
+  happens to resolve to the default. That is the whole point: the join exists, the data is there, and
+  turning on real tenancy later is adding rows + auth, not a migration.
+- `account_id` lives on the **root node** (the production); the tree inherits it via `production_id`.
+- Tenant metadata that is *not* recursive (owner, delivery target, billing) is deferred — the table is
+  deliberately thin for v0. Grow it when the external phase needs it.
 
 ## Versions — the feedback history of a leaf
 
@@ -82,39 +105,57 @@ review {
 }
 ```
 
-## Interactions — the typed human-contact queue
+## Human contact — split by direction (`human_output` / `human_input`)
 
-Engine↔user contact is an explicit **typed queue**, not inferred from `node.status`. The loop writes
-interaction requests; the client reads the pending queue, handles each by type, writes the response
-back.
+Engine↔user contact is explicit and **typed by direction**, not inferred from `node.status`. Two
+tables, defined from the **engine's** point of view:
+
+- **`human_output`** — everything the engine needs to **show the user** (engine → user).
+- **`human_input`** — everything that **comes from the user** (user → engine).
+
+> Direction is defined, not guessed: `human_output` = *output the engine sends out to the human*;
+> `human_input` = *input the engine receives from the human*. (If this reads ambiguous in code,
+> `to_human` / `from_human` are the unambiguous fallbacks — one decision, easy to swap.)
 
 ```
-interaction {
-  id, production_id, node_id?, version_id?
+human_output {
+  id, account_id, production_id, node_id?, version_id?
   type                   // present | ask | notify
-  status                 // pending | resolved
+  status                 // pending | resolved   (resolved when a human_input answers it)
   prompt
   options                // JSON, for `ask`
-  response
   created_at, resolved_at
+}
+
+human_input {
+  id, account_id, production_id, node_id?, version_id?
+  responds_to            // human_output.id it answers — NULLABLE (unsolicited feedback has none)
+  kind                   // approve | feedback | answer
+  body                   // feedback text / the chosen answer
+  created_at
 }
 ```
 
-- **present** — show a presentable version → user approves or gives feedback.
-- **ask** — request a decision, optionally with options → user answers.
-- **notify** — inform the user (e.g. "render started, ~$X") → ack.
+**`human_output` types** (what to show): **present** a presentable version · **ask** a decision
+(optionally with options) · **notify** a heads-up (e.g. "render started, ~$X").
 
-**v0 emits `present` only.** `ask` / `notify` are schema-supported for when the loop needs them.
+**`human_input` kinds** (what came back): **approve** a version · **feedback** (denies + text →
+learns a rule) · **answer** an `ask`.
 
-## Feedback & budget
+- A `present` → `approve`/`feedback` is one exchange across the two tables, linked by `responds_to`.
+- **`human_input` absorbs the old `feedback` table** — feedback is just input from the human. The
+  *learned rule* it produces is a **separate** concern (it persists across productions in
+  client-preferences / a learnings store), not a row here.
+- **v0 emits `present` only** (+ the matching `approve`/`feedback` inputs). `ask` / `notify` / `answer`
+  are schema-supported for when the loop needs them.
+
+## Budget
 
 ```
-feedback { id, production_id, target, body, created_at }   // human feedback → becomes a learned rule
-budget   { production_id, approved }                       // the money-gate flag (render-spend cap)
+budget { production_id, approved }   // the money-gate flag (render-spend cap)
 ```
 
-`budget` is a single flag for v0. Promote to a `cost_events` table only if/when we track real render
-spend.
+A single flag for v0. Promote to a `cost_events` table only if/when we track real render spend.
 
 ## The type registry — files, not tables
 
@@ -141,7 +182,7 @@ out of this one mechanism — see spec 02.
 
 | thing | home | why |
 |-------|------|-----|
-| node, version, review, interaction, feedback, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
+| account, node, version, review, human_output, human_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
 | artifacts (storyboard.md, render, audio) | **files** on the shared volume | big; referenced from the DB by `artifact_path` |
 | type contracts + rubrics + producer skills | **files** (type registry) | behavior, the craft/IP; not state |
 

@@ -17,8 +17,12 @@ One interface over every table in spec 01. Tool handlers and the loop call `Stor
 
 ```ts
 export interface Store {
+	// accounts (the tenant seam — PoC resolves to one default)
+	defaultAccount(): Promise<Account>                            // seeds on first call; always returns the default in v0
+	getAccount(id: string): Promise<Account | null>
+
 	// productions / nodes
-	createProduction(input: NewProduction): Promise<Node>          // inserts the root node
+	createProduction(input: NewProduction): Promise<Node>          // inserts the root node under input.accountId
 	getNode(id: string): Promise<Node | null>
 	getProduction(id: string): Promise<Node | null>               // the root node
 	listReadyNodes(productionId: string): Promise<Node[]>         // pending + deps approved + parent active
@@ -34,13 +38,13 @@ export interface Store {
 	addReview(input: NewReview): Promise<Review>
 	reviewsFor(versionId: string): Promise<Review[]>
 
-	// interactions (the typed human queue)
-	emitInteraction(input: NewInteraction): Promise<Interaction>
-	pendingInteractions(productionId: string): Promise<Interaction[]>   // the client `inbox`
-	resolveInteraction(id: string, response: string): Promise<void>
+	// human contact — split by direction (spec 01)
+	emitOutput(input: NewHumanOutput): Promise<HumanOutput>        // engine → user (present | ask | notify)
+	pendingOutputs(productionId: string): Promise<HumanOutput[]>   // the client `inbox`: unresolved human_output
+	recordInput(input: NewHumanInput): Promise<HumanInput>         // user → engine (approve | feedback | answer)
+	resolveOutput(id: string): Promise<void>                       // mark a human_output resolved (an input answered it)
 
-	// feedback / budget
-	addFeedback(input: NewFeedback): Promise<void>
+	// budget
 	getBudget(productionId: string): Promise<Budget>
 	approveBudget(productionId: string): Promise<void>
 }
@@ -87,11 +91,20 @@ Injected everywhere a timestamp or id is created, so tests are reproducible.
 ## SQLite schema (behind the Store)
 
 Falls out of spec 01. One `nodes` table (no separate productions/jobs table — the root node *is* the
-production). Lives in `server/shared` as migrations.
+production), plus a thin `accounts` table (the tenant seam — PoC seeds one default row). Lives in
+`server/shared` as migrations.
 
 ```sql
+CREATE TABLE accounts (
+	id         TEXT PRIMARY KEY,
+	name       TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+-- PoC seeds exactly one default account on init; every production points at it via nodes.account_id.
+
 CREATE TABLE nodes (
 	id            TEXT PRIMARY KEY,
+	account_id    TEXT REFERENCES accounts(id), -- root only: the owning account (tenant); NULL on children
 	production_id TEXT NOT NULL,            -- groups one tree; equals the root node's id
 	parent_id     TEXT,                     -- NULL = root = the production
 	type          TEXT NOT NULL,            -- resolved against the type registry (files)
@@ -106,6 +119,7 @@ CREATE TABLE nodes (
 );
 CREATE INDEX idx_nodes_production ON nodes(production_id);
 CREATE INDEX idx_nodes_parent     ON nodes(parent_id);
+CREATE INDEX idx_nodes_account    ON nodes(account_id);
 
 CREATE TABLE versions (
 	id              TEXT PRIMARY KEY,
@@ -132,8 +146,10 @@ CREATE TABLE reviews (
 	created_at TEXT NOT NULL
 );
 
-CREATE TABLE interactions (
+-- engine → user: everything to SHOW the user
+CREATE TABLE human_output (
 	id            TEXT PRIMARY KEY,
+	account_id    TEXT,
 	production_id TEXT NOT NULL,
 	node_id       TEXT,
 	version_id    TEXT,
@@ -141,19 +157,24 @@ CREATE TABLE interactions (
 	status        TEXT NOT NULL,            -- pending | resolved
 	prompt        TEXT,
 	options       TEXT,                     -- JSON (for ask)
-	response      TEXT,
 	created_at    TEXT NOT NULL,
 	resolved_at   TEXT
 );
-CREATE INDEX idx_interactions_pending ON interactions(production_id, status);
+CREATE INDEX idx_human_output_pending ON human_output(production_id, status);
 
-CREATE TABLE feedback (
+-- user → engine: everything FROM the user (absorbs the old feedback table)
+CREATE TABLE human_input (
 	id            TEXT PRIMARY KEY,
+	account_id    TEXT,
 	production_id TEXT NOT NULL,
-	target        TEXT,                     -- node/version the feedback is about
-	body          TEXT NOT NULL,
+	node_id       TEXT,
+	version_id    TEXT,
+	responds_to   TEXT REFERENCES human_output(id), -- the output it answers; NULL = unsolicited (e.g. ad-hoc feedback)
+	kind          TEXT NOT NULL,            -- approve | feedback | answer
+	body          TEXT,                     -- feedback text / chosen answer
 	created_at    TEXT NOT NULL
 );
+CREATE INDEX idx_human_input_production ON human_input(production_id);
 
 CREATE TABLE budget (
 	production_id TEXT PRIMARY KEY,
@@ -167,7 +188,7 @@ Timestamps are ISO-8601 TEXT (SQLite has no native datetime); the `Clock` produc
 
 - **Core (loop + tool handlers):** unit tests against `FakeStore` + `FakeSubagentRunner` +
   `StubRenderClient` + fixed `Clock`/`IdGen`. No I/O. These are the tests that matter most — they pin
-  the dispatch logic, the redo cap, the rollup, the interaction emission.
+  the dispatch logic, the redo cap, the rollup, the `human_output` emission.
 - **Adapters:** thin focused tests. The SQLite `Store` against a temp DB file; the `claude -p` runner
   behind a flag (not in the default suite — it costs real calls); the render stub trivially.
 - **Runner:** vitest (locked). Keep the suite fast and deterministic.
