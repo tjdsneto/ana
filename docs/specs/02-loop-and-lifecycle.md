@@ -17,7 +17,7 @@ queued → producing → review → done
 
 - **queued** — `request_video` (spec 04) inserted the root; the worker has not picked it up.
 - **producing** — the worker is walking the tree, producing and reviewing nodes.
-- **review** — one or more versions are `presentable` and waiting on the human gate (via `human_output`).
+- **review** — one or more versions are `presentable` and waiting on the human gate (via `chat_output`).
 - **done** — the root node is approved (completion rolled up from the leaves).
 
 These are the production-level rollup of the per-node / per-version statuses in spec 01.
@@ -28,7 +28,7 @@ The engine worker is a single long-running process (v0 — no queue/broker):
 
 1. **Poll** the DB every `POLL_INTERVAL_MS` for productions with actionable work.
 2. For each, find **ready nodes** and **run one dispatch step** per ready node.
-3. **Write** results (versions, reviews, status, `human_output`) back to the DB.
+3. **Write** results (versions, reviews, status, `chat_output`) back to the DB.
 4. Repeat. The loop is **re-runnable**: it reads state fresh each pass and uses version↔subagent
    association (spec 01) to avoid re-dispatching in-flight work.
 
@@ -93,25 +93,25 @@ it has good-enough info, then presents the extracted key points for agreement. I
   parent**, which is presented and approved → the parent completes → up the tree to the root.
 - When the **root** is approved, the production is `done`.
 
-## Human gate — via `human_output`, never inline
+## Human gate — via `chat_output`, never inline
 
-When a version becomes `presentable`, the loop writes a **`present` `human_output`** (spec 01) and
-stops. It does not present and does not wait. The client (spec 04) reads the pending `human_output`
-queue, presents to the user, and writes the verdict back as a `human_input` (`responds_to` = that
+When a version becomes `presentable`, the loop writes a **`present` `chat_output`** (spec 01) and
+stops. It does not present and does not wait. The client (spec 04) reads the pending `chat_output`
+queue, presents to the user, and writes the verdict back as a `chat_input` (`responds_to` = that
 output):
 
-- **approve** (`human_input.kind = approve`) → version + node `approved`; the `human_output` resolves;
+- **approve** (`chat_input.kind = approve`) → version + node `approved`; the `chat_output` resolves;
   roll up.
-- **feedback** (`human_input.kind = feedback`) → version `denied`, the feedback event stored, **learn a
+- **feedback** (`chat_input.kind = feedback`) → version `denied`, the feedback event stored, **learn a
   rule** (the rule persists separately — spec 01), node back to `pending` → the loop redoes, fed that
   feedback.
 
 Two feedback sources, kept distinct: the internal reviewer's `revise` → silent redo; the user's
-`human_input` feedback → a learned rule + redo.
+`chat_input` feedback → a learned rule + redo.
 
 ## The nudge (how the client hears about a `present`)
 
-MCP cannot push (see the design §16). v0: the client **polls** the pending `human_output` queue
+MCP cannot push (see the design §16). v0: the client **polls** the pending `chat_output` queue
 (`inbox`) and presents — or an optional headless dialer pushes into the live client session. Poll
 first; add push later. v1: a background executor pushes to a notification channel. Either way, **the
 loop only marks the data; the client presents.**

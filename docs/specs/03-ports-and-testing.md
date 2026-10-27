@@ -17,12 +17,14 @@ One interface over every table in spec 01. Tool handlers and the loop call `Stor
 
 ```ts
 export interface Store {
-	// accounts (the tenant seam — PoC resolves to one default)
+	// accounts + users (the tenant/identity seam — PoC resolves to one default each)
 	defaultAccount(): Promise<Account>                            // seeds on first call; always returns the default in v0
 	getAccount(id: string): Promise<Account | null>
+	defaultUser(): Promise<User>                                  // seeds the default user under the default account
+	getUser(id: string): Promise<User | null>
 
 	// productions / nodes
-	createProduction(input: NewProduction): Promise<Node>          // inserts the root node under input.accountId
+	createProduction(input: NewProduction): Promise<Node>          // inserts the root node under input.accountId + input.userId
 	getNode(id: string): Promise<Node | null>
 	getProduction(id: string): Promise<Node | null>               // the root node
 	listReadyNodes(productionId: string): Promise<Node[]>         // pending + deps approved + parent active
@@ -38,11 +40,11 @@ export interface Store {
 	addReview(input: NewReview): Promise<Review>
 	reviewsFor(versionId: string): Promise<Review[]>
 
-	// human contact — split by direction (spec 01)
-	emitOutput(input: NewHumanOutput): Promise<HumanOutput>        // engine → user (present | ask | notify)
-	pendingOutputs(productionId: string): Promise<HumanOutput[]>   // the client `inbox`: unresolved human_output
-	recordInput(input: NewHumanInput): Promise<HumanInput>         // user → engine (approve | feedback | answer)
-	resolveOutput(id: string): Promise<void>                       // mark a human_output resolved (an input answered it)
+	// chat I/O — split by direction (spec 01)
+	emitOutput(input: NewChatOutput): Promise<ChatOutput>        // engine → chat (present | ask | notify)
+	pendingOutputs(productionId: string): Promise<ChatOutput[]>   // the client `inbox`: unresolved chat_output
+	recordInput(input: NewChatInput): Promise<ChatInput>         // chat → engine (approve | feedback | answer)
+	resolveOutput(id: string): Promise<void>                       // mark a chat_output resolved (an input answered it)
 
 	// budget
 	getBudget(productionId: string): Promise<Budget>
@@ -100,11 +102,20 @@ CREATE TABLE accounts (
 	name       TEXT NOT NULL,
 	created_at TEXT NOT NULL
 );
--- PoC seeds exactly one default account on init; every production points at it via nodes.account_id.
+
+CREATE TABLE users (
+	id         TEXT PRIMARY KEY,
+	account_id TEXT NOT NULL REFERENCES accounts(id), -- account 1—* users
+	name       TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+-- PoC seeds exactly one default account + one default user on init; every production points at them
+-- via nodes.account_id / nodes.user_id.
 
 CREATE TABLE nodes (
 	id            TEXT PRIMARY KEY,
 	account_id    TEXT REFERENCES accounts(id), -- root only: the owning account (tenant); NULL on children
+	user_id       TEXT REFERENCES users(id),    -- root only: the user who requested it; NULL on children
 	production_id TEXT NOT NULL,            -- groups one tree; equals the root node's id
 	parent_id     TEXT,                     -- NULL = root = the production
 	type          TEXT NOT NULL,            -- resolved against the type registry (files)
@@ -147,9 +158,10 @@ CREATE TABLE reviews (
 );
 
 -- engine → user: everything to SHOW the user
-CREATE TABLE human_output (
+CREATE TABLE chat_output (
 	id            TEXT PRIMARY KEY,
 	account_id    TEXT,
+	user_id       TEXT,                     -- the user this message is for
 	production_id TEXT NOT NULL,
 	node_id       TEXT,
 	version_id    TEXT,
@@ -160,21 +172,22 @@ CREATE TABLE human_output (
 	created_at    TEXT NOT NULL,
 	resolved_at   TEXT
 );
-CREATE INDEX idx_human_output_pending ON human_output(production_id, status);
+CREATE INDEX idx_chat_output_pending ON chat_output(production_id, status);
 
 -- user → engine: everything FROM the user (absorbs the old feedback table)
-CREATE TABLE human_input (
+CREATE TABLE chat_input (
 	id            TEXT PRIMARY KEY,
 	account_id    TEXT,
+	user_id       TEXT,                     -- the user this message came from
 	production_id TEXT NOT NULL,
 	node_id       TEXT,
 	version_id    TEXT,
-	responds_to   TEXT REFERENCES human_output(id), -- the output it answers; NULL = unsolicited (e.g. ad-hoc feedback)
+	responds_to   TEXT REFERENCES chat_output(id), -- the output it answers; NULL = unsolicited (e.g. ad-hoc feedback)
 	kind          TEXT NOT NULL,            -- approve | feedback | answer
 	body          TEXT,                     -- feedback text / chosen answer
 	created_at    TEXT NOT NULL
 );
-CREATE INDEX idx_human_input_production ON human_input(production_id);
+CREATE INDEX idx_chat_input_production ON chat_input(production_id);
 
 CREATE TABLE budget (
 	production_id TEXT PRIMARY KEY,
@@ -188,7 +201,7 @@ Timestamps are ISO-8601 TEXT (SQLite has no native datetime); the `Clock` produc
 
 - **Core (loop + tool handlers):** unit tests against `FakeStore` + `FakeSubagentRunner` +
   `StubRenderClient` + fixed `Clock`/`IdGen`. No I/O. These are the tests that matter most — they pin
-  the dispatch logic, the redo cap, the rollup, the `human_output` emission.
+  the dispatch logic, the redo cap, the rollup, the `chat_output` emission.
 - **Adapters:** thin focused tests. The SQLite `Store` against a temp DB file; the `claude -p` runner
   behind a flag (not in the default suite — it costs real calls); the render stub trivially.
 - **Runner:** vitest (locked). Keep the suite fast and deterministic.

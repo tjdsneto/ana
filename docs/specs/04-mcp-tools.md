@@ -22,10 +22,11 @@ surface on top. This is the client-facing door.
 Insert the root node (`status = queued`) from a brief; return the `production_id` immediately. Does
 **not** run the production — the engine worker picks it up (spec 02).
 
-- in: `{ brief: string, session_id: string, options?: {...} }` — no `account_id` in v0; the server
-  resolves `Store.defaultAccount()` and stamps the root. (v1: auth maps the caller to its account.)
+- in: `{ brief: string, session_id: string, options?: {...} }` — no `account_id` / `user_id` in v0;
+  the server resolves `Store.defaultAccount()` + `Store.defaultUser()` and stamps the root. (v1: auth
+  maps the caller to its account + user.)
 - out: `{ production_id: string, status: "queued" }`
-- Store: `defaultAccount()` then `createProduction({ accountId, ... })`.
+- Store: `defaultAccount()` + `defaultUser()` then `createProduction({ accountId, userId, ... })`.
 
 ### `get_status` — DIRECT
 
@@ -37,7 +38,7 @@ Read production + node/version progress.
 
 ### `inbox` — DIRECT
 
-The pending **`human_output`** queue for this production (spec 01) — everything the engine needs the
+The pending **`chat_output`** queue for this production (spec 01) — everything the engine needs the
 user to see, typed. This is how the client learns there is something to `present` (MCP can't push —
 spec 02 "the nudge").
 
@@ -55,7 +56,7 @@ Read a produced version's artifact (the drafts/renders the loop wrote).
 
 ### `approve` — DIRECT
 
-Record an `approve` `human_input` against a `present` output → version + node `approved`; the output
+Record an `approve` `chat_input` against a `present` output → version + node `approved`; the output
 resolves; the worker rolls up on its next pass.
 
 - in: `{ output_id: string }` (or `{ version_id }`)
@@ -64,7 +65,7 @@ resolves; the worker rolls up on its next pass.
 
 ### `submit_feedback` — DIRECT
 
-Record a `feedback` `human_input` → version `denied`, the feedback event stored (→ a learned rule,
+Record a `feedback` `chat_input` → version `denied`, the feedback event stored (→ a learned rule,
 persisted separately per spec 01), node back to `pending`; the worker redoes on its next pass, fed the
 feedback (spec 02).
 
@@ -80,8 +81,8 @@ Flip the money-gate flag so the worker may proceed past a render-spend gate.
 - out: `{ ok: true }`
 - Store: `approveBudget(...)`.
 
-> **v0 human-contact scope:** the worker emits `present` `human_output` only (+ the matching
-> `approve`/`feedback` `human_input`); `ask` / `notify` / `answer` are schema-supported but unused.
+> **v0 human-contact scope:** the worker emits `present` `chat_output` only (+ the matching
+> `approve`/`feedback` `chat_input`); `ask` / `notify` / `answer` are schema-supported but unused.
 > `inbox` already returns outputs typed, so adding `ask`/`notify` later needs no tool change — only
 > client handling.
 

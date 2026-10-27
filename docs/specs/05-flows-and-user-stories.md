@@ -2,11 +2,12 @@
 
 **Status:** draft to react to — narrative companion to specs 01–04, not a new contract. Reads well
 right after spec 01. The point is to walk real use cases end-to-end so the data model (nodes,
-versions, reviews, `human_output`/`human_input`, budget, account) earns its shape, and to surface
+versions, reviews, `chat_output`/`chat_input`, budget, account, user) earns its shape, and to surface
 gaps before any code.
 
-> PoC = **single account**. Every flow runs under the one default account (spec 01). The actor "the
-> caller" and "the user" are the same person in v0, reached through their client agent.
+> PoC = **single account, single user**. Every flow runs under the one default account + default user
+> (spec 01). The actor "the caller" and "the user" are the same person in v0, reached through their
+> client agent.
 
 ## Actors
 
@@ -14,10 +15,11 @@ gaps before any code.
 - **Client agent** (`client/agent`) — the thin conversational agent in the user's Claude Code/ChatGPT.
   Talks to the user; via MCP, writes requests + inputs and reads status + outputs. **No craft, no
   subagents.**
-- **Engine worker** (`server/engine`) — the loop. Produces, runs reviewers, writes `human_output`,
-  resolves on `human_input`. Never talks to the user directly.
+- **Engine worker** (`server/engine`) — the loop. Produces, runs reviewers, writes `chat_output`,
+  resolves on `chat_input`. Never talks to the user directly.
 - **Specialist reviewers** — independent `claude -p` per rubric; the internal quality gate.
-- **Account** — the owning tenant; default + implicit in v0, the seam for multi-tenant later.
+- **Account / user** — the owning tenant + the requesting person; one default of each, implicit in
+  v0, the seam for multi-tenant + real users later.
 
 ## User stories (PoC)
 
@@ -45,19 +47,19 @@ Engine:
 
 ## Flows
 
-Notation: `node` / `version` / `human_output(type)` / `human_input(kind)`.
+Notation: `node` / `version` / `chat_output(type)` / `chat_input(kind)`.
 
 ### F1 — Happy path, end to end
 
 1. User → client: "make a 15s video about X." Client calls `request_video(brief, session_id)`.
-2. Server resolves `defaultAccount()`, inserts the **root node** (`type=video-project`, `status=queued`)
-   under that account, returns `production_id`.
+2. Server resolves `defaultAccount()` + `defaultUser()`, inserts the **root node**
+   (`type=video-project`, `status=queued`) under that account + user, returns `production_id`.
 3. Worker polls, sees the production, moves it `producing`. Finds the first ready node (`briefing`,
    no deps).
 4. Worker produces the briefing draft → internal review (advisory for briefing) → writes
-   `human_output(present)` for the briefing packet, node `needs-presentation`.
+   `chat_output(present)` for the briefing packet, node `needs-presentation`.
 5. Client `inbox` surfaces the pending output → presents it → user approves. Client writes
-   `human_input(approve, responds_to=output)`; server resolves the output, node `approved`.
+   `chat_input(approve, responds_to=output)`; server resolves the output, node `approved`.
 6. Approval unblocks the next node (`script`, deps briefing). Worker produces → reviewer set passes →
    `present` → approve. Repeat for `moodboard`, `storyboard`, `render`, `polish`, `deliver`.
 7. Root rolls up `approved` when its last child approves → production `done`. `get_status` reflects it;
@@ -67,7 +69,7 @@ Notation: `node` / `version` / `human_output(type)` / `human_input(kind)`.
 
 Branch from F1 step 5/6 when the user is not happy:
 
-1. User gives feedback on the presented version. Client writes `human_input(feedback, responds_to,
+1. User gives feedback on the presented version. Client writes `chat_input(feedback, responds_to,
    body="too long, wrong tone")`.
 2. Server: version `denied`, output resolved, the **feedback event** stored; a **learned rule** is
    written to the account's preferences/learnings (separate from the event — spec 01).
@@ -77,7 +79,7 @@ Branch from F1 step 5/6 when the user is not happy:
 
 ### F3 — Internal review fail (invisible to the user) + escalate
 
-Inside a single produce step, before any `human_output`:
+Inside a single produce step, before any `chat_output`:
 
 1. Worker produces version n → reviewer set runs. One reviewer returns `revise`.
 2. Version `needs-work`, node `pending`. **Nothing is presented.** Worker redoes fed the union of the
@@ -91,7 +93,7 @@ Inside a single produce step, before any `human_output`:
 Before the expensive `render` node runs:
 
 1. Worker reaches `render`, sees `budget.approved = 0`. It emits a heads-up and **waits** —
-   `human_output(notify|ask, "render ~$X, approve budget?")`. *(v0: may be a `present`/flag; `ask`
+   `chat_output(notify|ask, "render ~$X, approve budget?")`. *(v0: may be a `present`/flag; `ask`
    deferred.)*
 2. User approves → client calls `approve_budget(production_id)` → `budget.approved = 1`.
 3. Worker proceeds with the render (stubbed in v0 → a text placeholder artifact, zero cost).
@@ -103,7 +105,7 @@ The `briefing` node is **agreement-terminal**, not rubric-terminal (spec 02):
 1. Brief is thin ("a video about our new feature"). `info-check` router → `VERDICT: insufficient`.
 2. `interview` runs (its `when` matched) → `draft` (the `role: output` child) produces the key-points
    packet → `present`.
-3. User: "you missed the pricing angle." → `human_input(feedback)` → reopen `draft`, redraft, present
+3. User: "you missed the pricing angle." → `chat_input(feedback)` → reopen `draft`, redraft, present
    again. **Uncapped** — the AI reviewer is advisory, client approval is the only terminal.
 4. Loops until the user approves the packet.
 
@@ -120,7 +122,7 @@ The `briefing` node is **agreement-terminal**, not rubric-terminal (spec 02):
    are runnable without a human in the loop.
 2. **Nudge in v0** (F1 step 5): poll `inbox` vs the headless dialer push. Poll first (spec 02).
 3. **Budget gate shape** (F4): a dedicated `notify`/`ask` vs just the `budget` flag + a gate check.
-   v0 leans on the flag; the `human_output` framing is the v1 shape.
+   v0 leans on the flag; the `chat_output` framing is the v1 shape.
 4. **Learned-rule store** (F2 step 2): where account preferences/learnings physically live (a file in
    the instance vs a table). Design leaves it to client-preferences; confirm when we build the learn
    step.

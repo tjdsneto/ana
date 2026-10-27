@@ -16,7 +16,8 @@ sub-project, or a single work item. A node has a **type**; the loop resolves the
 ```
 node {
   id
-  account_id             // root only: the account (tenant) that owns this production — see Accounts below
+  account_id             // root only: the account (tenant) that owns this production — see Account & users below
+  user_id                // root only: the user who requested this production (within the account)
   production_id          // groups one tree; the root's own id
   parent_id              // null = root = the production
   type                   // resolved against the type registry (see below)
@@ -37,11 +38,13 @@ Two orthogonal axes (do not conflate):
   **sub-project** — its status derives from its children. A node *without* children is a **leaf** — it
   progresses through its **versions**.
 
-## Account — the tenant seam
+## Account & users — the tenant/identity seam
 
-An **account** owns productions. It is the brand/tenant the design calls out as a v1 concern
-(`key-decisions.md` D1; `lisa-loop-design.md` §18/§23 + the "no separate projects table in v0" footer). We pull the abstraction forward **now** — not
-the multi-tenancy, just the seam — so nothing has to be retrofitted later.
+An **account** owns productions (the brand/tenant); a **user** is a person within an account who
+requests videos and answers the chat. Both are the v1 concern the design calls out
+(`key-decisions.md` D1; `lisa-loop-design.md` §18/§23 + the "no separate projects table in v0"
+footer). We pull the abstraction forward **now** — not the multi-tenancy, just the seam — so nothing
+has to be retrofitted later.
 
 ```
 account {
@@ -49,15 +52,27 @@ account {
   name
   created_at
 }
+
+user {
+  id
+  account_id             // the account this user belongs to
+  name
+  created_at
+}
 ```
 
-- **PoC runs single-account.** One **default** account is seeded at init; every production is created
-  under it. Code never hardcodes "there is one account" — it always reads/writes `account_id`, which
-  happens to resolve to the default. That is the whole point: the join exists, the data is there, and
-  turning on real tenancy later is adding rows + auth, not a migration.
-- `account_id` lives on the **root node** (the production); the tree inherits it via `production_id`.
-- Tenant metadata that is *not* recursive (owner, delivery target, billing) is deferred — the table is
-  deliberately thin for v0. Grow it when the external phase needs it.
+- **PoC runs single-account, single-user.** One **default** account and one **default** user are
+  seeded at init; every production is created under them. Code never hardcodes "there is one
+  account/user" — it always reads/writes `account_id` + `user_id`, which happen to resolve to the
+  defaults. That is the whole point: the joins exist, the data is there, and turning on real tenancy +
+  real users later is adding rows + auth, not a migration.
+- Relationship: **account 1—* users**; a production belongs to an account and is **requested by** a
+  user.
+- `account_id` + `user_id` live on the **root node** (the production); the tree inherits them via
+  `production_id`. `chat_output` / `chat_input` also carry `user_id` (who the message is to / from).
+- Metadata that is *not* recursive (account: owner, delivery target, billing; user: email, role,
+  auth) is deferred — both tables are deliberately thin for v0. Grow them when the external phase
+  needs them.
 
 ## Versions — the feedback history of a leaf
 
@@ -105,45 +120,48 @@ review {
 }
 ```
 
-## Human contact — split by direction (`human_output` / `human_input`)
+## Chat I/O — split by direction (`chat_output` / `chat_input`)
 
-Engine↔user contact is explicit and **typed by direction**, not inferred from `node.status`. Two
-tables, defined from the **engine's** point of view:
+Engine↔chat contact is explicit and **typed by direction**, not inferred from `node.status`. The
+counterpart on the other end is **a chat** — a human, or an agent on the human's behalf (design §4) —
+so it is named for the channel, not the human. Two tables, defined from the **engine's** point of
+view:
 
-- **`human_output`** — everything the engine needs to **show the user** (engine → user).
-- **`human_input`** — everything that **comes from the user** (user → engine).
+- **`chat_output`** — everything the engine needs to **send to the chat** (engine → chat: shown to
+  the user or consumed by their agent).
+- **`chat_input`** — everything that **comes back from the chat** (chat → engine).
 
-> Direction is defined, not guessed: `human_output` = *output the engine sends out to the human*;
-> `human_input` = *input the engine receives from the human*. (If this reads ambiguous in code,
-> `to_human` / `from_human` are the unambiguous fallbacks — one decision, easy to swap.)
+> Direction is defined, not guessed: `chat_output` = *what the engine sends out to the chat*;
+> `chat_input` = *what the engine receives back from the chat*. (If this reads ambiguous in code,
+> `to_chat` / `from_chat` are the unambiguous fallbacks — one decision, easy to swap.)
 
 ```
-human_output {
-  id, account_id, production_id, node_id?, version_id?
+chat_output {
+  id, account_id, user_id, production_id, node_id?, version_id?
   type                   // present | ask | notify
-  status                 // pending | resolved   (resolved when a human_input answers it)
+  status                 // pending | resolved   (resolved when a chat_input answers it)
   prompt
   options                // JSON, for `ask`
   created_at, resolved_at
 }
 
-human_input {
-  id, account_id, production_id, node_id?, version_id?
-  responds_to            // human_output.id it answers — NULLABLE (unsolicited feedback has none)
+chat_input {
+  id, account_id, user_id, production_id, node_id?, version_id?
+  responds_to            // chat_output.id it answers — NULLABLE (unsolicited feedback has none)
   kind                   // approve | feedback | answer
   body                   // feedback text / the chosen answer
   created_at
 }
 ```
 
-**`human_output` types** (what to show): **present** a presentable version · **ask** a decision
+**`chat_output` types** (what to show): **present** a presentable version · **ask** a decision
 (optionally with options) · **notify** a heads-up (e.g. "render started, ~$X").
 
-**`human_input` kinds** (what came back): **approve** a version · **feedback** (denies + text →
+**`chat_input` kinds** (what came back): **approve** a version · **feedback** (denies + text →
 learns a rule) · **answer** an `ask`.
 
 - A `present` → `approve`/`feedback` is one exchange across the two tables, linked by `responds_to`.
-- **`human_input` absorbs the old `feedback` table** — feedback is just input from the human. The
+- **`chat_input` absorbs the old `feedback` table** — feedback is just input from the human. The
   *learned rule* it produces is a **separate** concern (it persists across productions in
   client-preferences / a learnings store), not a row here.
 - **v0 emits `present` only** (+ the matching `approve`/`feedback` inputs). `ask` / `notify` / `answer`
@@ -182,7 +200,7 @@ out of this one mechanism — see spec 02.
 
 | thing | home | why |
 |-------|------|-----|
-| account, node, version, review, human_output, human_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
+| account, user, node, version, review, chat_output, chat_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
 | artifacts (storyboard.md, render, audio) | **files** on the shared volume | big; referenced from the DB by `artifact_path` |
 | type contracts + rubrics + producer skills | **files** (type registry) | behavior, the craft/IP; not state |
 
