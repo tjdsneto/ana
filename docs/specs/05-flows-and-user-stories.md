@@ -2,8 +2,8 @@
 
 **Status:** draft to react to — narrative companion to specs 01–04, not a new contract. Reads well
 right after spec 01. The point is to walk real use cases end-to-end so the data model (nodes,
-versions, reviews, assets, `chat_output`/`chat_input`, budget, account, user, autonomy lever) earns
-its shape, and to surface gaps before any code.
+versions, reviews, assets, `chat_output`/`chat_input`, budget, account, user, autonomy lever,
+actor kind) earns its shape, and to surface gaps before any code.
 
 > PoC = **single account, single user**. Every flow runs under the one default account + default user
 > (spec 01). The actor "the caller" and "the user" are the same person in v0, reached through their
@@ -52,7 +52,7 @@ Notation: `node` / `version` / `chat_output(type)` / `chat_input(kind)`.
 ### F1 — Happy path, end to end
 
 1. User → client: "make a 15s video about X." Client calls `request_video(brief, session_id,
-   autonomy_lever)` (lever defaults to `medium`).
+   autonomy_lever, actor_kind)` (lever defaults to `medium`, `actor_kind` to `human`).
 2. Server resolves `defaultAccount()` + `defaultUser()`, inserts the **root node**
    (`type=video-project`, `status=queued`, `autonomy_lever`) under that account + user, returns
    `production_id`.
@@ -110,14 +110,17 @@ The `briefing` node is **agreement-terminal**, not rubric-terminal (spec 02):
 2. `interview` runs (its `when` matched) → `draft` (the `role: output` child) produces the key-points
    packet → `present`.
 3. User: "you missed the pricing angle." → `chat_input(feedback)` → reopen `draft`, redraft, present
-   again. **Uncapped** — the AI reviewer is advisory, client approval is the only terminal.
-4. Loops until the user approves the packet.
+   again. Client approval is the terminal (the AI reviewer is advisory), but the **back-and-forth is
+   capped** (next).
+4. Loops until the user approves the packet — or the **agreement cap** trips.
 
-> ⚠ **Open: F5 can spin.** In v0 with an auto/stubbed client (no real human), an uncapped agreement
-> loop never terminates. Even with a human, a flapping approver could loop indefinitely. Candidate
-> guard: a soft cap on agreement redraws that **escalates/pauses** (asks the user to decide "proceed
-> as-is or keep refining") rather than capping-and-forcing like `MAX_REDOS`. Needs Tiago's call before
-> F5 is built — flagged in spec 02 too.
+> ✅ **Resolved: the agreement cap (spec 02).** Not uncapped. The loop counts agreement rounds against a
+> **per-`actor_kind` cap** (spec 01): `human` = soft cap (default 5), `agent` = lower (default 2). On the
+> cap it **escalates** — emits an `options` `["Proceed as-is","Keep refining"]` and lets the actor
+> decide, rather than force-passing like `MAX_REDOS`. A real human (Tiago) answers it; the stubbed/agent
+> client auto-answers "Proceed as-is", so headless runs always terminate. Same uniform loop either way —
+> `actor_kind` only sets the number. Design intent: **avoid too much back-and-forth** for either actor;
+> caps stay low and `autonomy_lever = high` damps further.
 
 ### F6 — Same request, different autonomy (the lever in action)
 
@@ -147,4 +150,5 @@ asks less, converges faster).
 4. **Learned-rule store** (F2 step 2): where account preferences/learnings physically live (a file in
    the instance vs a table). Design leaves it to client-preferences; confirm when we build the learn
    step.
-5. **Agreement-loop termination** (F5): the spin guard above.
+5. ~~**Agreement-loop termination** (F5): the spin guard above.~~ **Resolved:** per-`actor_kind`
+   back-and-forth cap → escalate via `options` (spec 02). Not uncapped.

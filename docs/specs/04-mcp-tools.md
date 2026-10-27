@@ -22,12 +22,13 @@ surface on top. This is the client-facing door.
 Insert the root node (`status = queued`) from a brief; return the `production_id` immediately. Does
 **not** run the production — the engine worker picks it up (spec 02).
 
-- in: `{ brief: string, session_id: string, autonomy_lever?: "low"|"medium"|"high", options?: {...} }`
-  — `autonomy_lever` defaults to `medium`; it governs how much the engine asks vs decides (spec 01).
-  No `account_id` / `user_id` in v0; the server resolves `Store.defaultAccount()` + `Store.defaultUser()`
-  and stamps the root. (v1: auth maps the caller to its account + user.)
+- in: `{ brief: string, session_id: string, autonomy_lever?: "low"|"medium"|"high", actor_kind?: "human"|"agent", options?: {...} }`
+  — `autonomy_lever` defaults to `medium` (how much the engine asks vs decides, spec 01); `actor_kind`
+  defaults to `human` (who answers the chat → sets the agreement cap, spec 01/02). No `account_id` /
+  `user_id` in v0; the server resolves `Store.defaultAccount()` + `Store.defaultUser()` and stamps the
+  root. (v1: auth maps the caller to its account + user.)
 - out: `{ production_id: string, status: "queued" }`
-- Store: `defaultAccount()` + `defaultUser()` then `createProduction({ accountId, userId, autonomyLever, ... })`.
+- Store: `defaultAccount()` + `defaultUser()` then `createProduction({ accountId, userId, autonomyLever, actorKind, ... })`.
 
 ### `get_status` — DIRECT
 

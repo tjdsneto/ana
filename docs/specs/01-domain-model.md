@@ -27,6 +27,7 @@ node {
   position               // ordering among siblings
   session_id             // root only: the client session that owns it (the nudge target)
   autonomy_lever         // root only: how much the engine may decide for itself — see Autonomy lever below
+  actor_kind             // root only: human | agent — who answers the chat; sets the agreement cap (spec 02)
   created_at, updated_at
 }
 ```
@@ -128,6 +129,11 @@ These are **assets**: first-class, catalogued with metadata, because the storybo
 name, the deliverable ships with them, and they want describing/typing for reuse — more than a bare
 `artifact_path` carries.
 
+**Assets are the raw material (matéria-prima), not drafts.** An asset ≠ a version. A **version** is a
+work item's own deliverable through its revision lineage (a storyboard draft, a render cut). An
+**asset** is an ingredient the production consumes or ships — it has no review/approval lineage of its
+own; it is gathered/generated, catalogued, and referenced. Keep the two tables separate.
+
 ```
 asset {
   id
@@ -220,9 +226,26 @@ assumptions and proceeds; the lower the autonomy, the **more it asks** (clarifyi
   before each step.
 - **Value:** it is the single knob that also tempers the F5 agreement-loop spin (spec 05) — high
   autonomy asks less, so it converges faster; low autonomy asks more, so it needs the spin guard most.
-- **v0 shape:** an enum `low | medium | high` (or `0..3`) on the root node. Read by the loop at
-  dispatch to decide whether to emit a `question`/`options`/confirmation or to self-resolve and
-  proceed. Default = `medium`. May later be an account/user default and adjustable mid-flight.
+- **v0 shape:** an **enum `low | medium | high`** on the root node (scalar `0..N` is a later refinement
+  if a continuous knob is ever needed — enum for v0). Read by the loop at dispatch to decide whether to
+  emit a `question`/`options`/confirmation or to self-resolve and proceed. Default = `medium`. May later
+  be an account/user default and adjustable mid-flight.
+
+## Actor kind — human vs agent chat
+
+The chat counterpart is **a chat**, but it can be driven by a **human** (Tiago is the v0 user) or by an
+**agent** on the human's behalf (design §4; also the headless/stubbed approver in tests). Both are
+first-class — but they tolerate different amounts of back-and-forth, so the engine must know which.
+
+- **`actor_kind` enum `human | agent`** on the root node, a `request_video` input alongside
+  `autonomy_lever`. Default = `human`.
+- It sets the **agreement cap** (spec 02): how many briefing redraws before the engine escalates with a
+  "proceed as-is / keep refining" `options` instead of auto-redrawing. A human gets the higher soft cap;
+  an agent (incl. the stubbed test approver) a lower one, so automated runs always converge fast.
+- It does **not** change the pipeline or the escalation mechanism — only the cap number and who answers
+  the escalation. Same uniform loop. See spec 02 for the mechanism.
+- Design intent (your call): **avoid needing too much back-and-forth** for either actor — caps are
+  deliberately low, and `autonomy_lever = high` damps it further.
 
 ## Budget
 

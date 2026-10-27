@@ -78,13 +78,31 @@ The design's three "processes" are not special cases in code; they fall out of t
 
 | process | types | how it concludes |
 |---------|-------|------------------|
-| **agreement-loop** | briefing | expandable + `advisory_review` + feedback reopens the `role: output` child, **uncapped**. Terminal = **client approval** (the AI reviewer is advisory only, never blocks). |
+| **agreement-loop** | briefing | expandable + `advisory_review` + feedback reopens the `role: output` child. Terminal = **client approval** (the AI reviewer is advisory only, never blocks), with a **per-actor back-and-forth cap → escalate** (below) so it can't spin. |
 | **produce-review** | script, moodboard, storyboard, render, polish, deliver | leaf: produce → reviewer set → present. Terminal = all reviewers pass (or MAX_REDOS escalate) then client approve/feedback. |
 | **decompose** | assets, audio | `planner` fan-out → each child produce-review → set-level review → roll up. *(v0-flat: deferred.)* |
 
 **Why briefing differs:** its input may be a full prompt or just an idea. It explores and asks until
 it has good-enough info, then presents the extracted key points for agreement. It must end with an
 **approved** artifact, so its terminal is *agreement*, not a craft rubric.
+
+### Agreement cap — stop the spin without forcing a result
+
+The agreement loop (F5, spec 05) is agreement-terminal, so `MAX_REDOS` does **not** apply — capping and
+force-passing would ship a briefing the user never agreed to. Instead cap the **back-and-forth**, then
+**escalate** rather than decide:
+
+- Count the agreement rounds (each `present` → `feedback` → redraw) on the agreement node. When the
+  count reaches the **cap for this production's `actor_kind`** (spec 01), the loop stops auto-redrawing
+  and emits an `options` `chat_output`: `["Proceed as-is","Keep refining"]`.
+- **The actor answers the escalation — the engine never auto-decides.** "Proceed as-is" → approve the
+  current draft, move on. "Keep refining" → reset the counter and continue (one more cap window).
+- **The cap is the only thing `actor_kind` changes.** `human` → higher soft cap (`AGREEMENT_MAX_ROUNDS_HUMAN`,
+  default 5); `agent` → lower cap (`AGREEMENT_MAX_ROUNDS_AGENT`, default 2). The stubbed/headless agent
+  answers the escalation automatically ("Proceed as-is"), so automated runs always terminate — no
+  special path in the engine, just a lower number + an auto-answer on the client side.
+- `autonomy_lever = high` reduces rounds independently (it asks less up front), so the cap is a backstop,
+  not the primary damper.
 
 ## Completion rolls up via approval
 

@@ -24,7 +24,7 @@ export interface Store {
 	getUser(id: string): Promise<User | null>
 
 	// productions / nodes
-	createProduction(input: NewProduction): Promise<Node>          // root under accountId + userId; input carries autonomyLever
+	createProduction(input: NewProduction): Promise<Node>          // root under accountId + userId; input carries autonomyLever + actorKind
 	getNode(id: string): Promise<Node | null>
 	getProduction(id: string): Promise<Node | null>               // the root node
 	listReadyNodes(productionId: string): Promise<Node[]>         // pending + deps approved + parent active
@@ -139,6 +139,7 @@ CREATE TABLE nodes (
 	position       integer NOT NULL DEFAULT 0,
 	session_id     text,                     -- root only: the owning client session (nudge target)
 	autonomy_lever text,                     -- root only: low | medium | high — how much the engine decides vs asks
+	actor_kind     text,                     -- root only: human | agent — who answers the chat; sets the agreement cap
 	created_at     timestamptz NOT NULL DEFAULT now(),
 	updated_at     timestamptz NOT NULL DEFAULT now()
 );
