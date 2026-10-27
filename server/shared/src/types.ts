@@ -1,0 +1,141 @@
+// Domain contract types. Row types are inferred from the Drizzle schema (single source of truth);
+// the unions below carry the allowed values the `text` columns hold (spec 01). Both imports are
+// type-only, so schema.ts ⇄ types.ts never form a runtime cycle.
+
+import type {
+	accounts,
+	assets,
+	budget,
+	chatInput,
+	chatOutput,
+	nodes,
+	reviews,
+	users,
+	versions,
+} from "./schema.js"
+
+// ── value unions (the allowed contents of the `text` columns) ─────────────────────────────
+
+export type AutonomyLever = "low" | "medium" | "high"
+export type ActorKind = "human" | "agent"
+
+export type NodeStatus =
+	| "pending"
+	| "ready"
+	| "in-progress"
+	| "needs-presentation"
+	| "presented"
+	| "approved"
+	| "skipped"
+	| "failed"
+
+export type ProductionStatus = "queued" | "producing" | "review" | "done"
+
+export type VersionStatus =
+	| "producing"
+	| "in-review"
+	| "presentable"
+	| "presented"
+	| "approved"
+	| "denied"
+	| "needs-work"
+	| "superseded"
+
+export type ReviewKind = "craft" | "coverage" | "consistency"
+export type ReviewVerdict = "pass" | "revise"
+
+export type ChatOutputType = "present" | "notify" | "question" | "options"
+export type ChatOutputStatus = "pending" | "resolved"
+export type ChatInputKind = "approve" | "feedback" | "answer"
+
+// Open unions: the listed values are the known roles/formats; any other string is allowed (`& {}`
+// keeps the literal hints in editors without closing the set).
+export type AssetType = "logo" | "screenshot" | "b-roll" | "music" | "vo" | "sfx" | (string & {})
+export type FileType = "png" | "svg" | "mp4" | "wav" | "mp3" | (string & {})
+
+// The subagent attached to a version, for idempotency (don't re-dispatch in-flight work).
+export interface SubagentRef {
+	runId: string
+	status: "spawned" | "running" | "done" | "failed"
+}
+
+// ── row types (inferred from the schema) ──────────────────────────────────────────────────
+
+export type Account = typeof accounts.$inferSelect
+export type User = typeof users.$inferSelect
+export type Node = typeof nodes.$inferSelect
+export type Version = typeof versions.$inferSelect
+export type Review = typeof reviews.$inferSelect
+export type Asset = typeof assets.$inferSelect
+export type ChatOutput = typeof chatOutput.$inferSelect
+export type ChatInput = typeof chatInput.$inferSelect
+export type Budget = typeof budget.$inferSelect
+
+// ── port-input types (what the Store accepts; the Store fills ids/timestamps/derived columns) ─
+
+export interface NewProduction {
+	accountId: string
+	userId: string
+	brief: string
+	sessionId: string
+	autonomyLever: AutonomyLever
+	actorKind: ActorKind
+}
+
+export interface NewChildNode {
+	type: string
+	name: string
+	description?: string
+	deps?: string[]
+	position?: number
+}
+
+export interface NewVersion {
+	nodeId: string
+	n: number
+	prevVersionId?: string
+	status: VersionStatus
+	artifactPath?: string
+	subagent?: SubagentRef
+}
+
+export interface NewReview {
+	nodeId: string
+	versionId: string
+	name: string
+	kind: ReviewKind
+	verdict: ReviewVerdict
+	body?: string
+}
+
+export interface NewAsset {
+	productionId: string
+	nodeId?: string
+	name: string
+	description?: string
+	assetType: AssetType
+	fileType: FileType
+	storagePath: string
+}
+
+export interface NewChatOutput {
+	accountId?: string
+	userId?: string
+	productionId: string
+	nodeId?: string
+	versionId?: string
+	type: ChatOutputType
+	prompt?: string
+	options?: string[]
+}
+
+export interface NewChatInput {
+	accountId?: string
+	userId?: string
+	productionId: string
+	nodeId?: string
+	versionId?: string
+	respondsTo?: string
+	kind: ChatInputKind
+	body?: string
+}

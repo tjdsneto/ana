@@ -35,7 +35,8 @@ Design source of truth (outside this repo — don't copy its product name in):
 2. Specs in `docs/specs/`, **domain model first**, then lifecycle/loop, ports + schema, tools, flows,
    dashboard, compose. ✅ (01–07)
 3. Shared contract: types + port interfaces + Drizzle schema/migrations in `server/shared`; seed the
-   default account + user.
+   default account + user. ✅ (`@app/shared` — schema + `0000_init.sql` + `migrate`/`seed`; smoked
+   against a throwaway Postgres: 9 tables created, defaults seeded, both scripts idempotent)
 4. MCP server: the direct tools + `request_video` (stdio entrypoint first), against a `Store` fake,
    then the Postgres (Drizzle + `pg`) adapter.
 5. Engine worker: the poll/`LISTEN` loop against fakes (fake subagent runner + stubbed render), then
