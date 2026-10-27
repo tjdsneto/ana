@@ -28,9 +28,9 @@ client (Claude / ChatGPT, via MCP)
 mcp-server (TS/Node) ──writes/reads──►  SQLite (app.db) + artifacts/  ◄──reads/writes── engine-worker (TS/Node; the loop; spawns `claude -p`)
 ```
 
-- **mcp-server** answers fast tool calls synchronously against the DB (`get_status`, `list_artifacts`,
-  `get_artifact`, `submit_feedback`, `approve_budget`). The slow one, `start_production`, only
-  **inserts a job row and returns a job id** — it never runs the production inline.
+- **mcp-server** answers fast tool calls synchronously against the DB (`get_status`, `inbox`,
+  `get_deliverable`, `approve`, `submit_feedback`, `approve_budget`). The slow one, `request_video`,
+  only **inserts the root node and returns its production id** — it never runs the production inline.
 - **engine-worker** is a separate long-running process that polls the DB for queued work, runs the
   recursive loop, spawns `claude -p` subagents (producers + specialist reviewers), and writes progress
   + artifacts back.
