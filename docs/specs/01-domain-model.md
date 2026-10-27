@@ -40,7 +40,7 @@ Two orthogonal axes (do not conflate):
 ## Account — the tenant seam
 
 An **account** owns productions. It is the brand/tenant the design calls out as a v1 concern
-(`key-decisions.md` D1, `lisa-loop-design.md` §36 note). We pull the abstraction forward **now** — not
+(`key-decisions.md` D1; `lisa-loop-design.md` §18/§23 + the "no separate projects table in v0" footer). We pull the abstraction forward **now** — not
 the multi-tenancy, just the seam — so nothing has to be retrofitted later.
 
 ```
