@@ -1,6 +1,7 @@
 {
 	"files": [],
 	"references": [
-		{ "path": "./server/shared" }
+		{ "path": "./server/shared" },
+		{ "path": "./server/mcp" }
 	]
 }

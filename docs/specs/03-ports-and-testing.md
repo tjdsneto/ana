@@ -33,7 +33,8 @@ export interface Store {
 
 	// versions
 	createVersion(input: NewVersion): Promise<Version>
-	updateVersion(id: string, patch: Partial<Version>): Promise<void>
+	updateVersion(id: string, patch: VersionPatch): Promise<void>
+	getVersion(id: string): Promise<Version | null>
 	latestVersion(nodeId: string): Promise<Version | null>
 
 	// reviews
@@ -46,6 +47,7 @@ export interface Store {
 
 	// chat I/O — split by direction (spec 01)
 	emitOutput(input: NewChatOutput): Promise<ChatOutput>        // engine → chat (present | notify | question | options)
+	getOutput(id: string): Promise<ChatOutput | null>            // resolve an output_id (approve / submit_feedback)
 	pendingOutputs(productionId: string): Promise<ChatOutput[]>   // the client `inbox`: unresolved chat_output
 	recordInput(input: NewChatInput): Promise<ChatInput>         // chat → engine (approve | feedback | answer)
 	resolveOutput(id: string): Promise<void>                       // mark a chat_output resolved (an input answered it)

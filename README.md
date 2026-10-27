@@ -38,7 +38,9 @@ Design source of truth (outside this repo — don't copy its product name in):
    default account + user. ✅ (`@app/shared` — schema + `0000_init.sql` + `migrate`/`seed`; smoked
    against a throwaway Postgres: 9 tables created, defaults seeded, both scripts idempotent)
 4. MCP server: the direct tools + `request_video` (stdio entrypoint first), against a `Store` fake,
-   then the Postgres (Drizzle + `pg`) adapter.
+   then the Postgres (Drizzle + `pg`) adapter. ✅ (`@app/mcp` — 7 tools, stdio + stateless-HTTP
+   entrypoints; `PgStore` + `FakeStore` in `@app/shared`; smoked over the real MCP protocol on both
+   FakeStore and Postgres)
 5. Engine worker: the poll/`LISTEN` loop against fakes (fake subagent runner + stubbed render), then
    the `claude -p` runner.
 6. Dashboard: `dashboard/api` (reads + WebSocket over `LISTEN/NOTIFY`) + `dashboard/app` (React),

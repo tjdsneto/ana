@@ -59,6 +59,7 @@ export interface Store {
 	// versions
 	createVersion(input: NewVersion): Promise<Version>
 	updateVersion(id: string, patch: VersionPatch): Promise<void>
+	getVersion(id: string): Promise<Version | null>
 	latestVersion(nodeId: string): Promise<Version | null>
 
 	// reviews (internal quality gate)
@@ -71,6 +72,7 @@ export interface Store {
 
 	// chat I/O (the human gate)
 	emitOutput(input: NewChatOutput): Promise<ChatOutput> // engine → chat
+	getOutput(id: string): Promise<ChatOutput | null>
 	pendingOutputs(productionId: string): Promise<ChatOutput[]> // the inbox
 	recordInput(input: NewChatInput): Promise<ChatInput> // chat → engine
 	resolveOutput(id: string): Promise<void>
