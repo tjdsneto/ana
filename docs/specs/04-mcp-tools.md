@@ -22,11 +22,12 @@ surface on top. This is the client-facing door.
 Insert the root node (`status = queued`) from a brief; return the `production_id` immediately. Does
 **not** run the production — the engine worker picks it up (spec 02).
 
-- in: `{ brief: string, session_id: string, options?: {...} }` — no `account_id` / `user_id` in v0;
-  the server resolves `Store.defaultAccount()` + `Store.defaultUser()` and stamps the root. (v1: auth
-  maps the caller to its account + user.)
+- in: `{ brief: string, session_id: string, autonomy_lever?: "low"|"medium"|"high", options?: {...} }`
+  — `autonomy_lever` defaults to `medium`; it governs how much the engine asks vs decides (spec 01).
+  No `account_id` / `user_id` in v0; the server resolves `Store.defaultAccount()` + `Store.defaultUser()`
+  and stamps the root. (v1: auth maps the caller to its account + user.)
 - out: `{ production_id: string, status: "queued" }`
-- Store: `defaultAccount()` + `defaultUser()` then `createProduction({ accountId, userId, ... })`.
+- Store: `defaultAccount()` + `defaultUser()` then `createProduction({ accountId, userId, autonomyLever, ... })`.
 
 ### `get_status` — DIRECT
 
@@ -81,10 +82,10 @@ Flip the money-gate flag so the worker may proceed past a render-spend gate.
 - out: `{ ok: true }`
 - Store: `approveBudget(...)`.
 
-> **v0 human-contact scope:** the worker emits `present` `chat_output` only (+ the matching
-> `approve`/`feedback` `chat_input`); `ask` / `notify` / `answer` are schema-supported but unused.
-> `inbox` already returns outputs typed, so adding `ask`/`notify` later needs no tool change — only
-> client handling.
+> **v0 chat scope:** the worker emits `present` `chat_output` only (+ the matching `approve`/`feedback`
+> `chat_input`); `notify` / `question` / `options` (and the `options`-based confirm) are schema-supported
+> but unused in v0 — the autonomy lever decides how many get emitted (spec 01). `inbox` already returns
+> outputs typed, so adding them later needs no tool change — only client handling.
 
 ## Transport
 

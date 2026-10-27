@@ -26,6 +26,7 @@ node {
   deps: [node_id]        // sibling prerequisites that must be approved before this can START
   position               // ordering among siblings
   session_id             // root only: the client session that owns it (the nudge target)
+  autonomy_lever         // root only: how much the engine may decide for itself — see Autonomy lever below
   created_at, updated_at
 }
 ```
@@ -120,6 +121,35 @@ review {
 }
 ```
 
+## Assets — the catalogued produced/gathered files
+
+Video production generates and gathers many files (logos, screenshots, background clips, music, VO).
+These are **assets**: first-class, catalogued with metadata, because the storyboard calls for them by
+name, the deliverable ships with them, and they want describing/typing for reuse — more than a bare
+`artifact_path` carries.
+
+```
+asset {
+  id
+  production_id          // the production it belongs to
+  node_id                // the node that produced or gathered it (nullable)
+  name
+  description
+  asset_type             // ROLE/kind: logo | screenshot | b-roll | music | vo | sfx | ...
+  file_type              // FORMAT: png | svg | mp4 | wav | mp3 | ...
+  storage_path           // file on the shared volume
+  created_at, updated_at
+}
+```
+
+- **`asset_type` (role) ≠ `file_type` (format).** Two axes: what it is *for* vs what it *is on disk*.
+- An asset is typically the output of an `assets` decompose child (§25, deferred in v0-flat) or any
+  node that gathers/generates a file. It complements `version.artifact_path` — a storyboard draft
+  stays a version artifact; a generated logo is an **asset** row.
+- **v0:** production-scoped. The **brand library** (account-owned, reusable across productions) is a
+  later seam — promotion of a project asset into a library is a **brand** decision downstream
+  (`lisa-loop-design.md` §7), not built now.
+
 ## Chat I/O — split by direction (`chat_output` / `chat_input`)
 
 Engine↔chat contact is explicit and **typed by direction**, not inferred from `node.status`. The
@@ -138,10 +168,10 @@ view:
 ```
 chat_output {
   id, account_id, user_id, production_id, node_id?, version_id?
-  type                   // present | ask | notify
+  type                   // present | notify | question | options   (see below)
   status                 // pending | resolved   (resolved when a chat_input answers it)
   prompt
-  options                // JSON, for `ask`
+  options                // JSON array, for `options` (and its confirm specialization)
   created_at, resolved_at
 }
 
@@ -149,23 +179,50 @@ chat_input {
   id, account_id, user_id, production_id, node_id?, version_id?
   responds_to            // chat_output.id it answers — NULLABLE (unsolicited feedback has none)
   kind                   // approve | feedback | answer
-  body                   // feedback text / the chosen answer
+  body                   // feedback text / free-text answer / chosen option value
   created_at
 }
 ```
 
-**`chat_output` types** (what to show): **present** a presentable version · **ask** a decision
-(optionally with options) · **notify** a heads-up (e.g. "render started, ~$X").
+**`chat_output` types** (the shape of what the user sees):
 
-**`chat_input` kinds** (what came back): **approve** a version · **feedback** (denies + text →
-learns a rule) · **answer** an `ask`.
+- **present** — a presentable version to **approve** or give **feedback** on.
+- **notify** — a heads-up, ack only (e.g. "render started, ~$X"); no decision required.
+- **question** — a **simple free-text** question ("what's the deadline?").
+- **options** — pick from a provided list (`options` JSON). **A yes/no confirmation is a
+  specialization of `options`** with the fixed list `["Yes","No"]` — not its own type.
+
+**`chat_input` kinds** (what comes back): **approve** / **feedback** answer a `present`; **answer**
+answers a `question` or an `options`/confirm (its `body` carries the free text or the chosen option
+value). One input kind per shape keeps the response side small; the **output type** carries the UI
+shape.
 
 - A `present` → `approve`/`feedback` is one exchange across the two tables, linked by `responds_to`.
 - **`chat_input` absorbs the old `feedback` table** — feedback is just input from the human. The
   *learned rule* it produces is a **separate** concern (it persists across productions in
   client-preferences / a learnings store), not a row here.
-- **v0 emits `present` only** (+ the matching `approve`/`feedback` inputs). `ask` / `notify` / `answer`
-  are schema-supported for when the loop needs them.
+- **v0 emits `present` only** (+ the matching `approve`/`feedback` inputs). `notify` / `question` /
+  `options` are schema-supported for when the loop needs them (how many it emits is governed by the
+  autonomy lever — next).
+
+## Autonomy lever — a request input
+
+The caller sets an **autonomy lever** on the production (an input at `request_video`, stored on the
+root node). It governs **how much the engine decides for itself vs. asks the user**: the higher the
+autonomy, the **fewer `chat_output` questions** the engine emits — it fills gaps with sensible
+assumptions and proceeds; the lower the autonomy, the **more it asks** (clarifying `question`s,
+`options`, confirmations) and the more gates it opens. This is the design's **autonomy ladder**
+(`lisa-loop-design.md` §2.7, §19) made concrete.
+
+- **Same brief, different interactions.** A thin request under **high** autonomy → the `briefing`
+  `info-check` tends to `sufficient`, the `interview` is skipped, the engine assumes and produces.
+  The same request under **low** autonomy → `insufficient`, a full interview, more confirmations
+  before each step.
+- **Value:** it is the single knob that also tempers the F5 agreement-loop spin (spec 05) — high
+  autonomy asks less, so it converges faster; low autonomy asks more, so it needs the spin guard most.
+- **v0 shape:** an enum `low | medium | high` (or `0..3`) on the root node. Read by the loop at
+  dispatch to decide whether to emit a `question`/`options`/confirmation or to self-resolve and
+  proceed. Default = `medium`. May later be an account/user default and adjustable mid-flight.
 
 ## Budget
 
@@ -200,7 +257,7 @@ out of this one mechanism — see spec 02.
 
 | thing | home | why |
 |-------|------|-----|
-| account, user, node, version, review, chat_output, chat_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
+| account, user, node, version, review, asset, chat_output, chat_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
 | artifacts (storyboard.md, render, audio) | **files** on the shared volume | big; referenced from the DB by `artifact_path` |
 | type contracts + rubrics + producer skills | **files** (type registry) | behavior, the craft/IP; not state |
 

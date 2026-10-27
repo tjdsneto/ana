@@ -2,8 +2,8 @@
 
 **Status:** draft to react to — narrative companion to specs 01–04, not a new contract. Reads well
 right after spec 01. The point is to walk real use cases end-to-end so the data model (nodes,
-versions, reviews, `chat_output`/`chat_input`, budget, account, user) earns its shape, and to surface
-gaps before any code.
+versions, reviews, assets, `chat_output`/`chat_input`, budget, account, user, autonomy lever) earns
+its shape, and to surface gaps before any code.
 
 > PoC = **single account, single user**. Every flow runs under the one default account + default user
 > (spec 01). The actor "the caller" and "the user" are the same person in v0, reached through their
@@ -51,9 +51,11 @@ Notation: `node` / `version` / `chat_output(type)` / `chat_input(kind)`.
 
 ### F1 — Happy path, end to end
 
-1. User → client: "make a 15s video about X." Client calls `request_video(brief, session_id)`.
+1. User → client: "make a 15s video about X." Client calls `request_video(brief, session_id,
+   autonomy_lever)` (lever defaults to `medium`).
 2. Server resolves `defaultAccount()` + `defaultUser()`, inserts the **root node**
-   (`type=video-project`, `status=queued`) under that account + user, returns `production_id`.
+   (`type=video-project`, `status=queued`, `autonomy_lever`) under that account + user, returns
+   `production_id`.
 3. Worker polls, sees the production, moves it `producing`. Finds the first ready node (`briefing`,
    no deps).
 4. Worker produces the briefing draft → internal review (advisory for briefing) → writes
@@ -61,9 +63,10 @@ Notation: `node` / `version` / `chat_output(type)` / `chat_input(kind)`.
 5. Client `inbox` surfaces the pending output → presents it → user approves. Client writes
    `chat_input(approve, responds_to=output)`; server resolves the output, node `approved`.
 6. Approval unblocks the next node (`script`, deps briefing). Worker produces → reviewer set passes →
-   `present` → approve. Repeat for `moodboard`, `storyboard`, `render`, `polish`, `deliver`.
+   `present` → approve. Repeat for `moodboard`, `storyboard`, `render`, `polish`, `deliver`. Files the
+   steps generate/gather (logos, b-roll, VO) are written as `asset` rows (+ files on the shared volume).
 7. Root rolls up `approved` when its last child approves → production `done`. `get_status` reflects it;
-   `get_deliverable` returns the final artifact.
+   `get_deliverable` returns the final artifact **plus its `assets`** (they ship with the deliverable).
 
 ### F2 — Feedback → redo (the loop turning)
 
@@ -92,9 +95,10 @@ Inside a single produce step, before any `chat_output`:
 
 Before the expensive `render` node runs:
 
-1. Worker reaches `render`, sees `budget.approved = 0`. It emits a heads-up and **waits** —
-   `chat_output(notify|ask, "render ~$X, approve budget?")`. *(v0: may be a `present`/flag; `ask`
-   deferred.)*
+1. Worker reaches `render`, sees `budget.approved = 0`. It emits a confirmation and **waits** —
+   `chat_output(options, prompt="render ~$X, approve budget?", options=["Yes","No"])` (the yes/no
+   confirm). *(v0: may be just the `budget` flag + a gate check; the `options` framing is the v1
+   shape.)*
 2. User approves → client calls `approve_budget(production_id)` → `budget.approved = 1`.
 3. Worker proceeds with the render (stubbed in v0 → a text placeholder artifact, zero cost).
 
@@ -114,6 +118,22 @@ The `briefing` node is **agreement-terminal**, not rubric-terminal (spec 02):
 > guard: a soft cap on agreement redraws that **escalates/pauses** (asks the user to decide "proceed
 > as-is or keep refining") rather than capping-and-forcing like `MAX_REDOS`. Needs Tiago's call before
 > F5 is built — flagged in spec 02 too.
+
+### F6 — Same request, different autonomy (the lever in action)
+
+One brief ("a video about our new feature"), two levers — the interactions differ, the pipeline does
+not:
+
+- **`autonomy_lever = high`** — `briefing` `info-check` → `sufficient`; `interview` **skipped**; the
+  engine assumes deadline/tone/length from defaults + account preferences and proceeds. The user sees
+  far fewer `chat_output`s — maybe only the final `present`s to approve. Fast, hands-off.
+- **`autonomy_lever = low`** — `info-check` → `insufficient`; full `interview` (several `question` /
+  `options` outputs); confirmations before each expensive step; every deliverable presented. Slow,
+  tightly supervised.
+
+Same nodes, same types, same reviewers — the lever only changes **how many `chat_output`s the loop
+emits and how readily it self-resolves**. It is also the natural damper on F5's spin (high autonomy
+asks less, converges faster).
 
 ## Gaps these flows surface (for us to think)
 

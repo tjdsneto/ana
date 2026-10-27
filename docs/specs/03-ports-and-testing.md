@@ -24,7 +24,7 @@ export interface Store {
 	getUser(id: string): Promise<User | null>
 
 	// productions / nodes
-	createProduction(input: NewProduction): Promise<Node>          // inserts the root node under input.accountId + input.userId
+	createProduction(input: NewProduction): Promise<Node>          // root under accountId + userId; input carries autonomyLever
 	getNode(id: string): Promise<Node | null>
 	getProduction(id: string): Promise<Node | null>               // the root node
 	listReadyNodes(productionId: string): Promise<Node[]>         // pending + deps approved + parent active
@@ -40,8 +40,12 @@ export interface Store {
 	addReview(input: NewReview): Promise<Review>
 	reviewsFor(versionId: string): Promise<Review[]>
 
+	// assets
+	addAsset(input: NewAsset): Promise<Asset>
+	assetsFor(productionId: string): Promise<Asset[]>
+
 	// chat I/O — split by direction (spec 01)
-	emitOutput(input: NewChatOutput): Promise<ChatOutput>        // engine → chat (present | ask | notify)
+	emitOutput(input: NewChatOutput): Promise<ChatOutput>        // engine → chat (present | notify | question | options)
 	pendingOutputs(productionId: string): Promise<ChatOutput[]>   // the client `inbox`: unresolved chat_output
 	recordInput(input: NewChatInput): Promise<ChatInput>         // chat → engine (approve | feedback | answer)
 	resolveOutput(id: string): Promise<void>                       // mark a chat_output resolved (an input answered it)
@@ -125,6 +129,7 @@ CREATE TABLE nodes (
 	deps          TEXT NOT NULL DEFAULT '[]', -- JSON array of node ids (sibling prerequisites)
 	position      INTEGER NOT NULL DEFAULT 0,
 	session_id    TEXT,                     -- root only: the owning client session (nudge target)
+	autonomy_lever TEXT,                    -- root only: low | medium | high — how much the engine decides vs asks
 	created_at    TEXT NOT NULL,
 	updated_at    TEXT NOT NULL
 );
@@ -157,7 +162,21 @@ CREATE TABLE reviews (
 	created_at TEXT NOT NULL
 );
 
--- engine → user: everything to SHOW the user
+CREATE TABLE assets (
+	id            TEXT PRIMARY KEY,
+	production_id TEXT NOT NULL,
+	node_id       TEXT REFERENCES nodes(id), -- the node that produced/gathered it (nullable)
+	name          TEXT NOT NULL,
+	description   TEXT,
+	asset_type    TEXT NOT NULL,            -- ROLE: logo | screenshot | b-roll | music | vo | sfx | ...
+	file_type     TEXT NOT NULL,            -- FORMAT: png | svg | mp4 | wav | mp3 | ...
+	storage_path  TEXT NOT NULL,            -- file on the shared volume
+	created_at    TEXT NOT NULL,
+	updated_at    TEXT NOT NULL
+);
+CREATE INDEX idx_assets_production ON assets(production_id);
+
+-- engine → chat: everything to SHOW the user
 CREATE TABLE chat_output (
 	id            TEXT PRIMARY KEY,
 	account_id    TEXT,
@@ -165,10 +184,10 @@ CREATE TABLE chat_output (
 	production_id TEXT NOT NULL,
 	node_id       TEXT,
 	version_id    TEXT,
-	type          TEXT NOT NULL,            -- present | ask | notify   (v0 emits present only)
+	type          TEXT NOT NULL,            -- present | notify | question | options   (confirm = options[Yes,No]); v0 emits present only
 	status        TEXT NOT NULL,            -- pending | resolved
 	prompt        TEXT,
-	options       TEXT,                     -- JSON (for ask)
+	options       TEXT,                     -- JSON array (for options / confirm)
 	created_at    TEXT NOT NULL,
 	resolved_at   TEXT
 );
