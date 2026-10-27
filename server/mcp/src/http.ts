@@ -4,18 +4,20 @@
 //   claude mcp add --transport http production-engine http://localhost:8787/mcp
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
+import { JsonLogger } from "@app/shared"
 import express from "express"
 import { buildServer } from "./server.js"
 import { makeStore } from "./store-factory.js"
 
 const store = makeStore()
+const logger = new JsonLogger({ bound: { svc: "mcp", transport: "http" } })
 const port = Number(process.env.MCP_HTTP_PORT ?? 8787)
 
 const app = express()
 app.use(express.json())
 
 app.post("/mcp", async (req, res) => {
-	const server = buildServer(store)
+	const server = buildServer(store, logger)
 	const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
 	res.on("close", () => {
 		void transport.close()
@@ -29,4 +31,4 @@ app.post("/mcp", async (req, res) => {
 app.get("/mcp", (_req, res) => res.status(405).end())
 app.delete("/mcp", (_req, res) => res.status(405).end())
 
-app.listen(port, () => console.error(`[mcp] http transport on :${port}/mcp`))
+app.listen(port, () => logger.info("mcp.ready", { port, path: "/mcp" }))

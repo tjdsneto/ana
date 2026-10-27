@@ -130,3 +130,18 @@ export interface Clock {
 export interface IdGen {
 	next(prefix?: string): string
 }
+
+// ── Logger: structured events behind one interface. The default adapter writes JSON lines to
+//    stderr; LangSmith / OpenTelemetry / pino slot in later as alternate adapters, no core change. ─
+
+export type LogLevel = "debug" | "info" | "warn" | "error"
+export type LogFields = Record<string, unknown>
+
+export interface Logger {
+	log(level: LogLevel, event: string, fields?: LogFields): void
+	debug(event: string, fields?: LogFields): void
+	info(event: string, fields?: LogFields): void
+	warn(event: string, fields?: LogFields): void
+	error(event: string, fields?: LogFields): void
+	child(bound: LogFields): Logger // bind context (productionId, nodeId, …) onto every later line
+}

@@ -27,6 +27,9 @@ concrete implementation.
 - `SubagentRunner` — spawns `claude -p`. A fake returns canned output so the loop tests with no real
   subagent and no network.
 - `Clock` / `IdGen` — injectable, so timestamps and ids are deterministic in tests.
+- `Logger` — structured events (JSON lines to stderr by default). A real tracer (LangSmith,
+  OpenTelemetry, pino) is a later adapter behind the same port — no core change. Entrypoints inject
+  a `JsonLogger`; library code defaults to `NoopLogger` (quiet).
 
 Adapters (Postgres store via Drizzle + `pg`, HTTP render clients, the `claude -p` runner) each get thin, focused tests.
 Unit testing is a goal, **not a blocker** — don't let test scaffolding stall the first spike.

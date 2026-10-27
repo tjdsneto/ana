@@ -4,7 +4,7 @@
 
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { makePool, PgStore } from "@app/shared"
+import { JsonLogger, makePool, PgStore } from "@app/shared"
 import { ClaudeSubagentRunner } from "./adapters/claude-runner.js"
 import { StubRenderClient } from "./adapters/render-stub.js"
 import { configFromEnv } from "./config.js"
@@ -14,6 +14,8 @@ import { TypeRegistry } from "./typereg.js"
 const config = configFromEnv()
 const typesDir = process.env.AUTONOMY_TYPES_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", "types")
 
+const logger = new JsonLogger({ bound: { svc: "engine" } })
+
 async function main(): Promise<void> {
 	const pool = makePool()
 	const engine = new Engine({
@@ -22,17 +24,18 @@ async function main(): Promise<void> {
 		render: new StubRenderClient(),
 		types: TypeRegistry.load(typesDir),
 		config,
+		logger,
 	})
-	console.error(`[engine] worker up — types: ${typesDir}, poll: ${config.pollIntervalMs}ms`)
+	logger.info("worker.up", { typesDir, pollIntervalMs: config.pollIntervalMs })
 
 	let busy = false
-	const drain = async () => {
+	const drain = async (trigger: string) => {
 		if (busy) return // coalesce overlapping wake-ups; v0 is single-worker
 		busy = true
 		try {
 			await engine.runUntilIdle()
 		} catch (err) {
-			console.error("[engine] drain error:", err)
+			logger.error("worker.drain_error", { trigger, error: err instanceof Error ? err.message : String(err) })
 		} finally {
 			busy = false
 		}
@@ -42,13 +45,13 @@ async function main(): Promise<void> {
 	const listener = await pool.connect()
 	await listener.query("LISTEN new_job")
 	await listener.query("LISTEN presentable")
-	listener.on("notification", () => void drain())
+	listener.on("notification", (msg) => void drain(msg.channel))
 
-	await drain() // catch up on anything queued before we started
-	setInterval(() => void drain(), config.pollIntervalMs)
+	await drain("startup") // catch up on anything queued before we started
+	setInterval(() => void drain("poll"), config.pollIntervalMs)
 }
 
 main().catch((err) => {
-	console.error(err)
+	logger.error("worker.fatal", { error: err instanceof Error ? err.message : String(err) })
 	process.exit(1)
 })

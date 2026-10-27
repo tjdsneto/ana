@@ -8,7 +8,8 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { Node, RenderClient, Store, SubagentRunner } from "@app/shared"
+import { NoopLogger } from "@app/shared"
+import type { Logger, Node, RenderClient, Store, SubagentRunner } from "@app/shared"
 import type { EngineConfig } from "./config.js"
 import { buildProducerPrompt, buildReviewerPrompt, parseVerdict, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -21,6 +22,7 @@ export interface EngineDeps {
 	render: RenderClient
 	types: TypeRegistry
 	config: EngineConfig
+	logger?: Logger // default: quiet (NoopLogger). Entrypoints inject a JsonLogger.
 }
 
 export class Engine {
@@ -29,6 +31,7 @@ export class Engine {
 	private readonly render: RenderClient
 	private readonly types: TypeRegistry
 	private readonly config: EngineConfig
+	private readonly log: Logger
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -36,6 +39,7 @@ export class Engine {
 		this.render = deps.render
 		this.types = deps.types
 		this.config = deps.config
+		this.log = deps.logger ?? new NoopLogger()
 	}
 
 	// One unit of work. Returns whether anything advanced (false = idle: nothing queued/ready and
@@ -88,6 +92,7 @@ export class Engine {
 			position++
 		}
 		await this.store.updateNodeStatus(root.id, "in-progress")
+		this.log.info("production.start", { productionId: root.id, children: contract.checklist.length })
 	}
 
 	// ── all children approved → root approved (production done) ────────────────────────────────────
@@ -98,6 +103,7 @@ export class Engine {
 			const children = (await this.store.nodesFor(root.productionId)).filter((n) => n.parentId === root.id)
 			if (children.length > 0 && children.every((c) => c.status === "approved")) {
 				await this.store.updateNodeStatus(root.id, "approved")
+				this.log.info("production.done", { productionId: root.productionId })
 				rolled = true
 			}
 		}
@@ -119,6 +125,8 @@ export class Engine {
 	private async dispatchLeaf(node: Node, contract: TypeContract): Promise<void> {
 		const root = await this.store.getProduction(node.productionId)
 		if (!root) throw new Error(`dispatchLeaf: production ${node.productionId} missing`)
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		log.info("node.dispatch")
 
 		const priorVersions = await this.store.versionsFor(node.id)
 		const latest = priorVersions.at(-1)
@@ -142,6 +150,7 @@ export class Engine {
 		// produce — via the RenderClient for rendered types (stubbed in v0), else a subagent
 		let draft: string
 		let artifactPath: string
+		const t0 = Date.now()
 		if (contract.rendered) {
 			const outDir = join(this.config.artifactsDir, node.productionId)
 			mkdirSync(outDir, { recursive: true })
@@ -162,6 +171,7 @@ export class Engine {
 			artifactPath,
 			subagent: { runId: randomUUID(), status: "done" },
 		})
+		log.info("node.produce", { versionId: version.id, n, rendered: Boolean(contract.rendered), ms: Date.now() - t0 })
 
 		// internal quality gate — independent specialist reviewers
 		const verdicts: ("pass" | "revise")[] = []
@@ -173,11 +183,12 @@ export class Engine {
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
 			verdicts.push(verdict)
+			log.debug("review.verdict", { versionId: version.id, reviewer: rv.name, kind: rv.kind, verdict })
 		}
 
 		const advisory = contract.advisoryReview === true
 		if (advisory || verdicts.every((v) => v === "pass")) {
-			await this.present(node, contract, version.id, root)
+			await this.present(node, contract, version.id, root, log)
 			return
 		}
 
@@ -185,22 +196,28 @@ export class Engine {
 		await this.store.updateVersion(version.id, { status: "needs-work" })
 		const redosSoFar = priorVersions.filter((v) => v.status === "needs-work").length + 1
 		if (redosSoFar >= this.config.maxRedos) {
-			await this.present(node, contract, version.id, root, `couldn't fully satisfy the review set after ${this.config.maxRedos} attempts`)
+			const reason = `couldn't fully satisfy the review set after ${this.config.maxRedos} attempts`
+			log.warn("node.escalate", { versionId: version.id, reason, attempt: redosSoFar })
+			await this.present(node, contract, version.id, root, log, reason)
 		} else {
+			log.info("node.redo", { versionId: version.id, attempt: redosSoFar })
 			await this.store.updateNodeStatus(node.id, "pending") // redo next tick, fed the reviewer feedback
 		}
 	}
 
-	private async present(node: Node, contract: TypeContract, versionId: string, root: Node, caveat?: string): Promise<void> {
+	private async present(node: Node, contract: TypeContract, versionId: string, root: Node, log: Logger, caveat?: string): Promise<void> {
 		await this.store.updateVersion(versionId, { status: "presentable" })
 
 		let prompt = `${node.name} is ready for review.`
+		let agreementCapped = false
 		if (contract.agreement) {
 			const rounds = (await this.store.versionsFor(node.id)).filter((v) => v.status === "denied").length
 			const cap = root.actorKind === "agent" ? this.config.agreementMaxRoundsAgent : this.config.agreementMaxRoundsHuman
 			if (rounds >= cap) {
 				// agreement cap (F5): escalate — do not force. The actor decides: approve = proceed, feedback = keep refining.
 				prompt = `${node.name}: ${rounds} rounds of refinement reached. Approve to proceed as-is, or give feedback to keep refining.`
+				agreementCapped = true
+				log.warn("agreement.cap", { versionId, rounds, cap })
 			}
 		}
 		if (caveat) prompt = `${node.name}: ${caveat}. Presenting anyway — approve or give feedback.`
@@ -215,6 +232,7 @@ export class Engine {
 			prompt,
 		})
 		await this.store.updateNodeStatus(node.id, "needs-presentation")
+		log.info("node.present", { versionId, escalation: Boolean(caveat), agreementCapped })
 	}
 
 	private async collectUpstream(node: Node): Promise<UpstreamArtifact[]> {
