@@ -16,8 +16,8 @@
 			"default": "./dist/schema.js"
 		},
 		"./testing": {
-			"types": "./dist/testing/fake-store.d.ts",
-			"default": "./dist/testing/fake-store.js"
+			"types": "./dist/testing/index.d.ts",
+			"default": "./dist/testing/index.js"
 		}
 	},
 	"scripts": {

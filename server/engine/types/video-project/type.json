@@ -1,0 +1,13 @@
+{
+	"type": "video-project",
+	"name": "Video project",
+	"checklist": [
+		{ "id": "briefing", "type": "briefing", "deps": [] },
+		{ "id": "script", "type": "script", "deps": ["briefing"] },
+		{ "id": "moodboard", "type": "moodboard", "deps": ["briefing"] },
+		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
+		{ "id": "render", "type": "render", "deps": ["storyboard"] },
+		{ "id": "polish", "type": "polish", "deps": ["render"] },
+		{ "id": "deliver", "type": "deliver", "deps": ["polish"] }
+	]
+}

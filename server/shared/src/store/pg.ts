@@ -3,7 +3,7 @@
 // this one, in tests it is the FakeStore (../testing). Ids + timestamps come from the injected
 // IdGen / Clock so tests of the adapter stay deterministic.
 
-import { and, desc, eq, isNull } from "drizzle-orm"
+import { and, desc, eq, isNull, sql } from "drizzle-orm"
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
 import type { Pool } from "pg"
 import { DEFAULT_ACCOUNT_ID, DEFAULT_USER_ID } from "../defaults.js"
@@ -98,6 +98,8 @@ export class PgStore implements Store {
 			.returning()
 		if (!root) throw new Error("createProduction: insert returned no row")
 		await this.db.insert(budget).values({ productionId: id, approved: false }).onConflictDoNothing()
+		// push-wake the worker (spec 03); the poll loop is the fallback if no one is LISTENing
+		await this.db.execute(sql`SELECT pg_notify('new_job', ${id})`)
 		return root
 	}
 
@@ -218,6 +220,10 @@ export class PgStore implements Store {
 		return row ?? null
 	}
 
+	async versionsFor(nodeId: string): Promise<Version[]> {
+		return this.db.select().from(versions).where(eq(versions.nodeId, nodeId)).orderBy(versions.n)
+	}
+
 	// ── reviews ─────────────────────────────────────────────────────────────────────────────────
 
 	async addReview(input: NewReview): Promise<Review> {
@@ -290,6 +296,10 @@ export class PgStore implements Store {
 			})
 			.returning()
 		if (!row) throw new Error("emitOutput: insert returned no row")
+		// push-wake the dashboard on a presentable version (spec 03/06)
+		if (row.type === "present") {
+			await this.db.execute(sql`SELECT pg_notify('presentable', ${row.productionId})`)
+		}
 		return row
 	}
 

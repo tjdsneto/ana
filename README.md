@@ -42,7 +42,9 @@ Design source of truth (outside this repo — don't copy its product name in):
    entrypoints; `PgStore` + `FakeStore` in `@app/shared`; smoked over the real MCP protocol on both
    FakeStore and Postgres)
 5. Engine worker: the poll/`LISTEN` loop against fakes (fake subagent runner + stubbed render), then
-   the `claude -p` runner.
+   the `claude -p` runner. ✅ (`@app/engine` — generic loop + on-disk type registry (7-step pipeline),
+   redo cap + F5 agreement cap, `LISTEN/NOTIFY` wake-ups; smoked end-to-end on Postgres: queued →
+   7 children produced/reviewed/approved → root done in 8 ticks)
 6. Dashboard: `dashboard/api` (reads + WebSocket over `LISTEN/NOTIFY`) + `dashboard/app` (React),
    once there is live data to render.
 7. Docker Compose (`db` + `mcp-server` + `engine-worker` + dashboard) on the shared volume.

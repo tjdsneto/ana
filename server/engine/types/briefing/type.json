@@ -1,0 +1,8 @@
+{
+	"type": "briefing",
+	"name": "Briefing",
+	"produce": "Extract and confirm the key points of the request: goal, audience, tone, length, and must-include messages. If the brief is thin, state your assumptions explicitly so the user can correct them.",
+	"agreement": true,
+	"advisoryReview": true,
+	"reviews": [{ "name": "coverage", "kind": "coverage" }]
+}

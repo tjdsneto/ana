@@ -198,6 +198,9 @@ export class FakeStore implements Store {
 		const list = [...this.versions.values()].filter((v) => v.nodeId === nodeId).sort((a, b) => b.n - a.n)
 		return list[0] ?? null
 	}
+	async versionsFor(nodeId: string): Promise<Version[]> {
+		return [...this.versions.values()].filter((v) => v.nodeId === nodeId).sort((a, b) => a.n - b.n)
+	}
 
 	async addReview(input: NewReview): Promise<Review> {
 		const review: Review = {

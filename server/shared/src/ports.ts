@@ -61,6 +61,7 @@ export interface Store {
 	updateVersion(id: string, patch: VersionPatch): Promise<void>
 	getVersion(id: string): Promise<Version | null>
 	latestVersion(nodeId: string): Promise<Version | null>
+	versionsFor(nodeId: string): Promise<Version[]> // ordered by n; for the redo cap + agreement rounds
 
 	// reviews (internal quality gate)
 	addReview(input: NewReview): Promise<Review>

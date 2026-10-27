@@ -5,7 +5,8 @@
 	"description": "Autonomous video-production engine (PoC) — generic autonomy loop. No brand/product names (see CLAUDE.md).",
 	"workspaces": [
 		"server/shared",
-		"server/mcp"
+		"server/mcp",
+		"server/engine"
 	],
 	"scripts": {
 		"typecheck": "tsc -b",

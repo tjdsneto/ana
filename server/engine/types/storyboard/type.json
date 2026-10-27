@@ -1,0 +1,9 @@
+{
+	"type": "storyboard",
+	"name": "Storyboard",
+	"produce": "Lay out the shots scene by scene, aligning the script's beats to the moodboard's visual direction. Note timing per shot.",
+	"reviews": [
+		{ "name": "craft", "kind": "craft" },
+		{ "name": "consistency", "kind": "consistency" }
+	]
+}

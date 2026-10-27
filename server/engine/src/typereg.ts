@@ -1,0 +1,73 @@
+// Type registry — node behavior lives on disk, resolved by node.type (spec 01). Each type is a
+// directory holding type.json. The loop is generic; this is the only place the craft pipeline is
+// declared. Load from AUTONOMY_TYPES_DIR (default server/engine/types), or build in-memory for tests.
+
+import { readdirSync, readFileSync, statSync } from "node:fs"
+import { join } from "node:path"
+
+export interface ChecklistEntry {
+	id: string // checklist-local key; deps reference these, resolved to node ids on expand
+	type: string
+	deps?: string[]
+	when?: string
+	role?: string
+}
+
+export interface ReviewSpec {
+	name: string
+	kind: "craft" | "coverage" | "consistency"
+}
+
+export interface TypeContract {
+	type: string
+	name?: string // human label for the node
+	checklist?: ChecklistEntry[] // static sub-project (expand)
+	planner?: boolean // dynamic sub-project (plan) — v0-flat: not exercised
+	childType?: string
+	produce?: string // producer instruction (the prompt seed)
+	reviews?: ReviewSpec[] // the specialist reviewer set
+	advisoryReview?: boolean // rollup/review never blocks (agreement types)
+	agreement?: boolean // agreement-terminal (briefing): client approval is the gate, capped back-and-forth
+	router?: boolean // emits VERDICT to gate a sibling — v0-flat: not exercised
+	rendered?: boolean // produce via the RenderClient (stubbed in v0) instead of a subagent
+	skill?: string // producer skill name, or "self"
+}
+
+export class TypeRegistry {
+	private readonly byType = new Map<string, TypeContract>()
+
+	private constructor(contracts: TypeContract[]) {
+		for (const c of contracts) this.byType.set(c.type, c)
+	}
+
+	static fromContracts(contracts: TypeContract[]): TypeRegistry {
+		return new TypeRegistry(contracts)
+	}
+
+	static load(dir: string): TypeRegistry {
+		const contracts: TypeContract[] = []
+		for (const entry of readdirSync(dir)) {
+			const typeDir = join(dir, entry)
+			if (!statSync(typeDir).isDirectory()) continue
+			const contractPath = join(typeDir, "type.json")
+			try {
+				const parsed = JSON.parse(readFileSync(contractPath, "utf8")) as TypeContract
+				contracts.push(parsed)
+			} catch (err) {
+				throw new Error(`type registry: failed to load ${contractPath}: ${(err as Error).message}`)
+			}
+		}
+		if (contracts.length === 0) throw new Error(`type registry: no type.json found under ${dir}`)
+		return new TypeRegistry(contracts)
+	}
+
+	get(type: string): TypeContract {
+		const contract = this.byType.get(type)
+		if (!contract) throw new Error(`type registry: unknown type "${type}"`)
+		return contract
+	}
+
+	has(type: string): boolean {
+		return this.byType.has(type)
+	}
+}

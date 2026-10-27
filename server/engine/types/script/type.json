@@ -1,0 +1,9 @@
+{
+	"type": "script",
+	"name": "Script",
+	"produce": "Write a short, tight video script that delivers the brief's messages in the target length. Lead with the hook; keep lines speakable.",
+	"reviews": [
+		{ "name": "craft", "kind": "craft" },
+		{ "name": "coverage", "kind": "coverage" }
+	]
+}
