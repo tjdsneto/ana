@@ -1,7 +1,7 @@
 # Spec 03 — Ports, adapters & testing (+ DB schema)
 
 **Status:** draft to build against. Depends on specs 01–02. Defines the interfaces the core depends on,
-the SQLite schema behind the `Store`, and the test strategy. The whole point: the loop and the tool
+the Postgres schema behind the `Store`, and the test strategy. The whole point: the loop and the tool
 handlers unit-test against **fakes** — no DB, no network, no `claude -p`.
 
 > Rule: core logic depends on the **interface**, never the concrete. Even if the language changes
@@ -13,7 +13,7 @@ All live in `server/shared` and are imported by both `server/mcp` and `server/en
 
 ### Store — all DB access
 
-One interface over every table in spec 01. Tool handlers and the loop call `Store`, never SQLite.
+One interface over every table in spec 01. Tool handlers and the loop call `Store`, never the DB directly.
 
 ```ts
 export interface Store {
@@ -56,9 +56,12 @@ export interface Store {
 }
 ```
 
-- Concurrency: the loop and the MCP server are **two writers**. The SQLite adapter runs in WAL mode;
-  each `Store` method is a single transaction. (v0 load is tiny; this is correctness, not throughput.)
+- Concurrency: the loop, the MCP server, and the dashboard API are **concurrent writers/readers**.
+  Postgres MVCC handles that natively; each `Store` method is one transaction. See "Concurrency &
+  wakeups" below for claiming (`SKIP LOCKED`) and push (`LISTEN/NOTIFY`).
 - Partial updates matter — `updateVersion(id, patch)` must not rewrite the whole row.
+- The adapter is **Drizzle + `pg`** (TS-native, SQL-first). The port keeps the DB swappable; only the
+  adapter + DDL are Postgres-specific.
 
 ### RenderClient — each render engine behind one interface
 
@@ -94,134 +97,159 @@ export interface IdGen { next(): string }
 
 Injected everywhere a timestamp or id is created, so tests are reproducible.
 
-## SQLite schema (behind the Store)
+## Postgres schema (behind the Store)
 
-Falls out of spec 01. One `nodes` table (no separate productions/jobs table — the root node *is* the
-production), plus a thin `accounts` table (the tenant seam — PoC seeds one default row). Lives in
-`server/shared` as migrations.
+Falls out of spec 01. **Postgres** (a `db` service in Compose — see spec 07), not SQLite: it is the
+v1 shape, removes the single-writer ceiling, and gives `LISTEN/NOTIFY` (push, not poll) + `jsonb` +
+`SELECT … FOR UPDATE SKIP LOCKED` (clean job claiming). One `nodes` table (no separate productions/jobs
+table — the root node *is* the production), plus a thin `accounts` table (the tenant seam — PoC seeds
+one default row). Lives in `server/shared` as migrations (Drizzle).
+
+Ids are app-generated strings (`IdGen`) → `text` PKs. Timestamps are `timestamptz`; the app supplies
+them via `Clock` (the `DEFAULT now()` is a convenience, overridden in deterministic tests). Status
+columns stay `text` in v0 (promote to enums/`CHECK` later).
 
 ```sql
 CREATE TABLE accounts (
-	id         TEXT PRIMARY KEY,
-	name       TEXT NOT NULL,
-	created_at TEXT NOT NULL
+	id         text PRIMARY KEY,
+	name       text NOT NULL,
+	created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE users (
-	id         TEXT PRIMARY KEY,
-	account_id TEXT NOT NULL REFERENCES accounts(id), -- account 1—* users
-	name       TEXT NOT NULL,
-	created_at TEXT NOT NULL
+	id         text PRIMARY KEY,
+	account_id text NOT NULL REFERENCES accounts(id), -- account 1—* users
+	name       text NOT NULL,
+	created_at timestamptz NOT NULL DEFAULT now()
 );
 -- PoC seeds exactly one default account + one default user on init; every production points at them
 -- via nodes.account_id / nodes.user_id.
 
 CREATE TABLE nodes (
-	id            TEXT PRIMARY KEY,
-	account_id    TEXT REFERENCES accounts(id), -- root only: the owning account (tenant); NULL on children
-	user_id       TEXT REFERENCES users(id),    -- root only: the user who requested it; NULL on children
-	production_id TEXT NOT NULL,            -- groups one tree; equals the root node's id
-	parent_id     TEXT,                     -- NULL = root = the production
-	type          TEXT NOT NULL,            -- resolved against the type registry (files)
-	name          TEXT NOT NULL,
-	description   TEXT,
-	status        TEXT NOT NULL,            -- pending | ready | in-progress | needs-presentation | presented | approved | ...
-	deps          TEXT NOT NULL DEFAULT '[]', -- JSON array of node ids (sibling prerequisites)
-	position      INTEGER NOT NULL DEFAULT 0,
-	session_id    TEXT,                     -- root only: the owning client session (nudge target)
-	autonomy_lever TEXT,                    -- root only: low | medium | high — how much the engine decides vs asks
-	created_at    TEXT NOT NULL,
-	updated_at    TEXT NOT NULL
+	id             text PRIMARY KEY,
+	account_id     text REFERENCES accounts(id), -- root only: the owning account (tenant); NULL on children
+	user_id        text REFERENCES users(id),    -- root only: the user who requested it; NULL on children
+	production_id  text NOT NULL,            -- groups one tree; equals the root node's id
+	parent_id      text REFERENCES nodes(id),-- NULL = root = the production
+	type           text NOT NULL,            -- resolved against the type registry (files)
+	name           text NOT NULL,
+	description    text,
+	status         text NOT NULL,            -- pending | ready | in-progress | needs-presentation | presented | approved | ...
+	deps           jsonb NOT NULL DEFAULT '[]'::jsonb, -- array of node ids (sibling prerequisites)
+	position       integer NOT NULL DEFAULT 0,
+	session_id     text,                     -- root only: the owning client session (nudge target)
+	autonomy_lever text,                     -- root only: low | medium | high — how much the engine decides vs asks
+	created_at     timestamptz NOT NULL DEFAULT now(),
+	updated_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_nodes_production ON nodes(production_id);
 CREATE INDEX idx_nodes_parent     ON nodes(parent_id);
 CREATE INDEX idx_nodes_account    ON nodes(account_id);
 
 CREATE TABLE versions (
-	id              TEXT PRIMARY KEY,
-	node_id         TEXT NOT NULL REFERENCES nodes(id),
-	n               INTEGER NOT NULL,
-	prev_version_id TEXT REFERENCES versions(id),
-	status          TEXT NOT NULL,          -- producing | in-review | presentable | presented | approved | denied | needs-work | superseded
-	artifact_path   TEXT,                   -- file on the shared volume (not in the DB)
-	subagent        TEXT,                   -- attached subagent + state (idempotency)
-	feedback        TEXT,
-	created_at      TEXT NOT NULL,
-	updated_at      TEXT NOT NULL
+	id              text PRIMARY KEY,
+	node_id         text NOT NULL REFERENCES nodes(id),
+	n               integer NOT NULL,
+	prev_version_id text REFERENCES versions(id),
+	status          text NOT NULL,          -- producing | in-review | presentable | presented | approved | denied | needs-work | superseded
+	artifact_path   text,                   -- file on the shared volume (not in the DB)
+	subagent        jsonb,                  -- attached subagent + state (idempotency)
+	feedback        text,
+	created_at      timestamptz NOT NULL DEFAULT now(),
+	updated_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_versions_node ON versions(node_id);
 
 CREATE TABLE reviews (
-	id         TEXT PRIMARY KEY,
-	node_id    TEXT NOT NULL REFERENCES nodes(id),
-	version_id TEXT NOT NULL REFERENCES versions(id),
-	name       TEXT NOT NULL,               -- rubric name (craft side; files)
-	kind       TEXT NOT NULL,               -- craft | coverage | consistency
-	verdict    TEXT NOT NULL,               -- pass | revise
-	body       TEXT,
-	created_at TEXT NOT NULL
+	id         text PRIMARY KEY,
+	node_id    text NOT NULL REFERENCES nodes(id),
+	version_id text NOT NULL REFERENCES versions(id),
+	name       text NOT NULL,               -- rubric name (craft side; files)
+	kind       text NOT NULL,               -- craft | coverage | consistency
+	verdict    text NOT NULL,               -- pass | revise
+	body       text,
+	created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE assets (
-	id            TEXT PRIMARY KEY,
-	production_id TEXT NOT NULL,
-	node_id       TEXT REFERENCES nodes(id), -- the node that produced/gathered it (nullable)
-	name          TEXT NOT NULL,
-	description   TEXT,
-	asset_type    TEXT NOT NULL,            -- ROLE: logo | screenshot | b-roll | music | vo | sfx | ...
-	file_type     TEXT NOT NULL,            -- FORMAT: png | svg | mp4 | wav | mp3 | ...
-	storage_path  TEXT NOT NULL,            -- file on the shared volume
-	created_at    TEXT NOT NULL,
-	updated_at    TEXT NOT NULL
+	id            text PRIMARY KEY,
+	production_id text NOT NULL,
+	node_id       text REFERENCES nodes(id), -- the node that produced/gathered it (nullable)
+	name          text NOT NULL,
+	description   text,
+	asset_type    text NOT NULL,            -- ROLE: logo | screenshot | b-roll | music | vo | sfx | ...
+	file_type     text NOT NULL,            -- FORMAT: png | svg | mp4 | wav | mp3 | ...
+	storage_path  text NOT NULL,            -- file on the shared volume
+	created_at    timestamptz NOT NULL DEFAULT now(),
+	updated_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_assets_production ON assets(production_id);
 
 -- engine → chat: everything to SHOW the user
 CREATE TABLE chat_output (
-	id            TEXT PRIMARY KEY,
-	account_id    TEXT,
-	user_id       TEXT,                     -- the user this message is for
-	production_id TEXT NOT NULL,
-	node_id       TEXT,
-	version_id    TEXT,
-	type          TEXT NOT NULL,            -- present | notify | question | options   (confirm = options[Yes,No]); v0 emits present only
-	status        TEXT NOT NULL,            -- pending | resolved
-	prompt        TEXT,
-	options       TEXT,                     -- JSON array (for options / confirm)
-	created_at    TEXT NOT NULL,
-	resolved_at   TEXT
+	id            text PRIMARY KEY,
+	account_id    text,
+	user_id       text,                     -- the user this message is for
+	production_id text NOT NULL,
+	node_id       text,
+	version_id    text,
+	type          text NOT NULL,            -- present | notify | question | options   (confirm = options[Yes,No]); v0 emits present only
+	status        text NOT NULL,            -- pending | resolved
+	prompt        text,
+	options       jsonb,                    -- array (for options / confirm)
+	created_at    timestamptz NOT NULL DEFAULT now(),
+	resolved_at   timestamptz
 );
 CREATE INDEX idx_chat_output_pending ON chat_output(production_id, status);
 
 -- user → engine: everything FROM the user (absorbs the old feedback table)
 CREATE TABLE chat_input (
-	id            TEXT PRIMARY KEY,
-	account_id    TEXT,
-	user_id       TEXT,                     -- the user this message came from
-	production_id TEXT NOT NULL,
-	node_id       TEXT,
-	version_id    TEXT,
-	responds_to   TEXT REFERENCES chat_output(id), -- the output it answers; NULL = unsolicited (e.g. ad-hoc feedback)
-	kind          TEXT NOT NULL,            -- approve | feedback | answer
-	body          TEXT,                     -- feedback text / chosen answer
-	created_at    TEXT NOT NULL
+	id            text PRIMARY KEY,
+	account_id    text,
+	user_id       text,                     -- the user this message came from
+	production_id text NOT NULL,
+	node_id       text,
+	version_id    text,
+	responds_to   text REFERENCES chat_output(id), -- the output it answers; NULL = unsolicited (e.g. ad-hoc feedback)
+	kind          text NOT NULL,            -- approve | feedback | answer
+	body          text,                     -- feedback text / chosen answer
+	created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_chat_input_production ON chat_input(production_id);
 
 CREATE TABLE budget (
-	production_id TEXT PRIMARY KEY,
-	approved      INTEGER NOT NULL DEFAULT 0 -- the money-gate flag; promote to cost_events only if needed
+	production_id text PRIMARY KEY,
+	approved      boolean NOT NULL DEFAULT false -- the money-gate flag; promote to cost_events only if needed
 );
 ```
 
-Timestamps are ISO-8601 TEXT (SQLite has no native datetime); the `Clock` produces them.
+## Concurrency & wakeups (Postgres)
+
+- **Multiple writers, native.** Postgres MVCC lets the MCP server, the worker, and the dashboard API
+  all read/write concurrently — no single-writer ceiling. Each `Store` method is one transaction.
+- **Job claiming (multi-worker seam):** `SELECT … FROM nodes WHERE status='pending' … FOR UPDATE SKIP
+  LOCKED LIMIT 1` lets N workers each grab a different ready node with no double-dispatch. v0 runs one
+  worker; this is the seam that makes adding workers a config change, not a redesign.
+- **Wakeups via `LISTEN/NOTIFY` (push, not poll):** on insert of a queued production the writer fires
+  `NOTIFY new_job`; the worker `LISTEN new_job` wakes immediately (the `POLL_INTERVAL_MS` loop stays as
+  a cheap fallback). On a version turning presentable the worker fires `NOTIFY presentable`; the
+  dashboard API (spec 06) relays it over WebSocket to the browser. NOTIFY is app-level (the Store emits
+  it after the write) — no triggers needed in v0.
+- **Artifacts bypass the DB entirely** — big files (renders, audio) are written to `server/data/artifacts`
+  on the shared volume and only *referenced* by `artifact_path` / `storage_path`, so heavy I/O never
+  touches a row lock.
+```
+
+Timestamps are `timestamptz`; the `Clock` supplies them from the app (the DDL `DEFAULT now()` is a
+convenience), so tests stay deterministic.
 
 ## Test strategy
 
 - **Core (loop + tool handlers):** unit tests against `FakeStore` + `FakeSubagentRunner` +
   `StubRenderClient` + fixed `Clock`/`IdGen`. No I/O. These are the tests that matter most — they pin
   the dispatch logic, the redo cap, the rollup, the `chat_output` emission.
-- **Adapters:** thin focused tests. The SQLite `Store` against a temp DB file; the `claude -p` runner
+- **Adapters:** thin focused tests. The Postgres `Store` against a throwaway test database (a
+  disposable container / Testcontainers, or a scratch schema); the `claude -p` runner
   behind a flag (not in the default suite — it costs real calls); the render stub trivially.
 - **Runner:** vitest (locked). Keep the suite fast and deterministic.
 

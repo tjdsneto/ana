@@ -111,10 +111,11 @@ Two feedback sources, kept distinct: the internal reviewer's `revise` → silent
 
 ## The nudge (how the client hears about a `present`)
 
-MCP cannot push (see the design §16). v0: the client **polls** the pending `chat_output` queue
-(`inbox`) and presents — or an optional headless dialer pushes into the live client session. Poll
-first; add push later. v1: a background executor pushes to a notification channel. Either way, **the
-loop only marks the data; the client presents.**
+MCP cannot push (see the design §16). The **dashboard** (spec 06) does get live push — the worker's
+`NOTIFY presentable` → the dashboard API's `LISTEN` → a WebSocket to the browser (spec 03). A pure MCP
+`client/agent` still **polls** the pending `chat_output` queue (`inbox`) or uses an optional headless
+dialer. v1: a background executor pushes to a notification channel. Either way, **the loop only marks
+the data; the client/dashboard presents.**
 
 ## Ports this loop depends on (spec 03)
 

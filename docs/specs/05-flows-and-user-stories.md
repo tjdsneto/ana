@@ -137,10 +137,11 @@ asks less, converges faster).
 
 ## Gaps these flows surface (for us to think)
 
-1. **The v0 client is a person or a stub?** F1/F5 assume someone approves. For an automated demo we
-   need a scripted approver (or `--gate ask` style). Decide how the gate is driven in v0 so flows F1–F5
-   are runnable without a human in the loop.
-2. **Nudge in v0** (F1 step 5): poll `inbox` vs the headless dialer push. Poll first (spec 02).
+1. ~~**The v0 client is a person or a stub?**~~ **Resolved:** the **dashboard** (spec 06) drives the
+   gate — a human clicks Approve/Feedback. For headless demos/tests a scripted approver can still write
+   `chat_input` directly. So: dashboard for the live demo, a scripted gate for automated runs.
+2. **Nudge in v0** (F1 step 5): the dashboard gets pushed live via `LISTEN/NOTIFY` → WebSocket (spec
+   03/06); a pure MCP `client/agent` still polls `inbox` or uses the headless dialer (spec 02).
 3. **Budget gate shape** (F4): a dedicated `notify`/`ask` vs just the `budget` flag + a gate check.
    v0 leans on the flag; the `chat_output` framing is the v1 shape.
 4. **Learned-rule store** (F2 step 2): where account preferences/learnings physically live (a file in

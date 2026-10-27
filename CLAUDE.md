@@ -25,7 +25,11 @@ for approval. v0 proof-of-concept — internal only, not production-ready. Rende
 client (Claude / ChatGPT, via MCP)
    │
    ▼
-mcp-server (TS/Node) ──writes/reads──►  SQLite (app.db) + artifacts/  ◄──reads/writes── engine-worker (TS/Node; the loop; spawns `claude -p`)
+mcp-server (TS/Node) ──writes/reads──►  Postgres (db service) + artifacts/  ◄──reads/writes── engine-worker (TS/Node; the loop; spawns `claude -p`)
+                                              ▲
+                                     reads/subscribes (LISTEN/NOTIFY → WebSocket)
+                                              │
+                                     dashboard (React + thin Node/TS read API) — dev/observability + v0 human-gate UI
 ```
 
 - **mcp-server** answers fast tool calls synchronously against the DB (`get_status`, `inbox`,
@@ -34,12 +38,16 @@ mcp-server (TS/Node) ──writes/reads──►  SQLite (app.db) + artifacts/  
 - **engine-worker** is a separate long-running process that polls the DB for queued work, runs the
   recursive loop, spawns `claude -p` subagents (producers + specialist reviewers), and writes progress
   + artifacts back.
-- **The DB is the only integration point.** The two processes never call each other — they share data.
-  This decoupling (conversation vs. production) is the core bet: the production survives the client
-  disconnecting, resumes after a crash, and later scales to many workers.
+- **The DB is the only integration point.** The processes never call each other — they share data
+  (the engine, the MCP server, and the dashboard are all just DB clients). This decoupling
+  (conversation vs. production) is the core bet: the production survives the client disconnecting,
+  resumes after a crash, and later scales to many workers.
+- **Postgres from v0** (a `db` service in Compose). `LISTEN/NOTIFY` wakes the worker on new jobs and
+  pushes dashboard updates (no pure polling); `SKIP LOCKED` is the multi-worker claim seam. Adapter:
+  Drizzle + `pg`, behind the `Store` port.
 
-**PoC simplification:** the worker is a single polling process — no queue/broker yet (Phase 4).
-SQLite is a file on the shared volume — no DB service (Phase 4). Don't over-build.
+**PoC simplification:** one worker, no queue/broker yet (the `SKIP LOCKED` claim makes multi-worker a
+later config change). Render stays stubbed. Don't over-build — no billing/tenancy/scale now.
 
 ## The domain model — the recursive typed-project loop
 
@@ -67,11 +75,12 @@ engine        generic autonomy loop — knows nothing about video
 |------|------|
 | `docs/specs/` | the specs — **start here**; domain model first |
 | `docs/code-standards.md` | TS/testing conventions, the port/adapter rule, the naming rule |
-| `server/shared/` | DB schema + migrations, job/node contract types, port interfaces shared by mcp + engine |
+| `server/shared/` | DB schema + migrations (Drizzle), node/contract types, port interfaces shared by mcp + engine |
 | `server/mcp/` | TS/Node MCP server (tools + transport: HTTP, plus a thin stdio entrypoint) |
 | `server/engine/` | the autonomy-engine worker (TS/Node; the loop; spawns `claude -p`) |
-| `server/data/` | gitignored runtime state: `app.db` (SQLite) + `artifacts/` |
-| `client/agent/` | thin client template a brand installs (MCP config only; no craft) |
+| `server/data/` | gitignored runtime state: produced `artifacts/` (the Postgres data lives in the `db` container volume) |
+| `client/agent/` | thin client template a brand installs (MCP config only; no craft) — the product client |
+| `dashboard/` | dev/observability web app — `dashboard/app` (React + Vite) + `dashboard/api` (thin Node/TS read API + WebSocket). Reads the DB, renders productions/nodes live, and drives the v0 human gate (approve/feedback). **Not** the product client. |
 | `.claude/skills/` | project skills (run/test the stack, add-a-tool, add-a-type) |
 
 ## Testing seam — ports and adapters (bake in from the start)

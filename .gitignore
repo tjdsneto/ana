@@ -7,11 +7,11 @@ dist/
 build/
 *.tsbuildinfo
 
-# runtime state (shared volume: SQLite DB + produced artifacts)
-server/data/*.db
-server/data/*.db-shm
-server/data/*.db-wal
+# runtime state — produced artifacts on the shared volume (Postgres data lives in the db container volume)
 server/data/artifacts/
+
+# postgres data (if a local bind-mount is ever used)
+server/data/pgdata/
 
 # secrets
 .env

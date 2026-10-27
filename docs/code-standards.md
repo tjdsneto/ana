@@ -21,14 +21,14 @@ Define an **interface (port)** at every external edge; core logic depends on the
 concrete implementation.
 
 - `Store` — all DB reads/writes (productions, nodes, versions, reviews, interactions, feedback,
-  budget). Tool handlers and the loop talk to `Store`, never to SQLite directly.
+  budget). Tool handlers and the loop talk to `Store`, never to Postgres directly.
 - `RenderClient` — each render engine behind one interface. **Stub implementation first**; real
   adapters when keys land.
 - `SubagentRunner` — spawns `claude -p`. A fake returns canned output so the loop tests with no real
   subagent and no network.
 - `Clock` / `IdGen` — injectable, so timestamps and ids are deterministic in tests.
 
-Adapters (SQLite store, HTTP render clients, the `claude -p` runner) each get thin, focused tests.
+Adapters (Postgres store via Drizzle + `pg`, HTTP render clients, the `claude -p` runner) each get thin, focused tests.
 Unit testing is a goal, **not a blocker** — don't let test scaffolding stall the first spike.
 
 ## Conventions

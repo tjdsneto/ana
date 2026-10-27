@@ -257,7 +257,7 @@ out of this one mechanism — see spec 02.
 
 | thing | home | why |
 |-------|------|-----|
-| account, user, node, version, review, asset, chat_output, chat_input, budget | **SQLite tables** | durable state the loop resumes from; two concurrent writers |
+| account, user, node, version, review, asset, chat_output, chat_input, budget | **Postgres tables** | durable state the loop resumes from; concurrent writers (engine + MCP + dashboard) |
 | artifacts (storyboard.md, render, audio) | **files** on the shared volume | big; referenced from the DB by `artifact_path` |
 | type contracts + rubrics + producer skills | **files** (type registry) | behavior, the craft/IP; not state |
 

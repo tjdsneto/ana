@@ -2,7 +2,7 @@
 
 A caller sends a brief; a generic autonomy engine produces a video through a recursive,
 self-reviewing loop and returns it for approval. Two processes (an MCP server + an engine worker)
-share one SQLite DB and an artifacts directory. v0 proof-of-concept, internal only.
+share one Postgres DB and an artifacts directory. v0 proof-of-concept, internal only.
 
 > **Naming rule:** no brand or product names in this repo — generic only (`engine`, `mcp-server`,
 > `client`, `worker`, `production`). See `CLAUDE.md`.
@@ -13,12 +13,17 @@ share one SQLite DB and an artifacts directory. v0 proof-of-concept, internal on
    shared contract types in `server/shared`. (PoC-scoping only; the product keeps v1 language open.)
 2. **Transport — streamable HTTP** for the Compose target, plus a **thin stdio entrypoint** for the
    first local Claude Code check.
-3. **SQLite for the PoC** — a file on the shared volume, no DB service. Phase 4 replaces it with a
-   networked DB + a real queue + multiple workers. Note it; don't build it.
+3. **Postgres from v0** — a `db` service in Compose (switched off the handoff's SQLite: it is the v1
+   shape, removes the single-writer ceiling, and gives `LISTEN/NOTIFY` push + `jsonb` + `SKIP LOCKED`
+   claiming, so no Phase-4 migration). Adapter: Drizzle + `pg`, behind the `Store` port. v0 still runs
+   **one worker**; multi-worker is a later config change (the `SKIP LOCKED` seam), not a redesign.
 4. **Ports and adapters** at every external edge (Store / RenderClient / SubagentRunner / Clock+IdGen)
    so the core unit-tests against fakes. See `docs/code-standards.md`.
 5. **Render stubbed** (text-level) until engine keys arrive (pending Angie).
 6. **Test runner: vitest** (default; confirm on scaffolding).
+7. **Dashboard from v0** — a dev/observability web app (`dashboard/`, React + Vite + a thin Node/TS
+   read API) that renders productions/nodes live (via `LISTEN/NOTIFY` → WebSocket) and drives the v0
+   **human gate** (approve/feedback). Not the product client. See `docs/specs/06-dashboard.md`.
 
 Design source of truth (outside this repo — don't copy its product name in):
 `../docs/lisa/lisa-loop-design.md` (§20–27 = the recursive typed-project model) and
@@ -27,26 +32,31 @@ Design source of truth (outside this repo — don't copy its product name in):
 ## Build order
 
 1. Repo + `git init` + `.gitignore` + skeleton `CLAUDE.md` / `docs/code-standards.md`. ✅
-2. Specs in `docs/specs/`, **domain model first** (entities + which become DB tables), then lifecycle,
-   engine loop, DB schema, testing seams, and the MCP tool contract **last**.
-3. Shared contract: types + port interfaces + DB schema in `server/shared`.
+2. Specs in `docs/specs/`, **domain model first**, then lifecycle/loop, ports + schema, tools, flows,
+   dashboard, compose. ✅ (01–07)
+3. Shared contract: types + port interfaces + Drizzle schema/migrations in `server/shared`; seed the
+   default account + user.
 4. MCP server: the direct tools + `request_video` (stdio entrypoint first), against a `Store` fake,
-   then the SQLite adapter.
-5. Engine worker: the poll loop against fakes (fake subagent runner + stubbed render), then the
-   `claude -p` runner.
-6. Docker Compose (HTTP) wiring both to the shared volume.
-7. End-to-end check per acceptance below.
+   then the Postgres (Drizzle + `pg`) adapter.
+5. Engine worker: the poll/`LISTEN` loop against fakes (fake subagent runner + stubbed render), then
+   the `claude -p` runner.
+6. Dashboard: `dashboard/api` (reads + WebSocket over `LISTEN/NOTIFY`) + `dashboard/app` (React),
+   once there is live data to render.
+7. Docker Compose (`db` + `mcp-server` + `engine-worker` + dashboard) on the shared volume.
+8. End-to-end check per acceptance below.
 
 ## Acceptance (PoC spike)
 
-- `docker compose up` brings up `mcp-server` + `engine-worker` sharing one volume.
-- From a Claude Code session: `request_video` inserts a production; `engine-worker` picks it up and
-  advances its status; `get_status` reflects progress; an artifact row + file appears under
-  `server/data/artifacts`.
+- `docker compose up` brings up `db` + `mcp-server` + `engine-worker` (+ dashboard) sharing the DB and
+  the artifacts volume.
+- From a Claude Code session: `request_video` inserts a production; `engine-worker` is woken by
+  `NOTIFY` and advances status; `get_status` / the dashboard reflect progress; a presentable version
+  shows in `inbox` / the dashboard; `approve` drives the next pass; an artifact row + file appears
+  under `server/data/artifacts`.
 - Render stubbed (text-level) is fine. Core loop + tool handlers have unit tests against fakes. No
-  brand/product naming anywhere. First commits land here.
+  brand/product naming anywhere.
 
 ## Not in scope
 
-Real render wiring (needs keys), hosting, accounts/billing, multi-worker scale, the app/website — all
-later phases.
+Real render wiring (needs keys), hosting, accounts/billing, multi-worker scale, the production
+website (WordPress) — all later phases.
