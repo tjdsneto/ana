@@ -85,6 +85,33 @@ engine        generic autonomy loop — knows nothing about video
 | `app/` | `@app/web` — the React + Vite SPA: dev/observability UI + the v0 human gate (approve/feedback). Reads `server/api`, renders productions/nodes live. **Not** the product client |
 | `.claude/skills/` | project skills (run/test the stack, add-a-tool, add-a-type) |
 
+## Running commands — use `./x` (host-free toolbox)
+
+The pinned toolchain (Node 24 LTS + npm 12) lives in the Docker image, **not on the machine** — do not
+assume a usable host `node`/`npm`. Run every Node/npm command through the **`./x`** wrapper, which
+executes it inside the `toolbox` Compose service (same pinned image, in the `tools` profile). The repo
+is bind-mounted live, so your edits are seen at once; each `node_modules` is a named volume, so the
+container's Linux-arch install never clobbers the host's (and vice versa).
+
+| Need | Command |
+|------|---------|
+| Install from the lockfile | `./x npm ci` |
+| Add a dep / regenerate the lockfile | `./x npm install <pkg>` |
+| Build the workspace (`tsc -b`) | `./x npm run build` |
+| Run tests (vitest) | `./x npm test` |
+| Typecheck | `./x npm run typecheck` |
+| Interactive shell in the toolbox | `./x sh` |
+
+First `./x` run builds the image (one-time). db-touching scripts need the `db` service up first:
+`docker compose up -d db && ./x npm run db:migrate`. Running Node directly on the host (`nvm use` →
+Node 24, then `npm ci`) still works but is the fallback; the only thing `./x` can't drive is the IDE's
+in-editor test runner / debugger. Full rationale + wrapper source: README "Local development" and the
+`toolbox` service in `docker-compose.yml`.
+
+Note: npm 12 blocks dependency install scripts by default — if an install warns `install scripts
+blocked ... not covered by allowScripts` and something then fails for a missing native binary, run
+`./x npm install-scripts ls` to see what's blocked and whitelist it.
+
 ## Testing seam — ports and adapters (bake in from the start)
 
 An interface (port) at every external edge; core logic depends on the interface, never the concrete:
