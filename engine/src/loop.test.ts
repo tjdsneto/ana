@@ -153,6 +153,58 @@ describe("agreement cap (F5)", () => {
 	})
 })
 
+describe("interaction log + session capture", () => {
+	it("records one interaction per subagent run (producers + reviewers), with engine/session/usage", async () => {
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render: new StubRenderClient(), types, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			for (const o of pending) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && pending.length === 0) throw new Error("stuck before done")
+		}
+
+		const ints = await store.interactionsFor(root.id)
+		// 6 producers (all leaves but render, which is rendered — no subagent) + 9 reviewers (reviews
+		// across all 7 leaves, render's consistency reviewer included).
+		expect(ints.filter((i) => i.role === "producer")).toHaveLength(6)
+		expect(ints.filter((i) => i.role.startsWith("review:"))).toHaveLength(9)
+		expect(ints.every((i) => i.engine === "fake")).toBe(true)
+		expect(ints.every((i) => typeof i.sessionId === "string")).toBe(true)
+		expect(ints.every((i) => i.inputTokens === 0 && i.costUsd === 0)).toBe(true) // usage plumbed, fake = zero
+	})
+
+	it("resumes the producer's session across redo rounds (one session per leaf producer)", async () => {
+		// every reviewer says revise → the script producer redoes up to the cap, resuming its session.
+		const runner = new FakeSubagentRunner((input) =>
+			input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "a draft" },
+		)
+		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig({ maxRedos: 3 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			const script = (await store.nodesFor(root.id)).find((n) => n.type === "script")
+			const scriptEscalated = pending.some((o) => o.nodeId === script?.id)
+			if (scriptEscalated) break
+			for (const o of pending) await gateApprove(store, o)
+		}
+
+		const script = (await store.nodesFor(root.id)).find((n) => n.type === "script")!
+		const versions = await store.versionsFor(script.id)
+		expect(versions).toHaveLength(3) // producer ran 3 times
+		const sessionIds = new Set(versions.map((v) => v.subagent?.sessionId))
+		expect(sessionIds.size).toBe(1) // all three redo rounds share ONE session
+		expect([...sessionIds][0]).toBeDefined()
+		// the 2nd and 3rd producer attempts carried a resumeSessionId (the 1st started cold)
+		const scriptResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
+		expect(scriptResumes.length).toBeGreaterThanOrEqual(2)
+	})
+})
+
 describe("type registry", () => {
 	it("loads the on-disk pipeline", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)

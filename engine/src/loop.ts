@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
-import type { Logger, Node, RenderClient, Store, SubagentRunner } from "@core/shared"
+import type { InteractionRole, Logger, Node, RenderClient, Store, SubagentResult, SubagentRunner } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { buildProducerPrompt, buildReviewerPrompt, parseVerdict, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -147,9 +147,12 @@ export class Engine {
 
 		const upstream = await this.collectUpstream(node)
 
-		// produce — via the RenderClient for rendered types (stubbed in v0), else a subagent
+		// produce — via the RenderClient for rendered types (stubbed in v0), else a subagent. The
+		// producer resumes its prior session (the latest version's subagent.sessionId) so a redo
+		// round continues the same provider session rather than starting cold.
 		let draft: string
 		let artifactPath: string
+		let producerResult: SubagentResult | undefined
 		const t0 = Date.now()
 		if (contract.rendered) {
 			const outDir = join(this.config.artifactsDir, node.productionId)
@@ -159,27 +162,39 @@ export class Engine {
 			draft = readArtifact(artifactPath) ?? `[rendered ${node.type} — stub]`
 		} else {
 			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
-			const produced = await this.runner.run({ prompt: producePrompt, skill: contract.skill ?? node.type })
-			draft = produced.output
+			producerResult = await this.runner.run({
+				prompt: producePrompt,
+				skill: contract.skill ?? node.type,
+				resumeSessionId: latest?.subagent?.sessionId,
+			})
+			draft = producerResult.output
 			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
 		}
+		const producerMs = Date.now() - t0
 		const version = await this.store.createVersion({
 			nodeId: node.id,
 			n,
 			prevVersionId: latest?.id,
 			status: "producing",
 			artifactPath,
-			subagent: { runId: randomUUID(), status: "done" },
+			subagent: {
+				runId: randomUUID(),
+				status: "done",
+				...(producerResult ? { sessionId: producerResult.sessionId, engine: this.runner.engine, model: producerResult.model } : {}),
+			},
 		})
-		log.info("node.produce", { versionId: version.id, n, rendered: Boolean(contract.rendered), ms: Date.now() - t0 })
+		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs)
+		log.info("node.produce", { versionId: version.id, n, rendered: Boolean(contract.rendered), ms: producerMs })
 
 		// internal quality gate — independent specialist reviewers
 		const verdicts: ("pass" | "revise")[] = []
 		for (const rv of contract.reviews ?? []) {
+			const rt0 = Date.now()
 			const rres = await this.runner.run({
 				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
 				skill: `review:${rv.kind}`,
 			})
+			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0)
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
 			verdicts.push(verdict)
@@ -233,6 +248,27 @@ export class Engine {
 		})
 		await this.store.updateNodeStatus(node.id, "needs-presentation")
 		log.info("node.present", { versionId, escalation: Boolean(caveat), agreementCapped })
+	}
+
+	// Log one subagent interaction (a producer draft or one reviewer pass): engine/model/session +
+	// token usage + timing. Per-call row; whole-session usage is SUM(...) GROUP BY session_id.
+	private async logInteraction(node: Node, versionId: string, role: InteractionRole, result: SubagentResult, durationMs: number): Promise<void> {
+		await this.store.recordInteraction({
+			productionId: node.productionId,
+			nodeId: node.id,
+			versionId,
+			role,
+			engine: this.runner.engine,
+			model: result.model,
+			sessionId: result.sessionId,
+			inputTokens: result.usage?.inputTokens,
+			outputTokens: result.usage?.outputTokens,
+			cacheReadTokens: result.usage?.cacheReadTokens,
+			cacheCreationTokens: result.usage?.cacheCreationTokens,
+			costUsd: result.usage?.costUsd,
+			durationMs,
+			status: "done",
+		})
 	}
 
 	private async collectUpstream(node: Node): Promise<UpstreamArtifact[]> {

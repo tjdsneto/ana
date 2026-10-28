@@ -15,10 +15,12 @@ import type {
 	Budget,
 	ChatInput,
 	ChatOutput,
+	Interaction,
 	NewAsset,
 	NewChatInput,
 	NewChatOutput,
 	NewChildNode,
+	NewInteraction,
 	NewProduction,
 	NewReview,
 	NewVersion,
@@ -30,7 +32,7 @@ import type {
 } from "../types.js"
 import { SystemClock, UuidGen } from "../runtime.js"
 
-const { accounts, assets, budget, chatInput, chatOutput, nodes, reviews, users, versions } = schema
+const { accounts, assets, budget, chatInput, chatOutput, interactions, nodes, reviews, users, versions } = schema
 
 // node statuses that count as "the parent is still active" for readiness (engine refines in step 5)
 const ACTIVE_PARENT = new Set<NodeStatus>(["in-progress", "ready"])
@@ -355,6 +357,38 @@ export class PgStore implements Store {
 			.insert(budget)
 			.values({ productionId, approved: true })
 			.onConflictDoUpdate({ target: budget.productionId, set: { approved: true } })
+	}
+
+	// ── subagent usage log ────────────────────────────────────────────────────────────────────────
+
+	async recordInteraction(input: NewInteraction): Promise<Interaction> {
+		const [row] = await this.db
+			.insert(interactions)
+			.values({
+				id: this.idgen.next("int"),
+				productionId: input.productionId,
+				nodeId: input.nodeId,
+				versionId: input.versionId ?? null,
+				role: input.role,
+				engine: input.engine,
+				model: input.model ?? null,
+				sessionId: input.sessionId ?? null,
+				inputTokens: input.inputTokens ?? null,
+				outputTokens: input.outputTokens ?? null,
+				cacheReadTokens: input.cacheReadTokens ?? null,
+				cacheCreationTokens: input.cacheCreationTokens ?? null,
+				costUsd: input.costUsd ?? null,
+				durationMs: input.durationMs ?? null,
+				status: input.status,
+				createdAt: this.clock.now(),
+			})
+			.returning()
+		if (!row) throw new Error("recordInteraction: insert returned no row")
+		return row
+	}
+
+	async interactionsFor(productionId: string): Promise<Interaction[]> {
+		return this.db.select().from(interactions).where(eq(interactions.productionId, productionId)).orderBy(interactions.createdAt)
 	}
 }
 

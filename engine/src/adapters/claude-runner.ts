@@ -1,20 +1,87 @@
 // ClaudeSubagentRunner — spawns `claude -p` (headless, one-shot) for a producer or reviewer. The
-// real SubagentRunner adapter; tests use FakeSubagentRunner instead. The exact flags are the seam
-// to verify when first exercised against the installed CLI — kept minimal here.
+// real SubagentRunner adapter; tests use FakeSubagentRunner instead.
+//
+// Runs with `--output-format json`, so one call returns the text output AND the session id + token
+// usage + cost together (no second probe). `--model` selects the model; `--resume <session_id>`
+// continues a prior session (the producer's, across redo rounds). The exact flags/field names are
+// the seam to verify against the installed CLI when first exercised — parsing is defensive.
 
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import type { SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
+import type { SubagentInput, SubagentResult, SubagentRunner, SubagentUsage } from "@core/shared"
 
 const run = promisify(execFile)
 
+// Shape of `claude -p --output-format json`. Every field optional: ones the installed CLI omits are
+// simply left undefined, and non-JSON stdout falls back to the raw text as the output.
+interface ClaudeJson {
+	result?: string
+	session_id?: string
+	total_cost_usd?: number
+	usage?: {
+		input_tokens?: number
+		output_tokens?: number
+		cache_creation_input_tokens?: number
+		cache_read_input_tokens?: number
+	}
+	modelUsage?: Record<string, unknown>
+	is_error?: boolean
+}
+
+export interface ClaudeRunnerOptions {
+	bin?: string // the CLI binary (default: CLAUDE_BIN env, else "claude")
+	model?: string // default model (SUBAGENT_MODEL); a per-call input.model overrides it
+}
+
 export class ClaudeSubagentRunner implements SubagentRunner {
-	constructor(private readonly bin = process.env.CLAUDE_BIN ?? "claude") {}
+	readonly engine = "claude"
+	private readonly bin: string
+	private readonly defaultModel?: string
+
+	constructor(opts: ClaudeRunnerOptions = {}) {
+		this.bin = opts.bin ?? process.env.CLAUDE_BIN ?? "claude"
+		this.defaultModel = opts.model ?? process.env.SUBAGENT_MODEL
+	}
 
 	async run(input: SubagentInput): Promise<SubagentResult> {
-		const args = ["-p", input.prompt]
+		const model = input.model ?? this.defaultModel
+		const args = ["-p", "--output-format", "json"]
+		if (model) args.push("--model", model)
+		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
 		if (input.systemPrompt) args.push("--append-system-prompt", input.systemPrompt)
+		args.push(input.prompt) // positional query
 		const { stdout } = await run(this.bin, args, { cwd: input.cwd, maxBuffer: 10 * 1024 * 1024 })
-		return { output: stdout.trim(), raw: { stdout } }
+		const json = parse(stdout)
+		return {
+			output: (json.result ?? stdout).trim(),
+			sessionId: json.session_id,
+			model: modelOf(json) ?? model,
+			usage: toUsage(json),
+			raw: json,
+		}
 	}
+}
+
+function parse(stdout: string): ClaudeJson {
+	try {
+		return JSON.parse(stdout) as ClaudeJson
+	} catch {
+		return { result: stdout } // older CLI / unexpected output — treat stdout as the raw text
+	}
+}
+
+function toUsage(json: ClaudeJson): SubagentUsage | undefined {
+	const u = json.usage
+	if (!u && json.total_cost_usd === undefined) return undefined
+	return {
+		inputTokens: u?.input_tokens,
+		outputTokens: u?.output_tokens,
+		cacheReadTokens: u?.cache_read_input_tokens,
+		cacheCreationTokens: u?.cache_creation_input_tokens,
+		costUsd: json.total_cost_usd,
+	}
+}
+
+function modelOf(json: ClaudeJson): string | undefined {
+	return json.modelUsage ? Object.keys(json.modelUsage)[0] : undefined
 }

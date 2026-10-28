@@ -8,6 +8,7 @@ import type {
 	budget,
 	chatInput,
 	chatOutput,
+	interactions,
 	nodes,
 	reviews,
 	users,
@@ -53,11 +54,24 @@ export type ChatInputKind = "approve" | "feedback" | "answer"
 export type AssetType = "logo" | "screenshot" | "b-roll" | "music" | "vo" | "sfx" | (string & {})
 export type FileType = "png" | "svg" | "mp4" | "wav" | "mp3" | (string & {})
 
-// The subagent attached to a version, for idempotency (don't re-dispatch in-flight work).
+// The subagent attached to a version, for idempotency (don't re-dispatch in-flight work) and for
+// resume: sessionId is the provider session the producer continues across redo rounds (see
+// SubagentInput.resumeSessionId). engine/model record which backend produced this version.
 export interface SubagentRef {
 	runId: string
 	status: "spawned" | "running" | "done" | "failed"
+	sessionId?: string // provider session id (e.g. claude session_id), for --resume + usage rollup
+	engine?: string // which SubagentRunner backend ran it (claude | codex | openai | fake)
+	model?: string // the resolved model, when the engine reports one
 }
+
+// The engine (subagent backend) a run targets. Open union: the three known backends plus the fake,
+// any other string allowed so a new adapter needs no type change.
+export type SubagentEngine = "claude" | "codex" | "openai" | "fake" | (string & {})
+
+// A single subagent interaction = one SubagentRunner.run() call (a producer draft or one reviewer
+// pass). Rows accumulate per production; summing by sessionId gives whole-session usage.
+export type InteractionRole = "producer" | `review:${ReviewKind}` | (string & {})
 
 // ── row types (inferred from the schema) ──────────────────────────────────────────────────
 
@@ -70,6 +84,7 @@ export type Asset = typeof assets.$inferSelect
 export type ChatOutput = typeof chatOutput.$inferSelect
 export type ChatInput = typeof chatInput.$inferSelect
 export type Budget = typeof budget.$inferSelect
+export type Interaction = typeof interactions.$inferSelect
 
 // ── port-input types (what the Store accepts; the Store fills ids/timestamps/derived columns) ─
 
@@ -138,4 +153,21 @@ export interface NewChatInput {
 	respondsTo?: string
 	kind: ChatInputKind
 	body?: string
+}
+
+export interface NewInteraction {
+	productionId: string
+	nodeId: string
+	versionId?: string
+	role: InteractionRole
+	engine: SubagentEngine
+	model?: string
+	sessionId?: string
+	inputTokens?: number
+	outputTokens?: number
+	cacheReadTokens?: number
+	cacheCreationTokens?: number
+	costUsd?: number
+	durationMs?: number
+	status: "done" | "failed"
 }

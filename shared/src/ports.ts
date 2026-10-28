@@ -8,10 +8,12 @@ import type {
 	Budget,
 	ChatInput,
 	ChatOutput,
+	Interaction,
 	NewAsset,
 	NewChatInput,
 	NewChatOutput,
 	NewChildNode,
+	NewInteraction,
 	NewProduction,
 	NewReview,
 	NewVersion,
@@ -81,6 +83,10 @@ export interface Store {
 	// budget (money gate)
 	getBudget(productionId: string): Promise<Budget | null>
 	approveBudget(productionId: string): Promise<void>
+
+	// subagent usage log — one row per SubagentRunner.run() (token/session tracking)
+	recordInteraction(input: NewInteraction): Promise<Interaction>
+	interactionsFor(productionId: string): Promise<Interaction[]> // ordered by createdAt; for the usage view
 }
 
 // ── RenderClient: each render engine behind one interface. Stub first (text-level), real adapters
@@ -110,14 +116,30 @@ export interface SubagentInput {
 	skill?: string // a type-registry skill name, or "self"
 	systemPrompt?: string
 	cwd?: string
+	model?: string // per-call model override (else the runner's configured default)
+	resumeSessionId?: string // continue a prior provider session (e.g. claude --resume) across redo rounds
+}
+
+// Token usage + cost the engine reports back, when it can. All optional: the fake and engines
+// without a usage API leave them undefined.
+export interface SubagentUsage {
+	inputTokens?: number
+	outputTokens?: number
+	cacheReadTokens?: number
+	cacheCreationTokens?: number
+	costUsd?: number
 }
 
 export interface SubagentResult {
 	output: string // the subagent's text output (producer draft, or `VERDICT: …` for a reviewer)
+	sessionId?: string // provider session id (claude session_id); undefined for engines without one
+	model?: string // the resolved model the engine actually used
+	usage?: SubagentUsage // tokens + cost for this interaction, when the engine reports it
 	raw?: unknown // transport-level detail, if the adapter wants to surface it
 }
 
 export interface SubagentRunner {
+	readonly engine: string // which backend this is (claude | codex | openai | fake) — recorded per interaction
 	run(input: SubagentInput): Promise<SubagentResult>
 }
 

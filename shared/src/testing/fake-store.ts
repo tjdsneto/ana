@@ -10,10 +10,12 @@ import type {
 	Budget,
 	ChatInput,
 	ChatOutput,
+	Interaction,
 	NewAsset,
 	NewChatInput,
 	NewChatOutput,
 	NewChildNode,
+	NewInteraction,
 	NewProduction,
 	NewReview,
 	NewVersion,
@@ -53,6 +55,7 @@ export class FakeStore implements Store {
 	readonly chatOutputs = new Map<string, ChatOutput>()
 	readonly chatInputs: ChatInput[] = []
 	readonly budgets = new Map<string, Budget>()
+	readonly interactions: Interaction[] = []
 
 	constructor(
 		private readonly clock: Clock = new FixedClock(),
@@ -293,6 +296,32 @@ export class FakeStore implements Store {
 	}
 	async approveBudget(productionId: string): Promise<void> {
 		this.budgets.set(productionId, { productionId, approved: true })
+	}
+
+	async recordInteraction(input: NewInteraction): Promise<Interaction> {
+		const interaction: Interaction = {
+			id: this.idgen.next("int"),
+			productionId: input.productionId,
+			nodeId: input.nodeId,
+			versionId: input.versionId ?? null,
+			role: input.role,
+			engine: input.engine,
+			model: input.model ?? null,
+			sessionId: input.sessionId ?? null,
+			inputTokens: input.inputTokens ?? null,
+			outputTokens: input.outputTokens ?? null,
+			cacheReadTokens: input.cacheReadTokens ?? null,
+			cacheCreationTokens: input.cacheCreationTokens ?? null,
+			costUsd: input.costUsd ?? null,
+			durationMs: input.durationMs ?? null,
+			status: input.status,
+			createdAt: this.clock.now(),
+		}
+		this.interactions.push(interaction)
+		return interaction
+	}
+	async interactionsFor(productionId: string): Promise<Interaction[]> {
+		return this.interactions.filter((i) => i.productionId === productionId)
 	}
 }
 

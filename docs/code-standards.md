@@ -24,8 +24,14 @@ concrete implementation.
   budget). Tool handlers and the loop talk to `Store`, never to Postgres directly.
 - `RenderClient` — each render engine behind one interface. **Stub implementation first**; real
   adapters when keys land.
-- `SubagentRunner` — spawns `claude -p`. A fake returns canned output so the loop tests with no real
-  subagent and no network.
+- `SubagentRunner` — the LLM-call backend (the "engine"). The real one shells out to `claude -p`
+  (`--output-format json`, so one call returns the text, the `session_id`, and token usage + cost);
+  a fake returns canned output so the loop tests with no real subagent and no network. A factory
+  (`engine/src/adapters/runner-factory.ts`) selects the backend by `SUBAGENT_ENGINE` (claude | fake;
+  codex | openai reserved) and model by `SUBAGENT_MODEL`. The producer carries a `resumeSessionId` so
+  a redo round continues the same session. Each `run()` is logged one row to the `interactions` table
+  (role, engine, model, session_id, tokens, cost, duration): per-call usage is the row, whole-session
+  usage is `SUM(...) GROUP BY session_id`.
 - `Clock` / `IdGen` — injectable, so timestamps and ids are deterministic in tests.
 - `Logger` — structured events (JSON lines to stderr by default). A real tracer (LangSmith,
   OpenTelemetry, pino) is a later adapter behind the same port — no core change. Entrypoints inject

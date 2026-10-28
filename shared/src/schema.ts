@@ -2,7 +2,7 @@
 // Status / kind / type columns stay `text` in v0 (the TS unions in types.ts carry the allowed
 // values; promote to pg enums / CHECK constraints later). Ids are app-generated strings (IdGen).
 
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core"
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 import type {
 	ActorKind,
 	AssetType,
@@ -142,3 +142,29 @@ export const budget = pgTable("budget", {
 	productionId: text("production_id").primaryKey(),
 	approved: boolean("approved").notNull().default(false), // money-gate flag
 })
+
+// subagent interactions — one row per SubagentRunner.run() (a producer draft or one reviewer pass).
+// Records which engine/model ran, the provider session id, token usage + cost, and timing. Per-call
+// = the row; whole-session = SUM(...) GROUP BY session_id. Written by the engine; read by the web app.
+export const interactions = pgTable(
+	"interactions",
+	{
+		id: text("id").primaryKey(),
+		productionId: text("production_id").notNull(),
+		nodeId: text("node_id").notNull().references(() => nodes.id),
+		versionId: text("version_id").references(() => versions.id), // the version produced / reviewed (nullable)
+		role: text("role").notNull(), // producer | review:craft | review:coverage | …
+		engine: text("engine").notNull(), // claude | codex | openai | fake
+		model: text("model"), // resolved model, when the engine reports one
+		sessionId: text("session_id"), // provider session (claude session_id); nullable
+		inputTokens: integer("input_tokens"),
+		outputTokens: integer("output_tokens"),
+		cacheReadTokens: integer("cache_read_tokens"),
+		cacheCreationTokens: integer("cache_creation_tokens"),
+		costUsd: doublePrecision("cost_usd"),
+		durationMs: integer("duration_ms"),
+		status: text("status").notNull(), // done | failed
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => [index("idx_interactions_production").on(t.productionId), index("idx_interactions_session").on(t.sessionId)],
+)
