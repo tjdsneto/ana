@@ -3,6 +3,7 @@
 	"references": [
 		{ "path": "./server/shared" },
 		{ "path": "./server/mcp" },
-		{ "path": "./server/engine" }
+		{ "path": "./server/engine" },
+		{ "path": "./dashboard/api" }
 	]
 }

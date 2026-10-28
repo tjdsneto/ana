@@ -4,6 +4,12 @@
 	"private": true,
 	"type": "module",
 	"description": "MCP server — the client-facing tool surface over the shared Store. HTTP (Compose) + a thin stdio entrypoint.",
+	"exports": {
+		"./tools": {
+			"types": "./dist/tools.d.ts",
+			"default": "./dist/tools.js"
+		}
+	},
 	"scripts": {
 		"build": "tsc -b",
 		"start:stdio": "node dist/stdio.js",

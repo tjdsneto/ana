@@ -46,7 +46,11 @@ Design source of truth (outside this repo — don't copy its product name in):
    redo cap + F5 agreement cap, `LISTEN/NOTIFY` wake-ups; smoked end-to-end on Postgres: queued →
    7 children produced/reviewed/approved → root done in 8 ticks)
 6. Dashboard: `dashboard/api` (reads + WebSocket over `LISTEN/NOTIFY`) + `dashboard/app` (React),
-   once there is live data to render.
+   once there is live data to render. ✅ (`@app/dashboard-api` — read DTOs over the `Store`, gate
+   writes reusing the MCP tool handlers, `LISTEN new_job`/`presentable` relayed to browsers over a
+   WebSocket; `@app/dashboard-app` — React + Vite SPA: productions list, live node tree + versions +
+   reviews, type-driven inbox gate (approve/feedback/ack + budget). Smoked on Postgres: reads +
+   both NOTIFYs over the socket + an approve round-trip; `vite build` clean.)
 7. Docker Compose (`db` + `mcp-server` + `engine-worker` + dashboard) on the shared volume.
 8. End-to-end check per acceptance below.
 

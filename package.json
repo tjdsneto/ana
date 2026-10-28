@@ -6,13 +6,17 @@
 	"workspaces": [
 		"server/shared",
 		"server/mcp",
-		"server/engine"
+		"server/engine",
+		"dashboard/api",
+		"dashboard/app"
 	],
 	"scripts": {
-		"typecheck": "tsc -b",
+		"typecheck": "tsc -b && npm -w @app/dashboard-app run typecheck",
 		"test": "vitest run",
 		"db:migrate": "npm -w @app/shared run migrate",
-		"db:seed": "npm -w @app/shared run seed"
+		"db:seed": "npm -w @app/shared run seed",
+		"dev:dashboard-api": "npm -w @app/dashboard-api run dev",
+		"dev:dashboard-app": "npm -w @app/dashboard-app run dev"
 	},
 	"devDependencies": {
 		"@types/node": "^22.10.2",
