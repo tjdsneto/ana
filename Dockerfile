@@ -1,8 +1,12 @@
-# One image for every TS/Node service (PoC — don't over-build). Each Compose service overrides the
-# command: the node services run their built dist, the web app runs the Vite dev server (which proxies
-# /api + /ws to web-api, so the browser talks to one origin). Slim per-service images are a later concern.
+# Two stages (PoC — don't over-build). `base` is the one image every service runs (node services run
+# their built dist; the web app runs the Vite dev server, which proxies /api + /ws to web-api so the
+# browser talks to one origin). `engine` extends it with the Claude Code CLI for the real subagent
+# runner — kept off the mcp/api/web image, which don't shell out to `claude`.
+#
+# NOTE: build with an explicit `target` — Compose services use `target: base`, engine-worker uses
+# `target: engine`. Without a target, Docker builds the LAST stage (engine) for everyone.
 
-FROM node:24-alpine
+FROM node:24-alpine AS base
 WORKDIR /repo
 
 # Pin the toolchain in the image (the versioned source of truth, not the host): Node 24 LTS from the
@@ -27,3 +31,19 @@ RUN npm run build
 
 # Overridden per service in docker-compose.yml.
 CMD ["node", "server/mcp/dist/http.js"]
+
+# ── engine stage ──────────────────────────────────────────────────────────────────────────────────
+# Adds the Claude Code CLI so the engine's real SubagentRunner can spawn `claude -p`. Pinned (behavior
+# shifts between CLI versions — e.g. -p defaults to Manual permission mode from v2.1.302). The apk
+# deps are what the CLI needs on musl. Subagents run text-only with tools denied (Manual mode), so no
+# non-root/bypass is needed and the image stays root. Auth is injected at runtime (CLAUDE_CODE_OAUTH_TOKEN,
+# never baked in). The disable-traffic/autoupdater envs stop background update + telemetry calls in CI.
+FROM base AS engine
+# npm 12 blocks dependency install scripts by default, so claude-code's postinstall (install.cjs, which
+# links its per-platform native binary) is skipped and `claude` won't launch — run it explicitly.
+RUN apk add --no-cache bash curl libgcc libstdc++ ripgrep \
+	&& npm i -g @anthropic-ai/claude-code@2.1.312 \
+	&& node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
+ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+	DISABLE_AUTOUPDATER=1
+CMD ["node", "engine/dist/worker.js"]

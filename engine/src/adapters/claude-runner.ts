@@ -31,21 +31,29 @@ interface ClaudeJson {
 export interface ClaudeRunnerOptions {
 	bin?: string // the CLI binary (default: CLAUDE_BIN env, else "claude")
 	model?: string // default model (SUBAGENT_MODEL); a per-call input.model overrides it
+	maxBudgetUsd?: number // per-call client-side spend cap (SUBAGENT_MAX_BUDGET_USD); undefined = uncapped
 }
 
 export class ClaudeSubagentRunner implements SubagentRunner {
 	readonly engine = "claude"
 	private readonly bin: string
 	private readonly defaultModel?: string
+	private readonly maxBudgetUsd?: number
 
 	constructor(opts: ClaudeRunnerOptions = {}) {
 		this.bin = opts.bin ?? process.env.CLAUDE_BIN ?? "claude"
 		this.defaultModel = opts.model ?? process.env.SUBAGENT_MODEL
+		this.maxBudgetUsd = opts.maxBudgetUsd ?? numOrUndef(process.env.SUBAGENT_MAX_BUDGET_USD)
 	}
 
 	async run(input: SubagentInput): Promise<SubagentResult> {
 		const model = input.model ?? this.defaultModel
 		const args = ["-p", "--output-format", "json"]
+		// Headless safety: never wait on a permission prompt (deny instead of hang). Producers/reviewers
+		// are text-only, and Manual mode (the -p default from v2.1.302) already denies tool use. These
+		// flags are the seam to verify against the installed CLI on the first real (authed) run.
+		args.push("--permission-prompts", "none")
+		if (this.maxBudgetUsd !== undefined) args.push("--max-budget-usd", String(this.maxBudgetUsd))
 		if (model) args.push("--model", model)
 		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
 		if (input.systemPrompt) args.push("--append-system-prompt", input.systemPrompt)
@@ -84,4 +92,10 @@ function toUsage(json: ClaudeJson): SubagentUsage | undefined {
 
 function modelOf(json: ClaudeJson): string | undefined {
 	return json.modelUsage ? Object.keys(json.modelUsage)[0] : undefined
+}
+
+function numOrUndef(value: string | undefined): number | undefined {
+	if (value === undefined || value === "") return undefined
+	const n = Number(value)
+	return Number.isFinite(n) ? n : undefined
 }

@@ -6,6 +6,7 @@ x-engine-image: &engine-image
   build:
     context: .
     dockerfile: Dockerfile
+    target: base          # the slim image (no claude CLI); engine-worker overrides to target: engine
   image: production-engine:local
 
 services:
@@ -55,13 +56,25 @@ services:
 
   engine-worker:
     <<: *engine-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: engine           # the image WITH the Claude Code CLI (claude -p)
+    image: production-engine-claude:local
     command: ["node", "engine/dist/worker.js"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
       ARTIFACTS_DIR: /data/artifacts
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3000}
       MAX_REDOS: ${MAX_REDOS:-3}
-      ENGINE_FAKE_SUBAGENT: "1"   # = SUBAGENT_ENGINE=fake (alias): canned subagent, no `claude` binary in the image
+      # Subagent engine. Default: fake — canned output, no `claude` call, ZERO spend. To run the real
+      # engine on your Claude subscription, set SUBAGENT_ENGINE=claude and inject the token at launch,
+      # e.g.:  CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://Private/claude-code/token") SUBAGENT_ENGINE=claude docker compose up engine-worker
+      SUBAGENT_ENGINE: ${SUBAGENT_ENGINE:-fake}
+      SUBAGENT_MODEL: ${SUBAGENT_MODEL:-}
+      # Subscription auth. NEVER set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN here — either one silently
+      # outranks the OAuth token and bills the API instead of the subscription.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
       - ./server/data/artifacts:/data/artifacts
     depends_on:
