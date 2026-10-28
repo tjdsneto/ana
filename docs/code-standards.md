@@ -31,6 +31,27 @@ concrete implementation.
   OpenTelemetry, pino) is a later adapter behind the same port — no core change. Entrypoints inject
   a `JsonLogger`; library code defaults to `NoopLogger` (quiet).
 
+### Observability seam — reserved for tracing (LangSmith / OTel), not built yet
+
+We are **not** adding a tracing backend now. But the abstractions must leave an obvious place for
+one, so it drops in later with no core rewrite. Two facts fix that place:
+
+- **The LLM-call boundary is `SubagentRunner`.** Every `claude -p` producer and specialist reviewer
+  goes through it, and `SubagentResult` already carries a `runId`. That is the natural origin of a
+  trace span: one run in, one span out. A future `LangSmithRunner` (or a tracing decorator wrapping
+  any `SubagentRunner`) opens a span there, records the prompt/response as span I/O, and closes it —
+  the loop is unchanged because it only sees the `SubagentRunner` interface.
+- **The loop already emits span-shaped events** through `Logger`: `node.produce` (with `ms`),
+  `review.verdict`, `production.start`/`done`, all tagged with `productionId`/`nodeId`. A tracer that
+  consumes these — a `Logger` adapter that maps events to spans, correlating by `runId` + node ids —
+  is the lighter alternative to a dedicated `Tracer` port.
+
+So the reserved seam is: **wrap `SubagentRunner` for spans, and/or add a `Logger` adapter that
+forwards to a tracer.** LangSmith works without LangChain (its SDK's `traceable()`, an OTel exporter,
+or the REST API), so neither choice pulls LangChain into the tree. Decide between the two (wrap-runner
+vs logger-adapter) when tracing is actually introduced; until then, keep `runId` flowing and keep the
+events tagged.
+
 Adapters (Postgres store via Drizzle + `pg`, HTTP render clients, the `claude -p` runner) each get thin, focused tests.
 Unit testing is a goal, **not a blocker** — don't let test scaffolding stall the first spike.
 
