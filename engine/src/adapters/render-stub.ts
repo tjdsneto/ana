@@ -8,6 +8,7 @@ import { join } from "node:path"
 import type { RenderClient, RenderInput, RenderResult } from "@core/shared"
 
 export class StubRenderClient implements RenderClient {
+	readonly provider = "stub"
 	async render(input: RenderInput): Promise<RenderResult> {
 		const artifactPath = join(input.outDir, `${input.kind}-stub-${randomUUID().slice(0, 8)}.txt`)
 		writeFileSync(artifactPath, `[stub render: ${input.kind}]\nspec: ${JSON.stringify(input.spec)}\n`, "utf8")

@@ -105,7 +105,52 @@ export interface RenderResult {
 }
 
 export interface RenderClient {
+	readonly provider: string // which render backend (stub | local | heygen | higgsfield | …) — mirrors SubagentRunner.engine
 	render(input: RenderInput): Promise<RenderResult>
+}
+
+// ── VoiceClient: text → narration audio, one interface per TTS engine. Independent of RenderClient
+//    so the render engine and the voice engine swap separately. A silent/fake adapter needs no
+//    binary, so the loop and the local render assembler test with no TTS and no network. ─────────
+
+export interface VoiceInput {
+	text: string // narration line(s) to speak
+	outPath: string // where to write the audio file (shared volume)
+	voice?: string // provider voice/speaker id (else the adapter's configured default)
+	format?: "wav" | "mp3" // container; default wav
+}
+
+export interface VoiceResult {
+	audioPath: string // file written on the shared volume
+	provider: string // which voice backend produced it
+	voice?: string // the resolved voice/speaker id actually used
+	durationMs?: number // audio length, when the adapter can report it
+	costEstimate?: number // for the budget gate; 0 for offline engines
+}
+
+export interface VoiceClient {
+	readonly provider: string // piper | kokoro | silent | … — recorded on the render result
+	synthesize(input: VoiceInput): Promise<VoiceResult>
+}
+
+// ── Exec: run an external binary (ffmpeg, piper, …). A port so render/voice adapters are unit-tested
+//    against a fake that records argv and touches the output file, with no real process spawned. ──
+
+export interface ExecRequest {
+	bin: string // executable name or path
+	args: string[] // argv (never a shell string — no shell, no injection)
+	stdin?: string | Buffer // fed to the process stdin, if any
+	cwd?: string
+}
+
+export interface ExecResult {
+	code: number // exit code
+	stdout: string
+	stderr: string
+}
+
+export interface Exec {
+	run(req: ExecRequest): Promise<ExecResult>
 }
 
 // ── SubagentRunner: spawns `claude -p`. A fake returns canned output so the loop tests with no

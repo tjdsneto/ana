@@ -77,6 +77,16 @@ services:
       # finishes) until restart — so a retained volume full of stale queued nodes can't drain into a big
       # unintended spend. fake calls never count. Empty = uncapped. Set it low for a real-claude smoke run.
       SUBAGENT_MAX_CALLS: ${SUBAGENT_MAX_CALLS:-}
+      # Render + voice are two independent, swappable ports. Defaults make NO video and NO speech
+      # (stub + silent), zero cost. RENDER_PROVIDER=local assembles a real .mp4 via ffmpeg (needs
+      # ffmpeg + a drawtext font in the image); VOICE_PROVIDER=piper|kokoro adds offline narration
+      # (needs that TTS binary + a voice model baked in). heygen/higgsfield are reserved (keys pending).
+      RENDER_PROVIDER: ${RENDER_PROVIDER:-stub}        # stub | local  (heygen|higgsfield reserved)
+      RENDER_FONT: ${RENDER_FONT:-}                    # local: TTF path for drawtext captions
+      VOICE_PROVIDER: ${VOICE_PROVIDER:-silent}        # silent | piper | kokoro
+      VOICE_MODEL: ${VOICE_MODEL:-}                    # piper: .onnx voice model path
+      VOICE_ID: ${VOICE_ID:-}                          # kokoro: speaker id (e.g. af_sarah)
+      VOICE_BIN: ${VOICE_BIN:-}                        # override the TTS binary
       # Subscription auth. NEVER set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN here — either one silently
       # outranks the OAuth token and bills the API instead of the subscription.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}

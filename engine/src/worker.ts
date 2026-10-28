@@ -5,8 +5,10 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { JsonLogger, makePool, PgStore } from "@core/shared"
+import { NodeExec } from "./adapters/exec-node.js"
+import { makeRender, renderConfigFromEnv } from "./adapters/render-factory.js"
 import { makeRunner, runnerConfigFromEnv } from "./adapters/runner-factory.js"
-import { StubRenderClient } from "./adapters/render-stub.js"
+import { makeVoice, voiceConfigFromEnv } from "./adapters/voice-factory.js"
 import { configFromEnv } from "./config.js"
 import { Engine } from "./loop.js"
 import { TypeRegistry } from "./typereg.js"
@@ -22,17 +24,33 @@ const logger = new JsonLogger({ bound: { svc: "engine" } })
 // land. Same seam as MCP_FAKE_STORE.
 const runnerConfig = runnerConfigFromEnv()
 
+// Render + voice are two independent ports, each selected by env (RENDER_PROVIDER / VOICE_PROVIDER)
+// and each swappable without touching the other or the loop. Defaults: render "stub" (text
+// placeholder, zero cost), voice "silent" (no TTS). RENDER_PROVIDER=local assembles a real .mp4 via
+// ffmpeg; VOICE_PROVIDER=piper|kokoro adds real narration. ffmpeg/TTS binaries run through NodeExec.
+const renderConfig = renderConfigFromEnv()
+const voiceConfig = voiceConfigFromEnv()
+
 async function main(): Promise<void> {
 	const pool = makePool()
+	const exec = new NodeExec()
+	const voice = makeVoice(voiceConfig, exec)
 	const engine = new Engine({
 		store: new PgStore(pool),
 		runner: makeRunner(runnerConfig),
-		render: new StubRenderClient(),
+		render: makeRender(renderConfig, { voice, exec, logger }),
 		types: TypeRegistry.load(typesDir),
 		config,
 		logger,
 	})
-	logger.info("worker.up", { typesDir, pollIntervalMs: config.pollIntervalMs, engine: runnerConfig.engine, model: runnerConfig.model ?? null })
+	logger.info("worker.up", {
+		typesDir,
+		pollIntervalMs: config.pollIntervalMs,
+		engine: runnerConfig.engine,
+		model: runnerConfig.model ?? null,
+		render: renderConfig.provider,
+		voice: voiceConfig.provider,
+	})
 
 	let busy = false
 	const drain = async (trigger: string) => {
