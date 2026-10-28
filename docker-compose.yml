@@ -78,10 +78,12 @@ services:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
       - ./server/data/artifacts:/data/artifacts
-      # Persist the engine's Claude Code state (~/.claude: session transcripts, config, cached creds)
-      # so it survives container recreation — a sysadmin can inspect past sessions, and --resume keeps
-      # working across worker restarts. HOME is /root in the (root) engine image.
-      - claude_home:/root/.claude
+      # Bind the engine's Claude Code state (~/.claude: session transcripts under projects/, config,
+      # cached creds) to a host folder in the repo (gitignored) so you can browse past sessions directly
+      # in Finder/your editor. Engine-owned (not shared like artifacts). Survives container recreation;
+      # --resume keeps working across restarts. HOME is /root in the (root) engine image.
+      # Transcripts: engine/data/claude/projects/-repo/<session>.jsonl
+      - ./engine/data/claude:/root/.claude
     depends_on:
       db:
         condition: service_healthy
@@ -140,4 +142,3 @@ volumes:
   pgdata:
   toolbox_node_modules:
   toolbox_app_node_modules:
-  claude_home:   # engine-worker's ~/.claude (session transcripts + state), persisted across recreation

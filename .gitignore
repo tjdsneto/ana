@@ -13,6 +13,9 @@ server/data/artifacts/
 # postgres data (if a local bind-mount is ever used)
 server/data/pgdata/
 
+# engine's Claude Code state — session transcripts + cached creds (bind-mounted from engine-worker)
+engine/data/
+
 # secrets
 .env
 .env.local
