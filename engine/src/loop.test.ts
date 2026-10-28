@@ -4,7 +4,7 @@
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ChatOutput, Store } from "@core/shared"
+import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import { FakeStore, FakeSubagentRunner } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
 import { StubRenderClient } from "./adapters/render-stub.js"
@@ -202,6 +202,58 @@ describe("interaction log + session capture", () => {
 		// the 2nd and 3rd producer attempts carried a resumeSessionId (the 1st started cold)
 		const scriptResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
 		expect(scriptResumes.length).toBeGreaterThanOrEqual(2)
+	})
+})
+
+// A non-fake runner double: it spends no real quota but reports engine="claude" so the engine counts
+// its calls against the spend budget (the FakeSubagentRunner reports "fake" and is always free).
+class CountingRunner implements SubagentRunner {
+	readonly engine = "claude"
+	calls = 0
+	async run(input: SubagentInput): Promise<SubagentResult> {
+		this.calls++
+		return { output: input.skill?.startsWith("review:") ? "VERDICT: pass" : "a draft", sessionId: `sess-${this.calls}` }
+	}
+}
+
+describe("spend guard — real-call budget parks the worker", () => {
+	it("stops claiming new leaves once the real-call budget is spent (fake never counts)", async () => {
+		const runner = new CountingRunner()
+		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig({ maxSubagentCalls: 2 }) })
+		const root = await newProduction(store)
+
+		let parked = false
+		for (let guard = 0; guard < 50; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if (!did) {
+				parked = true
+				break
+			}
+		}
+
+		expect(parked).toBe(true)
+		// briefing = 1 producer + 1 advisory reviewer = 2 real calls, hitting the cap; the worker parks
+		// before claiming the next leaf, so script is never produced and the production never completes.
+		expect(runner.calls).toBe(2)
+		expect((await store.getProduction(root.id))?.status).not.toBe("approved")
+		const script = (await store.nodesFor(root.id)).find((n) => n.type === "script")!
+		expect(await store.versionsFor(script.id)).toHaveLength(0)
+	})
+
+	it("is uncapped when maxSubagentCalls is unset (walks the whole pipeline)", async () => {
+		const runner = new CountingRunner()
+		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
 	})
 })
 

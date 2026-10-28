@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
-import type { InteractionRole, Logger, Node, RenderClient, Store, SubagentResult, SubagentRunner } from "@core/shared"
+import type { InteractionRole, Logger, Node, RenderClient, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { buildProducerPrompt, buildReviewerPrompt, parseVerdict, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -32,6 +32,8 @@ export class Engine {
 	private readonly types: TypeRegistry
 	private readonly config: EngineConfig
 	private readonly log: Logger
+	private realCalls = 0 // real (non-fake) subagent calls made this process — the spend-guard counter
+	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -45,6 +47,16 @@ export class Engine {
 	// One unit of work. Returns whether anything advanced (false = idle: nothing queued/ready and
 	// nothing to roll up — the loop is waiting on the human gate or genuinely done).
 	async tick(): Promise<boolean> {
+		// Spend guard: once the worker has made its budget of real subagent calls this process, stop
+		// claiming new work and park idle (the in-flight leaf already finished). Protects against a
+		// worker draining a backlog of stale queued nodes on a retained volume. fake calls never count.
+		if (this.callBudgetSpent()) {
+			if (!this.parkedWarned) {
+				this.log.warn("worker.parked_budget", { realCalls: this.realCalls, maxSubagentCalls: this.config.maxSubagentCalls })
+				this.parkedWarned = true
+			}
+			return false
+		}
 		const started = await this.startQueuedProductions()
 		const rolled = await this.rollupProductions()
 		const node = await this.store.claimReadyNode()
@@ -53,6 +65,18 @@ export class Engine {
 			return true
 		}
 		return started || rolled
+	}
+
+	private callBudgetSpent(): boolean {
+		return this.config.maxSubagentCalls !== undefined && this.realCalls >= this.config.maxSubagentCalls
+	}
+
+	// Single seam for every subagent call, so the real-spend counter can never be bypassed. fake is
+	// free, so it does not count against the budget.
+	private async runSubagent(input: SubagentInput): Promise<SubagentResult> {
+		const result = await this.runner.run(input)
+		if (this.runner.engine !== "fake") this.realCalls++
+		return result
 	}
 
 	// Drain all currently-actionable work (stops when idle). The live worker calls this each wake-up;
@@ -162,7 +186,7 @@ export class Engine {
 			draft = readArtifact(artifactPath) ?? `[rendered ${node.type} — stub]`
 		} else {
 			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
-			producerResult = await this.runner.run({
+			producerResult = await this.runSubagent({
 				prompt: producePrompt,
 				skill: contract.skill ?? node.type,
 				resumeSessionId: latest?.subagent?.sessionId,
@@ -190,7 +214,7 @@ export class Engine {
 		const verdicts: ("pass" | "revise")[] = []
 		for (const rv of contract.reviews ?? []) {
 			const rt0 = Date.now()
-			const rres = await this.runner.run({
+			const rres = await this.runSubagent({
 				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
 				skill: `review:${rv.kind}`,
 			})

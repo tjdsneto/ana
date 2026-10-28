@@ -25,7 +25,10 @@ service images fill in as the code lands (it will not `up` end-to-end until then
 - **Secrets / render keys** come from `.env` (gitignored); render stays stubbed until keys land. The
   real `claude` engine authenticates with the subscription via `CLAUDE_CODE_OAUTH_TOKEN` (never
   `ANTHROPIC_API_KEY` — it outranks the token and bills the API). Default `SUBAGENT_ENGINE=fake` = no
-  calls, no spend.
+  calls, no spend. `SUBAGENT_MAX_CALLS` caps **real** subagent calls per worker process: once hit the
+  worker parks idle (in-flight leaf finishes) until restart, so a retained `pgdata` volume full of
+  stale queued nodes can't drain into a large unintended spend. Set it low for a real-`claude` smoke
+  run; empty = uncapped; `fake` calls never count.
 - **Startup ordering:** `mcp-server` / `engine-worker` / `web-api` `depends_on` `db` with a
   healthcheck (`pg_isready`) + a wait-for-db so migrations/queries don't race the DB coming up.
 

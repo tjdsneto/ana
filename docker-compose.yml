@@ -73,6 +73,10 @@ services:
       SUBAGENT_ENGINE: ${SUBAGENT_ENGINE:-fake}
       SUBAGENT_MODEL: ${SUBAGENT_MODEL:-}
       SUBAGENT_MAX_BUDGET_USD: ${SUBAGENT_MAX_BUDGET_USD:-}   # per-call client-side spend cap (uncapped if empty)
+      # Process-lifetime ceiling on REAL subagent calls. Once hit, the worker parks idle (in-flight leaf
+      # finishes) until restart — so a retained volume full of stale queued nodes can't drain into a big
+      # unintended spend. fake calls never count. Empty = uncapped. Set it low for a real-claude smoke run.
+      SUBAGENT_MAX_CALLS: ${SUBAGENT_MAX_CALLS:-}
       # Subscription auth. NEVER set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN here — either one silently
       # outranks the OAuth token and bills the API instead of the subscription.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}

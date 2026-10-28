@@ -7,6 +7,11 @@ export interface EngineConfig {
 	agreementMaxRoundsHuman: number
 	agreementMaxRoundsAgent: number
 	pollIntervalMs: number
+	// Process-lifetime ceiling on REAL (non-fake) subagent calls, a spend guardrail. Once the worker
+	// has made this many real calls, it stops claiming new leaves (the in-flight one finishes) and
+	// parks idle until restart. Guards against a worker draining a backlog of stale queued work on a
+	// retained volume and spending far more than intended. undefined = uncapped (fake is always free).
+	maxSubagentCalls?: number
 }
 
 export function configFromEnv(env = process.env): EngineConfig {
@@ -16,10 +21,18 @@ export function configFromEnv(env = process.env): EngineConfig {
 		agreementMaxRoundsHuman: num(env.AGREEMENT_MAX_ROUNDS_HUMAN, 5),
 		agreementMaxRoundsAgent: num(env.AGREEMENT_MAX_ROUNDS_AGENT, 2),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
+		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 	}
 }
 
 function num(value: string | undefined, fallback: number): number {
 	const n = value === undefined ? Number.NaN : Number(value)
 	return Number.isFinite(n) ? n : fallback
+}
+
+// Optional positive integer; unset/blank/non-finite/<=0 all mean "no cap".
+function optNum(value: string | undefined): number | undefined {
+	if (value === undefined || value === "") return undefined
+	const n = Number(value)
+	return Number.isFinite(n) && n > 0 ? n : undefined
 }
