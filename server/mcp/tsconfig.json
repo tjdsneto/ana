@@ -4,6 +4,6 @@
 		"rootDir": "./src",
 		"outDir": "./dist"
 	},
-	"references": [{ "path": "../shared" }, { "path": "../services" }],
+	"references": [{ "path": "../../shared" }, { "path": "../../core/services" }],
 	"include": ["src/**/*.ts"]
 }

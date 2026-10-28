@@ -27,16 +27,16 @@ dashboard/
   api/     thin Node/TS service — read queries + a WebSocket; proxies gate actions to the MCP tools
 ```
 
-- **`dashboard/api`** (Node/TS): read-only queries over the shared DB (productions, the node tree,
+- **`server/api`** (Node/TS): read-only queries over the shared DB (productions, the node tree,
   versions, reviews, assets, the chat queues), plus a **WebSocket** that pushes live updates. It
   subscribes to Postgres **`LISTEN/NOTIFY`** (spec 03) and relays `new_job` / `presentable` / status
   changes to connected browsers — no browser polling. For **gate actions** it calls the shared
-  **`@app/services`** layer (`approve`, `submitFeedback`) — the same functions the MCP tools call —
+  **`@core/services`** layer (`approve`, `submitFeedback`) — the same functions the MCP tools call —
   rather than writing `chat_input` itself, so there is **one** write path and no second copy to drift.
-  The gate logic lives in `@app/services`, not in the MCP package; the MCP server and the dashboard
+  The gate logic lives in `@core/services`, not in the MCP package; the MCP server and the dashboard
   API are both just transports over it. (This is the §18 principle again: the logic is shared, the
   transports are thin.)
-- **`dashboard/app`** (React): renders the live tree and drives the gate.
+- **`app`** (React): renders the live tree and drives the gate.
 
 ## Views (v0)
 
@@ -54,7 +54,7 @@ dashboard/
 ## Data flow
 
 ```
-engine-worker ──writes rows + NOTIFY──►  Postgres  ──LISTEN/NOTIFY──►  dashboard/api ──WebSocket──►  React
+engine-worker ──writes rows + NOTIFY──►  Postgres  ──LISTEN/NOTIFY──►  server/api ──WebSocket──►  React
                                             ▲                                                           │
                                             └──────── MCP tools (approve / submit_feedback) ◄───────────┘
 ```

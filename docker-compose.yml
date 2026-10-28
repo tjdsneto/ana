@@ -34,7 +34,7 @@ services:
         condition: service_healthy
 
   engine-worker:
-    build: ./server/engine       # TODO: Dockerfile lands with the code
+    build: ./engine              # TODO: Dockerfile lands with the code
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
       ARTIFACTS_DIR: /data/artifacts
@@ -48,29 +48,29 @@ services:
       db:
         condition: service_healthy
 
-  dashboard-api:
-    build: ./dashboard/api       # TODO: Dockerfile lands with the code
+  web-api:
+    build: ./server/api          # TODO: Dockerfile lands with the code
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
       MCP_HTTP_URL: http://mcp-server:8787
-      DASHBOARD_API_PORT: ${DASHBOARD_API_PORT:-8788}
+      WEB_API_PORT: ${WEB_API_PORT:-8788}
       ARTIFACTS_DIR: /data/artifacts
     ports:
-      - "${DASHBOARD_API_PORT:-8788}:8788"
+      - "${WEB_API_PORT:-8788}:8788"
     volumes:
       - ./server/data/artifacts:/data/artifacts
     depends_on:
       db:
         condition: service_healthy
 
-  dashboard-app:
-    build: ./dashboard/app       # TODO: Dockerfile lands with the code (React + Vite)
+  web:
+    build: ./app                 # TODO: Dockerfile lands with the code (React + Vite)
     environment:
-      VITE_DASHBOARD_API_URL: http://localhost:${DASHBOARD_API_PORT:-8788}
+      VITE_WEB_API_URL: http://localhost:${WEB_API_PORT:-8788}
     ports:
-      - "${DASHBOARD_APP_PORT:-5173}:5173"
+      - "${WEB_PORT:-5173}:5173"
     depends_on:
-      - dashboard-api
+      - web-api
 
 volumes:
   pgdata:

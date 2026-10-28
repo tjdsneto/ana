@@ -3,7 +3,7 @@
 //   claude mcp add --transport stdio production-engine -- node /abs/path/server/mcp/dist/stdio.js
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { JsonLogger } from "@app/shared"
+import { JsonLogger } from "@core/shared"
 import { buildServer } from "./server.js"
 import { makeStore } from "./store-factory.js"
 

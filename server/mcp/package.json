@@ -1,9 +1,9 @@
 {
-	"name": "@app/mcp",
+	"name": "@server/mcp",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "MCP server — the client-facing transport over the @app/services layer. Pure wiring (zod schemas + registerTool). HTTP (Compose) + a thin stdio entrypoint.",
+	"description": "MCP server — the client-facing transport over the @core/services layer. Pure wiring (zod schemas + registerTool). HTTP (Compose) + a thin stdio entrypoint.",
 	"scripts": {
 		"build": "tsc -b",
 		"start:stdio": "node dist/stdio.js",
@@ -13,8 +13,8 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@app/services": "*",
-		"@app/shared": "*",
+		"@core/services": "*",
+		"@core/shared": "*",
 		"@modelcontextprotocol/sdk": "^1.32.2",
 		"express": "^4.21.2",
 		"zod": "^3.23.8"

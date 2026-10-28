@@ -4,20 +4,20 @@
 	"type": "module",
 	"description": "Autonomous video-production engine (PoC) — generic autonomy loop. No brand/product names (see CLAUDE.md).",
 	"workspaces": [
-		"server/shared",
-		"server/services",
+		"shared",
+		"core/services",
+		"engine",
 		"server/mcp",
-		"server/engine",
-		"dashboard/api",
-		"dashboard/app"
+		"server/api",
+		"app"
 	],
 	"scripts": {
-		"typecheck": "tsc -b && npm -w @app/dashboard-app run typecheck",
+		"typecheck": "tsc -b && npm -w @app/web run typecheck",
 		"test": "vitest run",
-		"db:migrate": "npm -w @app/shared run migrate",
-		"db:seed": "npm -w @app/shared run seed",
-		"dev:dashboard-api": "npm -w @app/dashboard-api run dev",
-		"dev:dashboard-app": "npm -w @app/dashboard-app run dev"
+		"db:migrate": "npm -w @core/shared run migrate",
+		"db:seed": "npm -w @core/shared run seed",
+		"dev:api": "npm -w @server/api run dev",
+		"dev:web": "npm -w @app/web run dev"
 	},
 	"devDependencies": {
 		"@types/node": "^22.10.2",

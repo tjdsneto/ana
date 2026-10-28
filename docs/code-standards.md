@@ -11,7 +11,7 @@ terms (briefing, moodboard, storyboard, render, audio, polish) are the domain an
 ## Language & toolchain
 
 - **TypeScript / Node** for both the MCP server and the engine worker. One language, one toolchain,
-  shared contract types in `server/shared`.
+  shared contract types in `shared`.
 - **ESM** modules. Target current LTS Node.
 - Test runner: **vitest** (default call; confirm when scaffolding, record in README).
 
@@ -58,7 +58,7 @@ Unit testing is a goal, **not a blocker** — don't let test scaffolding stall t
 ## Where the logic lives — the service layer
 
 Client-facing business logic (start a production, read status/inbox/deliverable, and the gate —
-approve / feedback / budget) lives in **`@app/services`** as pure functions over the `Store` port. It
+approve / feedback / budget) lives in **`@core/services`** as pure functions over the `Store` port. It
 does **not** live in the MCP server and **not** in the dashboard. Those two are **transports**: each
 translates its own wire format (MCP tool calls over stdio/HTTP; HTTP+JSON for the dashboard) to and
 from the same service functions. One place for the rule, many ways to reach it — a new client (a CLI,
@@ -71,7 +71,7 @@ stay thin enough to need almost no logic tests of their own.
 - **Named exports.** No default exports.
 - Tabs for indentation (match Tiago's global style).
 - Follow existing project patterns first; when none exists, keep it boring and explicit.
-- Shared types are the contract — define them in `server/shared` and import; don't redeclare.
+- Shared types are the contract — define them in `shared` and import; don't redeclare.
 - Errors: fail loud in the worker loop (log + mark the node), fail fast + typed at the MCP boundary.
 
 ## Commits

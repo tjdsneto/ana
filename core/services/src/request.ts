@@ -1,0 +1,26 @@
+// request_video — HAND OFF. Inserts the root node and returns immediately; it never runs the
+// production inline (the engine worker picks it up off the DB). The one slow operation of the whole
+// surface, kept to a single insert.
+
+import type { ActorKind, AutonomyLever, Store } from "@core/shared"
+
+export interface RequestVideoInput {
+	brief: string
+	sessionId: string
+	autonomyLever?: AutonomyLever
+	actorKind?: ActorKind
+}
+
+export async function requestVideo(store: Store, input: RequestVideoInput): Promise<{ production_id: string; status: string }> {
+	const account = await store.defaultAccount()
+	const user = await store.defaultUser()
+	const root = await store.createProduction({
+		accountId: account.id,
+		userId: user.id,
+		brief: input.brief,
+		sessionId: input.sessionId,
+		autonomyLever: input.autonomyLever ?? "medium",
+		actorKind: input.actorKind ?? "human",
+	})
+	return { production_id: root.id, status: root.status }
+}

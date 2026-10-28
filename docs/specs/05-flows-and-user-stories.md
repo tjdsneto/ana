@@ -15,7 +15,7 @@ actor kind) earns its shape, and to surface gaps before any code.
 - **Client agent** (`client/agent`) — the thin conversational agent in the user's Claude Code/ChatGPT.
   Talks to the user; via MCP, writes requests + inputs and reads status + outputs. **No craft, no
   subagents.**
-- **Engine worker** (`server/engine`) — the loop. Produces, runs reviewers, writes `chat_output`,
+- **Engine worker** (`engine`) — the loop. Produces, runs reviewers, writes `chat_output`,
   resolves on `chat_input`. Never talks to the user directly.
 - **Specialist reviewers** — independent `claude -p` per rubric; the internal quality gate.
 - **Account / user** — the owning tenant + the requesting person; one default of each, implicit in

@@ -4,7 +4,7 @@
 //   claude mcp add --transport http production-engine http://localhost:8787/mcp
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
-import { JsonLogger } from "@app/shared"
+import { JsonLogger } from "@core/shared"
 import express from "express"
 import { buildServer } from "./server.js"
 import { makeStore } from "./store-factory.js"

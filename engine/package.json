@@ -1,0 +1,20 @@
+{
+	"name": "@engine/worker",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Autonomy engine worker — the recursive loop. Produces, reviews internally, marks the data. Spawns claude -p; render stubbed.",
+	"scripts": {
+		"build": "tsc -b",
+		"start": "node dist/worker.js",
+		"dev": "tsx src/worker.ts",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@core/shared": "*",
+		"pg": "^8.13.1"
+	},
+	"devDependencies": {
+		"@types/pg": "^8.11.10"
+	}
+}

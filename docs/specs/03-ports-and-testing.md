@@ -9,7 +9,7 @@ handlers unit-test against **fakes** — no DB, no network, no `claude -p`.
 
 ## The ports
 
-All live in `server/shared` and are imported by both `server/mcp` and `server/engine`.
+All live in `shared` and are imported by both `server/mcp` and `engine`.
 
 ### Store — all DB access
 
@@ -105,7 +105,7 @@ Falls out of spec 01. **Postgres** (a `db` service in Compose — see spec 07), 
 v1 shape, removes the single-writer ceiling, and gives `LISTEN/NOTIFY` (push, not poll) + `jsonb` +
 `SELECT … FOR UPDATE SKIP LOCKED` (clean job claiming). One `nodes` table (no separate productions/jobs
 table — the root node *is* the production), plus a thin `accounts` table (the tenant seam — PoC seeds
-one default row). Lives in `server/shared` as migrations (Drizzle).
+one default row). Lives in `shared` as migrations (Drizzle).
 
 Ids are app-generated strings (`IdGen`) → `text` PKs. Timestamps are `timestamptz`; the app supplies
 them via `Clock` (the `DEFAULT now()` is a convenience, overridden in deterministic tests). Status

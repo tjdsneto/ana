@@ -1,0 +1,22 @@
+{
+	"name": "@core/services",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Application service layer — the business logic of each client-facing operation, as pure async functions over the Store port. Consumed by the MCP tools (server/mcp) and the dashboard API (dashboard/api); neither owns a second copy.",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build": "tsc -b",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@core/shared": "*"
+	}
+}

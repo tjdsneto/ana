@@ -29,7 +29,7 @@ mcp-server (TS/Node) ──writes/reads──►  Postgres (db service) + artifa
                                               ▲
                                      reads/subscribes (LISTEN/NOTIFY → WebSocket)
                                               │
-                                     dashboard (React + thin Node/TS read API) — dev/observability + v0 human-gate UI
+                                     web app (React SPA + a thin Node/TS read API, server/api) — dev/observability + v0 human-gate UI
 ```
 
 - **mcp-server** answers fast tool calls synchronously against the DB (`get_status`, `inbox`,
@@ -39,11 +39,11 @@ mcp-server (TS/Node) ──writes/reads──►  Postgres (db service) + artifa
   recursive loop, spawns `claude -p` subagents (producers + specialist reviewers), and writes progress
   + artifacts back.
 - **The DB is the only integration point.** The processes never call each other — they share data
-  (the engine, the MCP server, and the dashboard are all just DB clients). This decoupling
+  (the engine, the MCP server, and the web app are all just DB clients). This decoupling
   (conversation vs. production) is the core bet: the production survives the client disconnecting,
   resumes after a crash, and later scales to many workers.
 - **Postgres from v0** (a `db` service in Compose). `LISTEN/NOTIFY` wakes the worker on new jobs and
-  pushes dashboard updates (no pure polling); `SKIP LOCKED` is the multi-worker claim seam. Adapter:
+  pushes web-app updates (no pure polling); `SKIP LOCKED` is the multi-worker claim seam. Adapter:
   Drizzle + `pg`, behind the `Store` port.
 
 **PoC simplification:** one worker, no queue/broker yet (the `SKIP LOCKED` claim makes multi-worker a
@@ -75,13 +75,14 @@ engine        generic autonomy loop — knows nothing about video
 |------|------|
 | `docs/specs/` | the specs — **start here**; domain model first |
 | `docs/code-standards.md` | TS/testing conventions, the port/adapter rule, the naming rule |
-| `server/shared/` | DB schema + migrations (Drizzle), node/contract types, port interfaces + adapters (PgStore) shared by every package |
-| `server/services/` | the **application service layer** (`@app/services`) — business logic of each client-facing operation (requestVideo, getStatus, inbox, getDeliverable, approve, submitFeedback, approveBudget) as pure functions over the `Store` port. Consumed by the MCP server **and** the dashboard API; neither holds a second copy |
-| `server/mcp/` | TS/Node MCP server — **pure transport** over `@app/services` (zod schemas + `registerTool` wiring: HTTP, plus a thin stdio entrypoint). No business logic |
-| `server/engine/` | the autonomy-engine worker (TS/Node; the loop; spawns `claude -p`) |
+| `shared/` | `@core/shared` — the contract: DB schema + migrations (Drizzle), node/contract types, port interfaces + adapters (PgStore), test fakes. Imported by every package |
+| `core/services/` | `@core/services` — the **application service layer**: business logic of each client-facing operation (requestVideo, getStatus, inbox, getDeliverable, approve, submitFeedback, approveBudget) as pure functions over the `Store` port. Transport-agnostic; consumed by **both** `server/mcp` and `server/api`, neither holds a second copy |
+| `engine/` | `@engine/worker` — the autonomy-engine loop + worker + type registry (TS/Node; spawns `claude -p`). Not a client-facing server |
+| `server/mcp/` | `@server/mcp` — the MCP server, **pure transport** over `@core/services` (zod schemas + `registerTool` wiring: HTTP, plus a thin stdio entrypoint). No business logic |
+| `server/api/` | `@server/api` — the web app's read API: read DTOs over the `Store` + a WebSocket relaying `LISTEN/NOTIFY`, plus the gate writes routed through `@core/services`. Thin transport, no business logic |
 | `server/data/` | gitignored runtime state: produced `artifacts/` (the Postgres data lives in the `db` container volume) |
 | `client/agent/` | thin client template a brand installs (MCP config only; no craft) — the product client |
-| `dashboard/` | dev/observability web app — `dashboard/app` (React + Vite) + `dashboard/api` (thin Node/TS read API + WebSocket). Reads the DB, renders productions/nodes live, and drives the v0 human gate (approve/feedback). **Not** the product client. |
+| `app/` | `@app/web` — the React + Vite SPA: dev/observability UI + the v0 human gate (approve/feedback). Reads `server/api`, renders productions/nodes live. **Not** the product client |
 | `.claude/skills/` | project skills (run/test the stack, add-a-tool, add-a-type) |
 
 ## Testing seam — ports and adapters (bake in from the start)

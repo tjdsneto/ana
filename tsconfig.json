@@ -1,10 +1,10 @@
 {
 	"files": [],
 	"references": [
-		{ "path": "./server/shared" },
-		{ "path": "./server/services" },
+		{ "path": "./shared" },
+		{ "path": "./core/services" },
+		{ "path": "./engine" },
 		{ "path": "./server/mcp" },
-		{ "path": "./server/engine" },
-		{ "path": "./dashboard/api" }
+		{ "path": "./server/api" }
 	]
 }

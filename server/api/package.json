@@ -1,0 +1,22 @@
+{
+	"name": "@server/api",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Dashboard read API + WebSocket — a thin DB reader over the shared Store, plus LISTEN/NOTIFY relayed to browsers. Gate writes call the shared @core/services layer (spec 06).",
+	"scripts": {
+		"build": "tsc -b",
+		"start": "node dist/index.js",
+		"dev": "tsx src/index.ts"
+	},
+	"dependencies": {
+		"@core/services": "*",
+		"@core/shared": "*",
+		"express": "^4.21.2",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"@types/express": "^4.17.21",
+		"@types/ws": "^8.5.13"
+	}
+}
