@@ -12,11 +12,11 @@
 	"dependencies": {
 		"@core/services": "*",
 		"@core/shared": "*",
-		"express": "^4.21.2",
-		"ws": "^8.18.0"
+		"express": "^5.3.0",
+		"ws": "^8.18.3"
 	},
 	"devDependencies": {
-		"@types/express": "^4.17.21",
-		"@types/ws": "^8.5.13"
+		"@types/express": "^5.0.6",
+		"@types/ws": "^8.18.1"
 	}
 }

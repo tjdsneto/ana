@@ -2,8 +2,12 @@
 # command: the node services run their built dist, the web app runs the Vite dev server (which proxies
 # /api + /ws to web-api, so the browser talks to one origin). Slim per-service images are a later concern.
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /repo
+
+# Pin the toolchain in the image (the versioned source of truth, not the host): Node 24 LTS from the
+# base, npm bumped to the latest major (12.x) — npm 10/11 crash resolving vite 8's rolldown tree.
+RUN npm i -g npm@latest
 
 # Install with the full workspace layout present (npm needs every package.json to resolve the
 # @core/@server/@engine/@app links) — copied before the source so this layer caches on lockfile changes.

@@ -11,6 +11,12 @@ share one Postgres DB and an artifacts directory. v0 proof-of-concept, internal 
 
 1. **TypeScript / Node** for both the MCP server and the engine worker — one language, one toolchain,
    shared contract types in `shared`. (PoC-scoping only; the product keeps v1 language open.)
+   **Toolchain is pinned by the project, not the machine:** Node 24 LTS + npm 12 (`.nvmrc`, root
+   `engines` + `packageManager`, `.npmrc` `engine-strict`), and the Docker image (`node:24-alpine` +
+   `npm@latest`) is the **canonical build/run/test environment**. Deps are kept at latest (zod 4,
+   express 5, react 19, drizzle-orm 0.45, vite 8, vitest 5); `npm audit` is clean (0 vulns). TypeScript
+   is held at 5.9 (7.0 is the native-compiler rewrite — revisit when tsx/vitest certify it). Local
+   dev: `nvm use` then `npm ci` under Node 24.
 2. **Transport — streamable HTTP** for the Compose target, plus a **thin stdio entrypoint** for the
    first local Claude Code check.
 3. **Postgres from v0** — a `db` service in Compose (switched off the handoff's SQLite: it is the v1

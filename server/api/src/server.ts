@@ -44,7 +44,7 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 	app.get("/api/productions", handle("productions", () => listProductions(store)))
 	app.get("/api/productions/:id", handle("production_detail", (req) => {
 		const id = req.params.id
-		if (!id) throw new Error("missing production id")
+		if (typeof id !== "string") throw new Error("missing production id") // express 5 types params as string | string[]
 		return productionDetail(store, id)
 	}))
 	app.get(
