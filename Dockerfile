@@ -47,3 +47,19 @@ RUN apk add --no-cache bash curl libgcc libstdc++ ripgrep \
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 	DISABLE_AUTOUPDATER=1
 CMD ["node", "engine/dist/worker.js"]
+
+# ── web build stage ─────────────────────────────────────────────────────────────────────────────
+# Produce the static SPA bundle (app/dist). Separate from `base` so the heavy node_modules never ship
+# in the final web image — only the built assets do.
+FROM base AS web-build
+RUN npm -w @app/web run build
+
+# ── web (prod) stage ────────────────────────────────────────────────────────────────────────────
+# Serve the built SPA with nginx and reverse-proxy /api + /ws to web-api (same origin, so the app's
+# relative URLs work unchanged — no CORS, no baked API host). This replaces the Vite dev server for
+# the Compose target; the dev server stays available via the `web-dev` service (dev profile).
+FROM nginx:1.27-alpine AS web
+COPY app/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /repo/app/dist /usr/share/nginx/html
+EXPOSE 80
+# nginx:alpine's default CMD runs the server in the foreground.

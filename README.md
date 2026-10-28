@@ -30,8 +30,10 @@ share one Postgres DB and an artifacts directory. v0 proof-of-concept, internal 
 6. **Test runner: vitest** (default; confirm on scaffolding).
 7. **Web app from v0** — a dev/observability SPA (`app/`, React + Vite) over a thin read API
    (`server/api`, Node/TS) that renders productions/nodes live (via `LISTEN/NOTIFY` → WebSocket) and
-   drives the v0 **human gate** (approve/feedback). Not the product client. See
-   `docs/specs/06-dashboard.md`.
+   drives the v0 **human gate** (approve/feedback). Not the product client. In Compose it is a
+   **production build** (`vite build`) served by **nginx**, which reverse-proxies `/api` + `/ws` to
+   `web-api` (one origin — the SPA's relative URLs need no CORS/host baking); the Vite dev server
+   stays available as the `web-dev` service under the `dev` profile. See `docs/specs/06-dashboard.md`.
 
 Design source of truth (outside this repo — don't copy its product name in):
 `../docs/lisa/lisa-loop-design.md` (§20–27 = the recursive typed-project model) and
@@ -60,9 +62,11 @@ Design source of truth (outside this repo — don't copy its product name in):
    versions + reviews, type-driven inbox gate (approve/feedback/ack + budget). Smoked on Postgres:
    reads + both NOTIFYs over the socket + an approve round-trip; `vite build` clean.)
 7. Docker Compose (`db` + `mcp-server` + `engine-worker` + `web-api` + `web`) on the shared volume. ✅
-   (one root `Dockerfile` builds the whole workspace; each service overrides the command. A one-shot
-   `migrate` service applies migrations + seed; the engine runs the **fake subagent**
-   (`ENGINE_FAKE_SUBAGENT=1`) so the stack runs with no `claude` binary, like render stays stubbed.)
+   (one root `Dockerfile`, multi-stage: `base` runs the node services, `engine` adds the Claude Code
+   CLI for the real subagent runner, `web` is an nginx prod build of the SPA proxying `/api`+`/ws` to
+   `web-api`. A one-shot `migrate` service applies migrations + seed. Default `SUBAGENT_ENGINE=fake`
+   so the stack runs with no `claude` call (zero spend), like render stays stubbed; real `claude` is
+   opt-in via the subscription token. `web-dev` (Vite hot-reload) and `toolbox` sit behind profiles.)
 8. End-to-end check per acceptance below. ✅ (full stack `up`; `request_video` over the **real MCP
    protocol** created a production; the `NOTIFY`-woken worker produced all 7 leaves; approving each
    gate output over MCP rolled the root up to `approved`; `web-api` reflected all 8 nodes approved; 7

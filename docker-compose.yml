@@ -107,16 +107,32 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Production web: nginx serves the built SPA and proxies /api + /ws to web-api (one origin). This is
+  # the default `docker compose up` web. For hot-reload development use the `web-dev` service below.
   web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: production-engine-web:local
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - web-api
+
+  # Development web: the Vite dev server (hot reload), proxying /api + /ws to web-api itself. Only
+  # starts under the `dev` profile (docker compose --profile dev up), so a plain up runs prod nginx.
+  web-dev:
     <<: *engine-image
     command: ["sh", "-c", "npm -w @app/web run dev -- --host 0.0.0.0 --port 5173"]
     environment:
       WEB_API_URL: http://web-api:8788   # Vite proxies /api + /ws here (server-side, cross-container)
       WEB_PORT: "5173"
     ports:
-      - "${WEB_PORT:-5173}:5173"
+      - "${WEB_DEV_PORT:-5173}:5173"
     depends_on:
       - web-api
+    profiles: ["dev"]
 
   # Dev toolbox — a Node 24 + npm 12 shell (the same pinned image as every service) for host-free
   # install / build / test / add-a-dep. The host needs only Docker, never a local Node. Drive it with

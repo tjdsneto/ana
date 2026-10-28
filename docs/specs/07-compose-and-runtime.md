@@ -10,9 +10,9 @@ service images fill in as the code lands (it will not `up` end-to-end until then
 |---------|--------|------|-------|
 | `db` | postgres image | Postgres — the one integration point. Named volume for data. | 5432 |
 | `mcp-server` | `server/mcp` | MCP over streamable HTTP; fast tool calls against the DB. | `MCP_HTTP_PORT` |
-| `engine-worker` | `engine` | the loop: `LISTEN new_job` + poll fallback; spawns `claude -p`; writes back + `NOTIFY presentable`. | — |
+| `engine-worker` | `engine` stage (bundles the Claude Code CLI) | the loop: `LISTEN new_job` + poll fallback; spawns the subagent engine (`SUBAGENT_ENGINE`: `claude` real / `fake`); writes back + `NOTIFY presentable`. | — |
 | `web-api` | `server/api` | read queries + WebSocket; subscribes to `LISTEN/NOTIFY`, relays to the browser; gate writes via `@core/services`. | `WEB_API_PORT` |
-| `web` | `app` | React + Vite SPA. | `WEB_PORT` |
+| `web` | `web` stage (nginx + `vite build` of `app`) | serves the built SPA, reverse-proxies `/api` + `/ws` to `web-api` (one origin). Vite dev server is `web-dev`, `dev` profile. | `WEB_PORT` |
 
 - **No queue/broker service** — `LISTEN/NOTIFY` + `SKIP LOCKED` on `db` cover wakeups + claiming for
   v0 (spec 03). Phase 4 adds a real queue + multiple `engine-worker` replicas.
@@ -20,7 +20,12 @@ service images fill in as the code lands (it will not `up` end-to-end until then
   - Postgres data → a named Docker volume (not in the repo).
   - produced artifacts → a bind-mount of `server/data/artifacts` shared by `engine-worker`,
     `mcp-server`, and `web-api` (all reference files by path; big I/O never hits the DB).
-- **Secrets / render keys** come from `.env` (gitignored); render stays stubbed until keys land.
+  - engine's Claude Code state (`~/.claude`: session transcripts + cached creds) → a bind-mount of
+    `engine/data/claude` (engine-owned; survives recreation; keeps `--resume` working across restarts).
+- **Secrets / render keys** come from `.env` (gitignored); render stays stubbed until keys land. The
+  real `claude` engine authenticates with the subscription via `CLAUDE_CODE_OAUTH_TOKEN` (never
+  `ANTHROPIC_API_KEY` — it outranks the token and bills the API). Default `SUBAGENT_ENGINE=fake` = no
+  calls, no spend.
 - **Startup ordering:** `mcp-server` / `engine-worker` / `web-api` `depends_on` `db` with a
   healthcheck (`pg_isready`) + a wait-for-db so migrations/queries don't race the DB coming up.
 
