@@ -98,5 +98,27 @@ services:
     depends_on:
       - web-api
 
+  # Dev toolbox — a Node 24 + npm 12 shell (the same pinned image as every service) for host-free
+  # install / build / test / add-a-dep. The host needs only Docker, never a local Node. Drive it with
+  # the ./x wrapper: `./x npm ci`, `./x npm test`, `./x npm run build`, `./x sh`.
+  #
+  # The repo is bind-mounted LIVE at /work, but every node_modules sits in a NAMED VOLUME so the
+  # container's Linux-arch install (native binaries: rolldown, esbuild, pg) never overwrites the
+  # host's darwin node_modules — and vice versa. One volume per node_modules that actually exists
+  # (root is hoisted; app/ keeps its own). Add a workspace's volume here if it ever grows one.
+  # In the `tools` profile so a plain `docker compose up` never starts it.
+  toolbox:
+    <<: *engine-image
+    working_dir: /work
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
+    volumes:
+      - .:/work
+      - toolbox_node_modules:/work/node_modules
+      - toolbox_app_node_modules:/work/app/node_modules
+    profiles: ["tools"]
+
 volumes:
   pgdata:
+  toolbox_node_modules:
+  toolbox_app_node_modules:

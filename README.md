@@ -15,8 +15,9 @@ share one Postgres DB and an artifacts directory. v0 proof-of-concept, internal 
    `engines` + `packageManager`, `.npmrc` `engine-strict`), and the Docker image (`node:24-alpine` +
    `npm@latest`) is the **canonical build/run/test environment**. Deps are kept at latest (zod 4,
    express 5, react 19, drizzle-orm 0.45, vite 8, vitest 5); `npm audit` is clean (0 vulns). TypeScript
-   is held at 5.9 (7.0 is the native-compiler rewrite — revisit when tsx/vitest certify it). Local
-   dev: `nvm use` then `npm ci` under Node 24.
+   is held at 5.9 (7.0 is the native-compiler rewrite — revisit when tsx/vitest certify it).
+   **Local dev needs no host Node** — use the `toolbox` container via `./x` (see below); `nvm use`
+   + `npm ci` on the host is only the alternative if you prefer running Node locally.
 2. **Transport — streamable HTTP** for the Compose target, plus a **thin stdio entrypoint** for the
    first local Claude Code check.
 3. **Postgres from v0** — a `db` service in Compose (switched off the handoff's SQLite: it is the v1
@@ -66,6 +67,27 @@ Design source of truth (outside this repo — don't copy its product name in):
    protocol** created a production; the `NOTIFY`-woken worker produced all 7 leaves; approving each
    gate output over MCP rolled the root up to `approved`; `web-api` reflected all 8 nodes approved; 7
    artifact files landed under `server/data/artifacts/<id>/`.)
+
+## Local development — no host Node required
+
+The pinned toolchain lives in the container, not on your machine. The `toolbox` service (Node 24 LTS
++ npm 12, the same image every service runs) gives a host-free shell for install / build / test / add-
+a-dep; drive it with the `./x` wrapper. The repo is bind-mounted live, so host edits are seen at once,
+while every `node_modules` sits in a named volume — the container's Linux-arch install never clobbers
+a host `node_modules`, and vice versa.
+
+```
+./x npm ci              # install from the lockfile (first run also builds the image)
+./x npm install <pkg>   # add a dependency / regenerate the lockfile
+./x npm run build       # tsc -b across the workspace
+./x npm test            # vitest run
+./x npm run typecheck
+./x sh                  # interactive shell in the toolbox
+```
+
+db-touching scripts need the `db` service up first: `docker compose up -d db && ./x npm run db:migrate`.
+Running Node directly on the host still works (`nvm use` → `npm ci` under Node 24) if you prefer it —
+the IDE's in-editor test runner / debugger is the one thing the container can't drive.
 
 ## Acceptance (PoC spike)
 
