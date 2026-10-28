@@ -12,6 +12,7 @@
 		"app"
 	],
 	"scripts": {
+		"build": "tsc -b",
 		"typecheck": "tsc -b && npm -w @app/web run typecheck",
 		"test": "vitest run",
 		"db:migrate": "npm -w @core/shared run migrate",

@@ -52,8 +52,14 @@ Design source of truth (outside this repo — don't copy its product name in):
    over a WebSocket; `@app/web` — React + Vite SPA: productions list, live node tree +
    versions + reviews, type-driven inbox gate (approve/feedback/ack + budget). Smoked on Postgres:
    reads + both NOTIFYs over the socket + an approve round-trip; `vite build` clean.)
-7. Docker Compose (`db` + `mcp-server` + `engine-worker` + `web-api` + `web`) on the shared volume.
-8. End-to-end check per acceptance below.
+7. Docker Compose (`db` + `mcp-server` + `engine-worker` + `web-api` + `web`) on the shared volume. ✅
+   (one root `Dockerfile` builds the whole workspace; each service overrides the command. A one-shot
+   `migrate` service applies migrations + seed; the engine runs the **fake subagent**
+   (`ENGINE_FAKE_SUBAGENT=1`) so the stack runs with no `claude` binary, like render stays stubbed.)
+8. End-to-end check per acceptance below. ✅ (full stack `up`; `request_video` over the **real MCP
+   protocol** created a production; the `NOTIFY`-woken worker produced all 7 leaves; approving each
+   gate output over MCP rolled the root up to `approved`; `web-api` reflected all 8 nodes approved; 7
+   artifact files landed under `server/data/artifacts/<id>/`.)
 
 ## Acceptance (PoC spike)
 

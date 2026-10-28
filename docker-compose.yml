@@ -1,6 +1,12 @@
-# DRAFT — topology for the v0 PoC (see docs/specs/07-compose-and-runtime.md).
-# The `db` service works today; the app services build once their code + Dockerfiles land,
-# so this will not `up` end-to-end yet. Kept in the repo to pin the shape.
+# v0 PoC topology (spec 07). One image (root Dockerfile) runs every TS/Node service; each service just
+# overrides the command. Render stays stubbed and the engine runs the FAKE subagent
+# (ENGINE_FAKE_SUBAGENT=1) so the whole stack runs end-to-end with no render keys and no `claude` binary.
+
+x-engine-image: &engine-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: production-engine:local
 
 services:
   db:
@@ -19,8 +25,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot: apply migrations + seed the default account/user, then exit. The long-running services
+  # wait for it to complete so they never race an empty schema.
+  migrate:
+    <<: *engine-image
+    command: ["sh", "-c", "npm run db:migrate && npm run db:seed"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
+    depends_on:
+      db:
+        condition: service_healthy
+
   mcp-server:
-    build: ./server/mcp          # TODO: Dockerfile lands with the code
+    <<: *engine-image
+    command: ["node", "server/mcp/dist/http.js"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
       MCP_HTTP_PORT: ${MCP_HTTP_PORT:-8787}
@@ -32,41 +50,49 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   engine-worker:
-    build: ./engine              # TODO: Dockerfile lands with the code
+    <<: *engine-image
+    command: ["node", "engine/dist/worker.js"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
       ARTIFACTS_DIR: /data/artifacts
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3000}
       MAX_REDOS: ${MAX_REDOS:-3}
-      CLAUDE_BIN: ${CLAUDE_BIN:-claude}
-      # RENDER_PROVIDER=stub   # keep stubbed until keys land
+      ENGINE_FAKE_SUBAGENT: "1"   # stubbed, like render — no `claude` binary in the image
     volumes:
       - ./server/data/artifacts:/data/artifacts
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   web-api:
-    build: ./server/api          # TODO: Dockerfile lands with the code
+    <<: *engine-image
+    command: ["node", "server/api/dist/index.js"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@db:5432/app}
-      MCP_HTTP_URL: http://mcp-server:8787
       WEB_API_PORT: ${WEB_API_PORT:-8788}
       ARTIFACTS_DIR: /data/artifacts
     ports:
       - "${WEB_API_PORT:-8788}:8788"
     volumes:
-      - ./server/data/artifacts:/data/artifacts
+      - ./server/data/artifacts:/data/artifacts   # read produced artifacts for get_deliverable
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   web:
-    build: ./app                 # TODO: Dockerfile lands with the code (React + Vite)
+    <<: *engine-image
+    command: ["sh", "-c", "npm -w @app/web run dev -- --host 0.0.0.0 --port 5173"]
     environment:
-      VITE_WEB_API_URL: http://localhost:${WEB_API_PORT:-8788}
+      WEB_API_URL: http://web-api:8788   # Vite proxies /api + /ws here (server-side, cross-container)
+      WEB_PORT: "5173"
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:

@@ -1,0 +1,12 @@
+# Rebuilt inside the image — never copy the host's copies in.
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+# Not needed at build / must not leak in.
+.git
+.env
+*.log
+server/data
+tmp

@@ -5,6 +5,7 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { JsonLogger, makePool, PgStore } from "@core/shared"
+import { FakeSubagentRunner } from "@core/shared/testing"
 import { ClaudeSubagentRunner } from "./adapters/claude-runner.js"
 import { StubRenderClient } from "./adapters/render-stub.js"
 import { configFromEnv } from "./config.js"
@@ -16,17 +17,22 @@ const typesDir = process.env.AUTONOMY_TYPES_DIR ?? join(dirname(fileURLToPath(im
 
 const logger = new JsonLogger({ bound: { svc: "engine" } })
 
+// Subagent adapter is a port: the real `claude -p` runner, or the canned fake when
+// ENGINE_FAKE_SUBAGENT=1 — so the full stack runs end-to-end (Compose) with no `claude` binary and no
+// network, exactly as render stays stubbed until keys land. Same seam as MCP_FAKE_STORE.
+const fakeSubagent = process.env.ENGINE_FAKE_SUBAGENT === "1"
+
 async function main(): Promise<void> {
 	const pool = makePool()
 	const engine = new Engine({
 		store: new PgStore(pool),
-		runner: new ClaudeSubagentRunner(),
+		runner: fakeSubagent ? new FakeSubagentRunner() : new ClaudeSubagentRunner(),
 		render: new StubRenderClient(),
 		types: TypeRegistry.load(typesDir),
 		config,
 		logger,
 	})
-	logger.info("worker.up", { typesDir, pollIntervalMs: config.pollIntervalMs })
+	logger.info("worker.up", { typesDir, pollIntervalMs: config.pollIntervalMs, fakeSubagent })
 
 	let busy = false
 	const drain = async (trigger: string) => {
