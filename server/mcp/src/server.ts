@@ -1,14 +1,15 @@
-// MCP wiring — maps the pure handlers (tools.ts) onto an McpServer with zod input schemas. Wire
-// param names are snake_case (spec 04); the handlers take camelCase, so each registration adapts.
+// MCP wiring — maps the application service layer (@app/services) onto an McpServer with zod input
+// schemas. This package is pure transport: no business logic lives here. Wire param names are
+// snake_case (spec 04); the service functions take camelCase, so each registration adapts.
 // Verified against @modelcontextprotocol/sdk 1.32.2 (registerTool(name, {description, inputSchema},
 // cb); inputSchema is a raw zod shape; cb returns { content: [{type:"text", text}] }). Every call is
 // timed + logged through the injected Logger (default quiet).
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "@app/services"
 import { type Logger, NoopLogger, type Store } from "@app/shared"
 import { z } from "zod"
-import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./tools.js"
 
 function ok(data: unknown): CallToolResult {
 	return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] }

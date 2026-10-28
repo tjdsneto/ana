@@ -1,9 +1,9 @@
-// The dashboard HTTP API. Reads assemble view DTOs (queries.ts); the two gate writes reuse the MCP
-// tool handlers verbatim (spec 06: "the one write path stays in the server"), so approve/feedback go
-// through the exact same code as the MCP tool surface — no second write path to drift. Returns an
-// express app; index.ts wraps it in an http.Server and attaches the WebSocket.
+// The dashboard HTTP API. Reads assemble view DTOs (queries.ts); the two gate writes call the shared
+// @app/services layer — the exact same functions the MCP tools call (spec 06: "the one write path
+// stays in the server"), so there is no second copy of the gate logic to drift. Returns an express
+// app; index.ts wraps it in an http.Server and attaches the WebSocket.
 
-import { approve, approveBudget, getDeliverable, submitFeedback } from "@app/mcp/tools"
+import { approve, approveBudget, getDeliverable, submitFeedback } from "@app/services"
 import type { Logger, Store } from "@app/shared"
 import express from "express"
 import { listProductions, productionDetail } from "./queries.js"

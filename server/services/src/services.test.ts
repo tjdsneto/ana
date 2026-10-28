@@ -1,8 +1,9 @@
-// Tool-handler unit tests — pure logic over FakeStore, no MCP transport, no DB, no network.
+// Service-layer unit tests — pure logic over FakeStore, no MCP transport, no HTTP, no DB, no network.
+// This is the home of the logic the MCP tools and the dashboard API both call.
 
 import { FakeStore } from "@app/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
-import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./tools.js"
+import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
 
 let store: FakeStore
 
@@ -25,7 +26,7 @@ async function presentSomething() {
 	return { production_id, node: child!, version, output }
 }
 
-describe("request_video (hand off)", () => {
+describe("requestVideo (hand off)", () => {
 	it("resolves the defaults, inserts a queued root, returns its id", async () => {
 		const res = await requestVideo(store, { brief: "make a promo", sessionId: "sess_1" })
 		expect(res.status).toBe("queued")
@@ -36,7 +37,7 @@ describe("request_video (hand off)", () => {
 		expect(root?.actorKind).toBe("human") // default
 	})
 
-	it("honors an explicit autonomy_lever + actor_kind", async () => {
+	it("honors an explicit autonomyLever + actorKind", async () => {
 		const res = await requestVideo(store, { brief: "x", sessionId: "s", autonomyLever: "high", actorKind: "agent" })
 		const root = await store.getProduction(res.production_id)
 		expect(root?.autonomyLever).toBe("high")
@@ -44,7 +45,7 @@ describe("request_video (hand off)", () => {
 	})
 })
 
-describe("get_status + inbox", () => {
+describe("getStatus + inbox", () => {
 	it("reports nodes and surfaces a presentable output", async () => {
 		const { production_id, node, version } = await presentSomething()
 		const status = await getStatus(store, { productionId: production_id })
@@ -59,7 +60,7 @@ describe("get_status + inbox", () => {
 })
 
 describe("approve", () => {
-	it("by output_id: resolves the output, approves the version + node, records the input", async () => {
+	it("by outputId: resolves the output, approves the version + node, records the input", async () => {
 		const { output, node, version } = await presentSomething()
 		const res = await approve(store, { outputId: output.id })
 		expect(res.ok).toBe(true)
@@ -69,7 +70,7 @@ describe("approve", () => {
 		expect(store.chatInputs.at(-1)).toMatchObject({ kind: "approve", respondsTo: output.id })
 	})
 
-	it("by version_id: approves without an output", async () => {
+	it("by versionId: approves without an output", async () => {
 		const { version, node } = await presentSomething()
 		await approve(store, { versionId: version.id })
 		expect((await store.getVersion(version.id))?.status).toBe("approved")
@@ -77,8 +78,8 @@ describe("approve", () => {
 	})
 })
 
-describe("submit_feedback", () => {
-	it("by output_id: denies the version, reopens the node, resolves the output", async () => {
+describe("submitFeedback", () => {
+	it("by outputId: denies the version, reopens the node, resolves the output", async () => {
 		const { output, node, version } = await presentSomething()
 		await submitFeedback(store, { outputId: output.id, body: "too long, wrong tone" })
 		expect((await store.getVersion(version.id))?.status).toBe("denied")
@@ -88,14 +89,14 @@ describe("submit_feedback", () => {
 		expect(store.chatInputs.at(-1)).toMatchObject({ kind: "feedback", respondsTo: output.id })
 	})
 
-	it("unsolicited (production_id): records feedback with no responds_to", async () => {
+	it("unsolicited (productionId): records feedback with no respondsTo", async () => {
 		const { production_id } = await presentSomething()
 		await submitFeedback(store, { productionId: production_id, body: "make it shorter" })
 		expect(store.chatInputs.at(-1)).toMatchObject({ kind: "feedback", respondsTo: null, body: "make it shorter" })
 	})
 })
 
-describe("approve_budget", () => {
+describe("approveBudget", () => {
 	it("flips the money gate", async () => {
 		const { production_id } = await presentSomething()
 		expect((await store.getBudget(production_id))?.approved).toBe(false)
@@ -104,7 +105,7 @@ describe("approve_budget", () => {
 	})
 })
 
-describe("get_deliverable", () => {
+describe("getDeliverable", () => {
 	it("returns the version + path, no inline content when there is no artifact", async () => {
 		const { version } = await presentSomething()
 		const res = await getDeliverable(store, { versionId: version.id })

@@ -55,6 +55,17 @@ events tagged.
 Adapters (Postgres store via Drizzle + `pg`, HTTP render clients, the `claude -p` runner) each get thin, focused tests.
 Unit testing is a goal, **not a blocker** — don't let test scaffolding stall the first spike.
 
+## Where the logic lives — the service layer
+
+Client-facing business logic (start a production, read status/inbox/deliverable, and the gate —
+approve / feedback / budget) lives in **`@app/services`** as pure functions over the `Store` port. It
+does **not** live in the MCP server and **not** in the dashboard. Those two are **transports**: each
+translates its own wire format (MCP tool calls over stdio/HTTP; HTTP+JSON for the dashboard) to and
+from the same service functions. One place for the rule, many ways to reach it — a new client (a CLI,
+another transport) reuses the layer instead of reimplementing a gate write, so the write path can't
+drift. The service layer unit-tests against `FakeStore` the same way the loop does; the transports
+stay thin enough to need almost no logic tests of their own.
+
 ## Conventions
 
 - **Named exports.** No default exports.

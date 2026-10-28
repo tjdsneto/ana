@@ -75,8 +75,9 @@ engine        generic autonomy loop — knows nothing about video
 |------|------|
 | `docs/specs/` | the specs — **start here**; domain model first |
 | `docs/code-standards.md` | TS/testing conventions, the port/adapter rule, the naming rule |
-| `server/shared/` | DB schema + migrations (Drizzle), node/contract types, port interfaces shared by mcp + engine |
-| `server/mcp/` | TS/Node MCP server (tools + transport: HTTP, plus a thin stdio entrypoint) |
+| `server/shared/` | DB schema + migrations (Drizzle), node/contract types, port interfaces + adapters (PgStore) shared by every package |
+| `server/services/` | the **application service layer** (`@app/services`) — business logic of each client-facing operation (requestVideo, getStatus, inbox, getDeliverable, approve, submitFeedback, approveBudget) as pure functions over the `Store` port. Consumed by the MCP server **and** the dashboard API; neither holds a second copy |
+| `server/mcp/` | TS/Node MCP server — **pure transport** over `@app/services` (zod schemas + `registerTool` wiring: HTTP, plus a thin stdio entrypoint). No business logic |
 | `server/engine/` | the autonomy-engine worker (TS/Node; the loop; spawns `claude -p`) |
 | `server/data/` | gitignored runtime state: produced `artifacts/` (the Postgres data lives in the `db` container volume) |
 | `client/agent/` | thin client template a brand installs (MCP config only; no craft) — the product client |
