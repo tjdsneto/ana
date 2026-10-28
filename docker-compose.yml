@@ -72,6 +72,7 @@ services:
       # e.g.:  CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://Private/claude-code/token") SUBAGENT_ENGINE=claude docker compose up engine-worker
       SUBAGENT_ENGINE: ${SUBAGENT_ENGINE:-fake}
       SUBAGENT_MODEL: ${SUBAGENT_MODEL:-}
+      SUBAGENT_MAX_BUDGET_USD: ${SUBAGENT_MAX_BUDGET_USD:-}   # per-call client-side spend cap (uncapped if empty)
       # Subscription auth. NEVER set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN here — either one silently
       # outranks the OAuth token and bills the API instead of the subscription.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
