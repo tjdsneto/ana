@@ -96,6 +96,20 @@ for (const [name, p] of Object.entries(film.plates)) {
 		await page.route(url, (r) => r.fulfill({ status: 200, contentType: "text/html", body: html }))
 		await page.goto(url, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {})
 	}
+	// Pre-capture steps: drive a real app into the state worth shooting (dismiss onboarding, pick a
+	// template, open a panel). Each step is {click|waitFor|fill|wait|remove}. This is what makes capture
+	// "eyes on a site" rather than goto-only.
+	for (const step of spec.steps || []) {
+		try {
+			if (step.click) await page.click(step.click, { timeout: step.timeout || 15000 }).catch(() => {})
+			if (step.waitFor) await page.waitForSelector(step.waitFor, { state: "visible", timeout: step.timeout || 20000 }).catch(() => {})
+			if (step.fill) await page.fill(step.fill[0], step.fill[1]).catch(() => {})
+			if (step.wait) await page.waitForTimeout(step.wait)
+			if (step.remove) await page.evaluate((sels) => sels.forEach((s) => document.querySelectorAll(s).forEach((e) => e.remove())), step.remove)
+		} catch (e) {
+			console.log(`  step skipped (${JSON.stringify(step)}): ${String(e).slice(0, 80)}`)
+		}
+	}
 	await page.evaluate(cleanup, { cap, js: spec.js || "" })
 	await page.waitForTimeout(300)
 	const rects = await page.evaluate(measure, { marks: film.marks, maxH: cap.maxHeight, vh })
