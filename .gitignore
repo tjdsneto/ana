@@ -29,3 +29,6 @@ engine/data/
 
 # overnight scratch (briefs, logs, captures) — not committed
 tmp/
+
+# host craft tools (playwright browsers / node_modules — not committed)
+craft/tools/node_modules/

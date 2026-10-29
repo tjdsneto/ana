@@ -1,0 +1,7 @@
+{
+  "name": "craft-tools",
+  "private": true,
+  "type": "module",
+  "description": "Host-side craft tools (capture/render). Browser automation via Playwright; container bake later.",
+  "dependencies": { "playwright": "1.49.1" }
+}
