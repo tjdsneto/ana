@@ -34,13 +34,25 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="voiceover + per-word timing")
     p.add_argument("--script", required=True, help="text file, one VO line per line")
     p.add_argument("--out", required=True, help="output dir (gets vo/, vo.wav, words.json)")
-    p.add_argument("--voice", default="af_heart", help="Kokoro voice id")
-    p.add_argument("--speed", type=float, default=0.95)
-    p.add_argument("--lead", type=float, default=0.6, help="silence before the first line (s)")
-    p.add_argument("--gap", type=float, default=0.45, help="silence between lines (s)")
-    p.add_argument("--tail", type=float, default=3.0, help="trailing room after the last line (s)")
+    p.add_argument("--film", default=None, help="film.json to read voice{id,speed,lead,gap}+tail from (CLI flags override)")
+    p.add_argument("--voice", default=None, help="Kokoro voice id")
+    p.add_argument("--speed", type=float, default=None)
+    p.add_argument("--lead", type=float, default=None, help="silence before the first line (s)")
+    p.add_argument("--gap", type=float, default=None, help="silence between lines (s)")
+    p.add_argument("--tail", type=float, default=None, help="trailing room after the last line (s)")
     p.add_argument("--whisper-model", default="base")
-    return p.parse_args()
+    a = p.parse_args()
+    # Defaults, then film.json (if given), then explicit CLI flags win.
+    d = {"voice": "af_heart", "speed": 0.95, "lead": 0.6, "gap": 0.45, "tail": 3.0}
+    if a.film:
+        f = json.loads(Path(a.film).read_text())
+        v = f.get("voice", {})
+        d.update(voice=v.get("id", d["voice"]), speed=v.get("speed", d["speed"]),
+                 lead=v.get("lead", d["lead"]), gap=v.get("gap", d["gap"]), tail=f.get("tail", d["tail"]))
+    for k in ("voice", "speed", "lead", "gap", "tail"):
+        if getattr(a, k) is None:
+            setattr(a, k, d[k])
+    return a
 
 
 def kokoro():
