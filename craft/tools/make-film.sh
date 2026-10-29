@@ -8,6 +8,7 @@
 # Self-check (critique-video) is the caller's job afterward — see the family-a-film skill.
 #
 #   craft/tools/make-film.sh <film-dir> [--out <mp4>] [--fps 30] [--music <file>] [--skip-capture]
+#                            [--voice-engine kokoro|piper] [--skip-voice]
 #
 # Env: KOKORO_HOME (Kokoro model), CHROME_PATH (optional). Needs the craft/tools node deps (playwright)
 # and a Kokoro venv python. Run from the repo root.
@@ -15,13 +16,15 @@
 set -euo pipefail
 
 F="${1:?make-film: film dir required (holds film.json + script.txt)}"; shift || true
-OUT="$F/film.mp4"; FPS=30; MUSIC=""; SKIP_CAPTURE=0
+OUT="$F/film.mp4"; FPS=30; MUSIC=""; SKIP_CAPTURE=0; SKIP_VOICE=0; VOICE_ENGINE="kokoro"
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
     --fps) FPS="$2"; shift 2 ;;
     --music) MUSIC="$2"; shift 2 ;;
     --skip-capture) SKIP_CAPTURE=1; shift ;;
+    --skip-voice) SKIP_VOICE=1; shift ;;            # VO already produced by the voice-production skill
+    --voice-engine) VOICE_ENGINE="$2"; shift 2 ;;   # kokoro (default) | piper — the voice-production skill picks
     *) echo "make-film: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
@@ -38,7 +41,11 @@ if [ "$SKIP_CAPTURE" -eq 0 ]; then
 else
   echo "  [1/5] capture (skipped)"
 fi
-echo "  [2/5] voice";  "$PY" "$HERE/vo.py" --script "$F/script.txt" --film "$F/film.json" --out "$F/media"
+if [ "$SKIP_VOICE" -eq 0 ]; then
+  echo "  [2/5] voice ($VOICE_ENGINE)";  "$PY" "$HERE/vo.py" --script "$F/script.txt" --film "$F/film.json" --out "$F/media" --engine "$VOICE_ENGINE"
+else
+  echo "  [2/5] voice (skipped — produced by voice-production)"
+fi
 echo "  [3/5] build";  python3 "$HERE/build.py" --root "$F"
 echo "  [4/5] mix";    "$PY" "$HERE/mix.py" --root "$F" ${MUSIC:+--music "$MUSIC"}
 echo "  [5/5] render"; ( cd "$HERE" && node render.mjs --html "$F/index.html" --audio "$F/media/mix.wav" --out "$OUT" --fps "$FPS" --no-master )

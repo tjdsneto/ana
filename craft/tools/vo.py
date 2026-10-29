@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """vo — voiceover + word timing, the storyboard timeline's spine.
 
-A craft TOOL (not engine code): the render/voice skill calls it. Synthesizes one Kokoro clip per
-script line, lays them end to end with a lead-in and inter-line gap, and force-times every word so
-cuts / clicks / captions can be anchored to a spoken word (see spec 09, Family A).
+A craft TOOL (not engine code): the voice-production skill calls it and chooses the TTS engine.
+Synthesizes one clip per script line with the selected engine, lays them end to end with a lead-in
+and inter-line gap, and force-times every word so cuts / clicks / captions can be anchored to a
+spoken word (see spec 09, Family A). The timing + laydown are engine-agnostic; only the synth differs.
+
+Engines (--engine): `kokoro` (default) — Kokoro ONNX, higher quality; `piper` — fast, lightweight,
+broad voice/language catalogue (good for drafts or languages Kokoro lacks). Both local and keyless.
 
 Technique lifted from the reference `vo.py` (real-ui-launch-film), re-authored for this repo:
-  - TTS: Kokoro ONNX directly (local, keyless) instead of the HyperFrames CLI.
+  - TTS: Kokoro ONNX / Piper CLI directly (local, keyless) instead of the HyperFrames CLI.
   - Word timing: the `whisper` CLI with --word_timestamps instead of torchaudio's MMS aligner
     (torchaudio is not installed here; whisper is). Clean TTS audio aligns well.
 
-Run under the Kokoro venv python (it has kokoro_onnx + soundfile + numpy):
+Run under the Kokoro venv python (it has soundfile + numpy + whisper; piper is a separate binary):
   "$KOKORO_HOME/venv/bin/python" craft/tools/vo.py --script script.txt --out media [options]
 
-Writes <out>/vo/sNN.wav (cached — delete to redo a line), <out>/vo.wav (48 kHz mono composition
-clock) and <out>/words.json = {"duration": s, "words": [{text, start, end, line}]}.
+Writes <out>/vo/<engine>/sNN.wav (cached — delete to redo a line), <out>/vo.wav (48 kHz mono
+composition clock) and <out>/words.json = {"duration": s, "words": [{text, start, end, line}]}.
 """
 import argparse
 import json
@@ -41,6 +45,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gap", type=float, default=None, help="silence between lines (s)")
     p.add_argument("--tail", type=float, default=None, help="trailing room after the last line (s)")
     p.add_argument("--whisper-model", default="base")
+    p.add_argument("--engine", choices=("kokoro", "piper"), default="kokoro", help="TTS engine")
+    p.add_argument("--piper-bin", default=None, help="piper binary (default: $PIPER_BIN or 'piper')")
+    p.add_argument("--piper-model", default=None, help="piper .onnx voice (default: $PIPER_MODEL or $VOICE_MODEL)")
     a = p.parse_args()
     # Defaults, then film.json (if given), then explicit CLI flags win.
     d = {"voice": "af_heart", "speed": 0.95, "lead": 0.6, "gap": 0.45, "tail": 3.0}
@@ -66,12 +73,41 @@ def kokoro():
     return Kokoro(str(model), str(voices))
 
 
-def synth_line(kok, text: str, voice: str, speed: float, out_wav: Path) -> None:
-    """Synthesize one line to a 24 kHz wav (cached: skip if it already exists)."""
-    if out_wav.exists():
-        return
-    samples, sr = kok.create(text, voice=voice, speed=speed, lang="en-us")
-    sf.write(str(out_wav), samples, sr)
+def make_synth(a: argparse.Namespace):
+    """Return synth(text, out_wav) for the chosen engine. Each synth caches: skip if the wav exists.
+
+    Both engines write a wav that trimmed_f32() later normalizes to 48 kHz mono, so the engine's own
+    sample rate does not matter downstream — only the (engine-agnostic) word timing + laydown do.
+    """
+    if a.engine == "kokoro":
+        kok = kokoro()
+
+        def synth(text: str, out_wav: Path) -> None:
+            if out_wav.exists():
+                return
+            samples, sr = kok.create(text, voice=a.voice, speed=a.speed, lang="en-us")
+            sf.write(str(out_wav), samples, sr)
+
+        return synth
+
+    if a.engine == "piper":
+        piper_bin = a.piper_bin or os.environ.get("PIPER_BIN", "piper")
+        model = a.piper_model or os.environ.get("PIPER_MODEL") or os.environ.get("VOICE_MODEL")
+        if not model or not Path(model).exists():
+            sys.exit(f"vo: piper model not found ({model!r}); set --piper-model or $VOICE_MODEL")
+        # Piper paces with --length_scale (inverse of speed: >1 is slower), so map our `speed`.
+        length_scale = round(1.0 / a.speed, 3) if a.speed else 1.0
+
+        def synth(text: str, out_wav: Path) -> None:
+            if out_wav.exists():
+                return
+            subprocess.run(
+                [piper_bin, "--model", str(model), "--length_scale", str(length_scale), "--output_file", str(out_wav)],
+                input=text.encode("utf-8"), capture_output=True, check=True)
+
+        return synth
+
+    sys.exit(f"vo: unknown engine {a.engine!r}")
 
 
 def trimmed_f32(wav: Path) -> np.ndarray:
@@ -148,16 +184,18 @@ def line_word_times(disp: list[str], rec: list[dict], clip_s: float) -> list[tup
 def main() -> None:
     a = parse_args()
     out = Path(a.out)
-    (out / "vo").mkdir(parents=True, exist_ok=True)
+    # Cache per engine so switching engines never reuses the other engine's clips.
+    vodir = out / "vo" / a.engine
+    vodir.mkdir(parents=True, exist_ok=True)
     lines = [l.strip() for l in Path(a.script).read_text().splitlines() if l.strip()]
     if not lines:
         sys.exit("vo: script is empty")
 
-    kok = kokoro()
+    synth = make_synth(a)
     clips: list[np.ndarray] = []
     for i, line in enumerate(lines, 1):
-        raw_wav = out / "vo" / f"s{i:02d}.wav"
-        synth_line(kok, line, a.voice, a.speed, raw_wav)
+        raw_wav = vodir / f"s{i:02d}.wav"
+        synth(line, raw_wav)
         clips.append(trimmed_f32(raw_wav))
 
     starts, t = [], a.lead
@@ -174,7 +212,7 @@ def main() -> None:
         disp = line.split()
         clip_s = len(clip) / SR
         # whisper needs a file: write the trimmed clip, align, then discard
-        tmp = out / "vo" / f"s{i:02d}.trim.wav"
+        tmp = vodir / f"s{i:02d}.trim.wav"
         sf.write(str(tmp), clip, SR)
         times = line_word_times(disp, whisper_words(tmp, a.whisper_model), clip_s)
         tmp.unlink(missing_ok=True)

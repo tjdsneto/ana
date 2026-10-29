@@ -21,7 +21,8 @@ The task prompt gives a **work dir** that already contains `film.json` (the appr
    ```
    craft/tools/make-film.sh <workDir> --out <workDir>/film.mp4
    ```
-   If the plates are already captured in `<workDir>/assets/shots/` (upstream provided them), add `--skip-capture`.
+   - The **voice** step inside the chain is owned by the `voice-production` skill — pick the TTS engine per that skill and pass `--voice-engine <kokoro|piper>` (default `kokoro`). If `voice-production` already produced `<workDir>/media/vo.wav` + `media/words.json`, pass `--skip-voice` so the chain reuses them instead of re-synthesizing.
+   - If the plates are already captured in `<workDir>/assets/shots/` (upstream provided them), add `--skip-capture`.
 3. Confirm `<workDir>/film.mp4` exists and is non-empty (`ls -la <workDir>/film.mp4`).
 
 ## Output
