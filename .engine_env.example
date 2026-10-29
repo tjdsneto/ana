@@ -18,6 +18,9 @@ SUBAGENT_ENGINE=fake
 
 # Render + voice engines (independent ports). Defaults: stub + silent (no video, no speech, zero cost).
 # RENDER_PROVIDER=stub         # stub | local  (heygen|higgsfield reserved)
+# RENDER_MOTION=1              # local: animatic motion (animated gradient bg + scene fades); static if unset
+# RENDER_MAX_SCENES=6          # local: cap scenes so the video stays short
+# RENDER_NARRATION_MAX=140     # local: clip each scene's spoken narration to this many chars
 # VOICE_PROVIDER=silent        # silent | piper | kokoro
 # VOICE_ID=                    # kokoro speaker id (e.g. af_sarah)
 # VOICE_BIN=                   # override the TTS binary

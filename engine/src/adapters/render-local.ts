@@ -24,6 +24,8 @@ export interface LocalRenderConfig {
 	fontColor?: string // default white
 	fontSize?: number // default 40
 	minSceneMs?: number // floor per scene so a short line still holds; default 2500
+	motion?: boolean // animatic motion (animated gradient bg + scene fades) via RENDER_MOTION; default off
+	accentColor?: string // second gradient colour for motion; default 0x1b2a4a
 }
 
 export class LocalRenderClient implements RenderClient {
@@ -45,6 +47,8 @@ export class LocalRenderClient implements RenderClient {
 			fontColor: config.fontColor ?? "white",
 			fontSize: config.fontSize ?? 40,
 			minSceneMs: config.minSceneMs ?? 2500,
+			motion: config.motion ?? process.env.RENDER_MOTION === "1",
+			accentColor: config.accentColor ?? "0x1b2a4a",
 		}
 		this.log = logger ?? new NoopLogger()
 	}
@@ -68,7 +72,13 @@ export class LocalRenderClient implements RenderClient {
 			const textFile = join(work, `scene-${i}.txt`)
 			writeFileSync(textFile, scene.caption, "utf8")
 			const scenePath = join(work, `scene-${i}.mp4`)
-			const res = await this.exec.run(this.cardCommand({ textFile, audioPath, outPath: scenePath, durationMs: sceneMs }))
+			const card = { textFile, audioPath, outPath: scenePath, durationMs: sceneMs }
+			let res = await this.exec.run(this.cardCommand(card, this.cfg.motion))
+			if (res.code !== 0 && this.cfg.motion) {
+				// motion (animated gradient) is fiddlier — fall back to the proven static card (D1).
+				this.log.warn("render.local.motion_fallback", { scene: i, stderr: res.stderr.trim().slice(0, 160) })
+				res = await this.exec.run(this.cardCommand(card, false))
+			}
 			if (res.code !== 0) throw new Error(`LocalRenderClient: scene ${i} render failed (code ${res.code}): ${res.stderr.trim()}`)
 			sceneFiles.push(scenePath)
 		}
@@ -89,11 +99,13 @@ export class LocalRenderClient implements RenderClient {
 
 	// ── ffmpeg command builders (pure — the tests assert on these argv) ────────────────────────────
 
-	// One scene: a solid-colour background for `durationMs`, the caption drawn from a text file (so no
-	// drawtext escaping), the narration as the audio track. H.264 + yuv420p + AAC so the scenes concat
-	// and play everywhere.
-	cardCommand(a: { textFile: string; audioPath: string; outPath: string; durationMs: number }): ExecRequest {
+	// One scene: a background for `durationMs`, the caption drawn from a text file (so no drawtext
+	// escaping), the narration as the audio track. H.264 + yuv420p + AAC so the scenes concat and play
+	// everywhere. `motion` swaps the solid background for an animated gradient and adds a fade in/out —
+	// the "animatic" feel — and is retried as a static card on failure (see render()).
+	cardCommand(a: { textFile: string; audioPath: string; outPath: string; durationMs: number }, motion = false): ExecRequest {
 		const seconds = (a.durationMs / 1000).toFixed(3)
+		const { width: w, height: h } = this.cfg
 		const draw = [
 			this.cfg.fontFile ? `fontfile=${this.cfg.fontFile}` : undefined,
 			`textfile=${a.textFile}`,
@@ -105,6 +117,13 @@ export class LocalRenderClient implements RenderClient {
 		]
 			.filter(Boolean)
 			.join(":")
+		// Background source: animated gradient (motion) or a solid colour (static).
+		const bgInput = motion
+			? `gradients=s=${w}x${h}:c0=${this.cfg.bgColor}:c1=${this.cfg.accentColor}:duration=${seconds}:speed=0.008`
+			: `color=c=${this.cfg.bgColor}:s=${w}x${h}:d=${seconds}`
+		// Video filter: caption, plus (motion) a half-second fade in and out bracketing the scene.
+		const fadeOut = Math.max(0, a.durationMs / 1000 - 0.5).toFixed(3)
+		const vf = motion ? `drawtext=${draw},fade=t=in:st=0:d=0.5,fade=t=out:st=${fadeOut}:d=0.5` : `drawtext=${draw}`
 		return {
 			bin: "ffmpeg",
 			args: [
@@ -112,11 +131,11 @@ export class LocalRenderClient implements RenderClient {
 				"-f",
 				"lavfi",
 				"-i",
-				`color=c=${this.cfg.bgColor}:s=${this.cfg.width}x${this.cfg.height}:d=${seconds}`,
+				bgInput,
 				"-i",
 				a.audioPath,
 				"-vf",
-				`drawtext=${draw}`,
+				vf,
 				"-t",
 				seconds,
 				"-c:v",
