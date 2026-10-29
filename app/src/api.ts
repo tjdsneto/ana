@@ -65,6 +65,16 @@ export interface UsageSummary {
 	durationMs: number
 }
 
+// One produced .mp4 on disk (from /api/videos). `path` is relative to the artifacts root and is the
+// key the /api/video stream route takes.
+export interface VideoFile {
+	path: string
+	name: string
+	dir: string
+	sizeBytes: number
+	mtimeMs: number
+}
+
 export interface ChatOutput {
 	id: string
 	type: string
@@ -112,6 +122,23 @@ export async function getProduction(id: string): Promise<ProductionDetail> {
 
 export async function getDeliverable(versionId: string): Promise<{ artifact_path: string | null; content?: string }> {
 	return json(await fetch(`/api/deliverable?version_id=${encodeURIComponent(versionId)}`))
+}
+
+export async function getVideos(): Promise<VideoFile[]> {
+	return json(await fetch("/api/videos"))
+}
+
+// Stream URLs for the <video> element (not JSON — used directly as a src).
+export function videoUrlByVersion(versionId: string): string {
+	return `/api/video?version_id=${encodeURIComponent(versionId)}`
+}
+
+export function videoUrlByPath(path: string): string {
+	return `/api/video?path=${encodeURIComponent(path)}`
+}
+
+export function isVideoPath(p: string | null | undefined): boolean {
+	return !!p && /\.mp4$/i.test(p)
 }
 
 export async function approveOutput(outputId: string): Promise<void> {

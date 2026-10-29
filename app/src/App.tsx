@@ -9,6 +9,10 @@ import {
 	getDeliverable,
 	getProduction,
 	getProductions,
+	getVideos,
+	isVideoPath,
+	videoUrlByPath,
+	videoUrlByVersion,
 	type ChatOutput,
 	type Interaction,
 	type Node,
@@ -16,13 +20,18 @@ import {
 	type ProductionDetail,
 	sendFeedback,
 	type UsageSummary,
+	type VideoFile,
 } from "./api.js"
 import { useLive } from "./useLive.js"
 
+type Tab = "productions" | "videos"
+
 export function App() {
+	const [tab, setTab] = useState<Tab>("productions")
 	const [productions, setProductions] = useState<Node[]>([])
 	const [selectedId, setSelectedId] = useState<string | null>(null)
 	const [detail, setDetail] = useState<ProductionDetail | null>(null)
+	const [videos, setVideos] = useState<VideoFile[]>([])
 	const [error, setError] = useState<string | null>(null)
 	const selectedRef = useRef<string | null>(null)
 	selectedRef.current = selectedId
@@ -43,9 +52,18 @@ export function App() {
 		}
 	}, [])
 
+	const refreshVideos = useCallback(async () => {
+		try {
+			setVideos(await getVideos())
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e))
+		}
+	}, [])
+
 	useEffect(() => {
 		void refreshList()
-	}, [refreshList])
+		void refreshVideos()
+	}, [refreshList, refreshVideos])
 
 	useEffect(() => {
 		if (selectedId) void refreshDetail(selectedId)
@@ -54,6 +72,7 @@ export function App() {
 
 	const { connected } = useLive(() => {
 		void refreshList()
+		void refreshVideos()
 		const id = selectedRef.current
 		if (id) void refreshDetail(id)
 	})
@@ -62,29 +81,70 @@ export function App() {
 		<div className="app">
 			<header>
 				<h1>Engine dashboard</h1>
+				<nav className="tabs">
+					<button className={tab === "productions" ? "on" : ""} onClick={() => setTab("productions")}>Productions</button>
+					<button className={tab === "videos" ? "on" : ""} onClick={() => setTab("videos")}>Videos {videos.length > 0 && <span className="badge">{videos.length}</span>}</button>
+				</nav>
 				<span className={`dot ${connected ? "on" : "off"}`} title={connected ? "live" : "disconnected"} />
 			</header>
 			{error && <div className="error" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
-			<div className="cols">
-				<aside>
-					<h2>Productions</h2>
-					{productions.length === 0 && <p className="muted">No productions yet.</p>}
-					<ul className="plist">
-						{productions.map((p) => (
-							<li key={p.id} className={p.id === selectedId ? "sel" : ""} onClick={() => setSelectedId(p.id)}>
-								<div className="pname">{p.name}</div>
-								<div className="pmeta">
-									<Pill status={p.status} /> <span className="muted">{p.autonomyLever ?? "—"} · {p.actorKind ?? "—"}</span>
-								</div>
-							</li>
+			{tab === "videos" ? (
+				<Gallery videos={videos} />
+			) : (
+				<div className="cols">
+					<aside>
+						<h2>Productions</h2>
+						{productions.length === 0 && <p className="muted">No productions yet.</p>}
+						<ul className="plist">
+							{productions.map((p) => (
+								<li key={p.id} className={p.id === selectedId ? "sel" : ""} onClick={() => setSelectedId(p.id)}>
+									<div className="pname">{p.name}</div>
+									<div className="pmeta">
+										<Pill status={p.status} /> <span className="muted">{p.autonomyLever ?? "—"} · {p.actorKind ?? "—"}</span>
+									</div>
+								</li>
+							))}
+						</ul>
+					</aside>
+					<section>
+						{!detail && <p className="muted">Select a production.</p>}
+						{detail && <Detail detail={detail} onAction={() => selectedId && refreshDetail(selectedId)} />}
+					</section>
+				</div>
+			)}
+		</div>
+	)
+}
+
+// The Videos tab: every produced .mp4 on disk, newest first, grouped by folder, each with an inline
+// player. This is where the short/motion renders (on disk but not attached to a DB version) live.
+function Gallery({ videos }: { videos: VideoFile[] }) {
+	if (videos.length === 0) return <p className="muted">No videos produced yet.</p>
+	const groups = new Map<string, VideoFile[]>()
+	for (const v of videos) {
+		const key = v.dir || "(root)"
+		const list = groups.get(key) ?? []
+		list.push(v)
+		groups.set(key, list)
+	}
+	return (
+		<div className="gallery">
+			{[...groups.entries()].map(([dir, vids]) => (
+				<div key={dir} className="vgroup">
+					<h3 className="vgroup-h"><code>{dir}</code> <span className="muted">{vids.length}</span></h3>
+					<div className="vgrid">
+						{vids.map((v) => (
+							<figure key={v.path} className="vcard">
+								<video controls preload="metadata" src={videoUrlByPath(v.path)} />
+								<figcaption>
+									<span className="vname">{v.name}</span>
+									<span className="muted">{fmtBytes(v.sizeBytes)} · {fmtTime(new Date(v.mtimeMs).toISOString())}</span>
+								</figcaption>
+							</figure>
 						))}
-					</ul>
-				</aside>
-				<section>
-					{!detail && <p className="muted">Select a production.</p>}
-					{detail && <Detail detail={detail} onAction={() => selectedId && refreshDetail(selectedId)} />}
-				</section>
-			</div>
+					</div>
+				</div>
+			))}
 		</div>
 	)
 }
@@ -141,8 +201,11 @@ function NodeRow({ nv, root }: { nv: NodeView | null; root?: boolean }) {
 						<div className="vhead">
 							<span className="vn">v{version.n}</span> <Pill status={version.status} />
 							<span className="ts">{fmtTime(version.createdAt)}</span>
-							{version.artifactPath && <ViewArtifact versionId={version.id} />}
+							{version.artifactPath && !isVideoPath(version.artifactPath) && <ViewArtifact versionId={version.id} />}
 						</div>
+						{isVideoPath(version.artifactPath) && (
+							<video className="vinline" controls preload="metadata" src={videoUrlByVersion(version.id)} />
+						)}
 						{version.feedback && <div className="fb">feedback: {version.feedback}</div>}
 						{reviews.length > 0 && (
 							<ul className="reviews">
@@ -228,6 +291,12 @@ function fmtDur(ms: number | null): string {
 
 function fmtNum(n: number | null): string {
 	return n == null ? "—" : n.toLocaleString()
+}
+
+function fmtBytes(n: number): string {
+	if (n < 1024) return `${n} B`
+	if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+	return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function shortId(id: string): string {

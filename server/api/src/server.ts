@@ -6,6 +6,7 @@
 import { approve, approveBudget, getDeliverable, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
+import { artifactsRoot, listVideos, resolveUnderRoot } from "./media.js"
 import { listProductions, productionDetail } from "./queries.js"
 
 // Open CORS: the Vite dev app (port 5173) calls this API (port 8788) cross-origin. Dev tool only.
@@ -51,6 +52,34 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 		"/api/deliverable",
 		handle("deliverable", (req) => getDeliverable(store, { versionId: req.query.version_id as string | undefined, nodeId: req.query.node_id as string | undefined })),
 	)
+
+	// ── video (the produced .mp4 artifacts) ───────────────────────────────────────────────────────
+	// Gallery list: every .mp4 under the artifacts root, newest first.
+	app.get("/api/videos", handle("videos", () => listVideos(artifactsRoot())))
+	// Stream one .mp4 by ?path= (relative, from /api/videos) or ?version_id= (its stored artifact).
+	// res.sendFile handles Range/206 so the <video> element can seek. Both resolve UNDER the root.
+	app.get("/api/video", async (req, res) => {
+		try {
+			const root = artifactsRoot()
+			let target: string | null = null
+			if (typeof req.query.version_id === "string") {
+				const d = await getDeliverable(store, { versionId: req.query.version_id })
+				target = d.artifact_path
+			} else if (typeof req.query.path === "string") {
+				target = req.query.path
+			}
+			const abs = target ? resolveUnderRoot(root, target) : null
+			if (!abs) {
+				res.status(400).json({ error: "pass ?path= (relative) or ?version_id= of an .mp4 under the artifacts root" })
+				return
+			}
+			res.sendFile(abs, { headers: { "Content-Type": "video/mp4" } }, (err) => {
+				if (err && !res.headersSent) res.status(404).json({ error: "artifact not found" })
+			})
+		} catch (err) {
+			if (!res.headersSent) res.status(400).json({ error: err instanceof Error ? err.message : String(err) })
+		}
+	})
 
 	// ── gate writes (reuse the MCP tool handlers) ────────────────────────────────────────────────
 	app.post("/api/approve", handle("approve", (req) => approve(store, { outputId: req.body.output_id, versionId: req.body.version_id })))
