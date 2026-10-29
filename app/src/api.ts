@@ -21,6 +21,8 @@ export interface Version {
 	status: string
 	artifactPath: string | null
 	feedback: string | null
+	createdAt: string
+	updatedAt: string
 }
 
 export interface Review {
@@ -29,6 +31,38 @@ export interface Review {
 	kind: string
 	verdict: string
 	body: string | null
+	createdAt: string
+}
+
+// One subagent run (a producer draft or one reviewer pass): engine/model/session + token usage +
+// timing. Null fields = the engine didn't report them (e.g. the fake runner, or a non-usage engine).
+export interface Interaction {
+	id: string
+	nodeId: string
+	versionId: string | null
+	role: string // "producer" | "review:<kind>"
+	engine: string // claude | fake | …
+	model: string | null
+	sessionId: string | null
+	inputTokens: number | null
+	outputTokens: number | null
+	cacheReadTokens: number | null
+	cacheCreationTokens: number | null
+	costUsd: number | null
+	durationMs: number | null
+	status: string
+	createdAt: string
+}
+
+export interface UsageSummary {
+	interactions: number
+	sessions: string[]
+	inputTokens: number
+	outputTokens: number
+	cacheReadTokens: number
+	cacheCreationTokens: number
+	costUsd: number
+	durationMs: number
 }
 
 export interface ChatOutput {
@@ -51,6 +85,7 @@ export interface Asset {
 export interface NodeView {
 	node: Node
 	versions: Array<{ version: Version; reviews: Review[] }>
+	interactions: Interaction[]
 }
 
 export interface ProductionDetail {
@@ -59,6 +94,7 @@ export interface ProductionDetail {
 	inbox: ChatOutput[]
 	assets: Asset[]
 	budget: { productionId: string; approved: boolean } | null
+	usage: UsageSummary
 }
 
 async function json<T>(res: Response): Promise<T> {

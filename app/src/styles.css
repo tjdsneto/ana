@@ -279,3 +279,123 @@ code {
 	border-radius: 4px;
 	font-size: 12px;
 }
+
+.s-needs-work {
+	color: #d29922;
+	border-color: #6b531a;
+}
+
+.rootmeta {
+	font-size: 12px;
+	margin: -4px 0 6px;
+}
+
+.ts {
+	font-size: 11px;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.vhead {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.vn {
+	font-weight: 600;
+	color: var(--muted);
+}
+
+.rbody {
+	font-size: 12px;
+	margin: 2px 0 0 4px;
+}
+
+/* interactions — one subagent run per row */
+.ints {
+	list-style: none;
+	margin: 4px 0 2px;
+	padding: 0;
+}
+
+.int {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	font-size: 12px;
+	padding: 3px 6px;
+	margin: 2px 0;
+	background: #0b0f14;
+	border: 1px solid var(--line);
+	border-radius: 5px;
+}
+
+.irole {
+	font-weight: 600;
+	padding: 0 6px;
+	border-radius: 4px;
+	font-size: 11px;
+}
+
+.r-producer {
+	color: #58a6ff;
+	background: #10243f;
+}
+
+.r-review {
+	color: #d29922;
+	background: #2a2110;
+}
+
+.sid {
+	color: #8b949e;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tok {
+	color: #a5d6ff;
+	font-variant-numeric: tabular-nums;
+}
+
+.cost {
+	color: #3fb950;
+	font-variant-numeric: tabular-nums;
+}
+
+.dur {
+	color: #d2a8ff;
+	font-variant-numeric: tabular-nums;
+}
+
+/* usage summary */
+.usage {
+	margin-top: 10px;
+}
+
+.ustats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.stat {
+	background: #0b0f14;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 6px 12px;
+	min-width: 84px;
+}
+
+.sv {
+	font-size: 16px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.sl {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}

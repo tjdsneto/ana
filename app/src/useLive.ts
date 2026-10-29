@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from "react"
 
 export interface LiveEvent {
-	channel: string // "new_job" | "presentable"
-	payload: string // the production id
+	channel: string // "new_job" | "presentable" | "production_changed"
+	payload: string // production id for new_job/presentable; empty for production_changed (refetch selected)
 }
 
 export function useLive(onEvent: (event: LiveEvent) => void): { connected: boolean } {

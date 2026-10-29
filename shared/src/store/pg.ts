@@ -152,6 +152,7 @@ export class PgStore implements Store {
 
 	async updateNodeStatus(id: string, status: NodeStatus): Promise<void> {
 		await this.db.update(nodes).set({ status, updatedAt: this.clock.now() }).where(eq(nodes.id, id))
+		await this.touch()
 	}
 
 	async createChildNodes(parentId: string, children: NewChildNode[]): Promise<Node[]> {
@@ -177,7 +178,9 @@ export class PgStore implements Store {
 			updatedAt: now,
 		}))
 		if (rows.length === 0) return []
-		return this.db.insert(nodes).values(rows).returning()
+		const created = await this.db.insert(nodes).values(rows).returning()
+		await this.touch()
+		return created
 	}
 
 	// ── versions ────────────────────────────────────────────────────────────────────────────────
@@ -200,11 +203,13 @@ export class PgStore implements Store {
 			})
 			.returning()
 		if (!row) throw new Error("createVersion: insert returned no row")
+		await this.touch()
 		return row
 	}
 
 	async updateVersion(id: string, patch: VersionPatch): Promise<void> {
 		await this.db.update(versions).set({ ...patch, updatedAt: this.clock.now() }).where(eq(versions.id, id))
+		await this.touch()
 	}
 
 	async getVersion(id: string): Promise<Version | null> {
@@ -243,6 +248,7 @@ export class PgStore implements Store {
 			})
 			.returning()
 		if (!row) throw new Error("addReview: insert returned no row")
+		await this.touch()
 		return row
 	}
 
@@ -302,6 +308,7 @@ export class PgStore implements Store {
 		if (row.type === "present") {
 			await this.db.execute(sql`SELECT pg_notify('presentable', ${row.productionId})`)
 		}
+		await this.touch()
 		return row
 	}
 
@@ -343,6 +350,7 @@ export class PgStore implements Store {
 			.update(chatOutput)
 			.set({ status: "resolved", resolvedAt: this.clock.now() })
 			.where(eq(chatOutput.id, id))
+		await this.touch()
 	}
 
 	// ── budget (money gate) ───────────────────────────────────────────────────────────────────────
@@ -357,6 +365,7 @@ export class PgStore implements Store {
 			.insert(budget)
 			.values({ productionId, approved: true })
 			.onConflictDoUpdate({ target: budget.productionId, set: { approved: true } })
+		await this.touch()
 	}
 
 	// ── subagent usage log ────────────────────────────────────────────────────────────────────────
@@ -384,11 +393,21 @@ export class PgStore implements Store {
 			})
 			.returning()
 		if (!row) throw new Error("recordInteraction: insert returned no row")
+		await this.touch()
 		return row
 	}
 
 	async interactionsFor(productionId: string): Promise<Interaction[]> {
 		return this.db.select().from(interactions).where(eq(interactions.productionId, productionId)).orderBy(interactions.createdAt)
+	}
+
+	// Live-dashboard nudge: fire after any write that changes a production's visible state. The payload
+	// is empty on purpose — the dashboard refetches whatever production is selected on any nudge (spec
+	// 06), so no productionId lookup is needed on the write path. new_job / presentable stay as their
+	// own channels for the worker wake-up + inbox badge; this one drives the intra-production updates
+	// (producing → review → redo → versions) the operator watches in real time.
+	private async touch(): Promise<void> {
+		await this.db.execute(sql`SELECT pg_notify('production_changed', '')`)
 	}
 }
 

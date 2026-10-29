@@ -30,6 +30,7 @@ async function main(): Promise<void> {
 	const listener = await pool.connect()
 	await listener.query("LISTEN new_job")
 	await listener.query("LISTEN presentable")
+	await listener.query("LISTEN production_changed") // intra-production updates (producing → review → redo → versions)
 	listener.on("notification", (msg) => {
 		logger.debug("notify", { channel: msg.channel, payload: msg.payload })
 		broadcast({ channel: msg.channel, payload: msg.payload ?? "" })

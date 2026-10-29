@@ -10,10 +10,12 @@ import {
 	getProduction,
 	getProductions,
 	type ChatOutput,
+	type Interaction,
 	type Node,
 	type NodeView,
 	type ProductionDetail,
 	sendFeedback,
+	type UsageSummary,
 } from "./api.js"
 import { useLive } from "./useLive.js"
 
@@ -94,7 +96,11 @@ function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () =
 			<h2>
 				{detail.root.name} <Pill status={detail.root.status} />
 			</h2>
+			<div className="rootmeta muted">
+				started {fmtTime(detail.root.createdAt)} · {detail.root.autonomyLever ?? "—"} · {detail.root.actorKind ?? "—"}
+			</div>
 			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} />
+			<UsagePanel usage={detail.usage} />
 			<h3>Node tree</h3>
 			<NodeRow nv={nodeViewOf(detail, detail.root.id)} root />
 			<ul className="tree">
@@ -126,26 +132,106 @@ function NodeRow({ nv, root }: { nv: NodeView | null; root?: boolean }) {
 		<div className={`node ${root ? "rootnode" : ""}`}>
 			<div className="nhead">
 				<strong>{nv.node.type}</strong> <span className="muted">{nv.node.name}</span> <Pill status={nv.node.status} />
+				<span className="ts">{fmtTime(nv.node.createdAt)}</span>
 			</div>
-			{nv.versions.map(({ version, reviews }) => (
-				<div key={version.id} className="version">
-					<span className="muted">v{version.n}</span> <Pill status={version.status} />
-					{version.artifactPath && <ViewArtifact versionId={version.id} />}
-					{version.feedback && <div className="fb">feedback: {version.feedback}</div>}
-					{reviews.length > 0 && (
-						<ul className="reviews">
-							{reviews.map((r) => (
-								<li key={r.id}>
-									<code>{r.name}</code> <span className={`verdict ${r.verdict}`}>{r.verdict}</span>
-									{r.body && <span className="muted"> — {r.body}</span>}
-								</li>
-							))}
-						</ul>
-					)}
-				</div>
-			))}
+			{nv.versions.map(({ version, reviews }) => {
+				const vints = nv.interactions.filter((i) => i.versionId === version.id)
+				return (
+					<div key={version.id} className="version">
+						<div className="vhead">
+							<span className="vn">v{version.n}</span> <Pill status={version.status} />
+							<span className="ts">{fmtTime(version.createdAt)}</span>
+							{version.artifactPath && <ViewArtifact versionId={version.id} />}
+						</div>
+						{version.feedback && <div className="fb">feedback: {version.feedback}</div>}
+						{reviews.length > 0 && (
+							<ul className="reviews">
+								{reviews.map((r) => (
+									<li key={r.id}>
+										<code>{r.name}</code> <span className={`verdict ${r.verdict}`}>{r.verdict}</span>
+										<span className="ts">{fmtTime(r.createdAt)}</span>
+										{r.body && <div className="muted rbody">{r.body}</div>}
+									</li>
+								))}
+							</ul>
+						)}
+						{vints.length > 0 && (
+							<ul className="ints">
+								{vints.map((it) => (
+									<InteractionRow key={it.id} it={it} />
+								))}
+							</ul>
+						)}
+					</div>
+				)
+			})}
 		</div>
 	)
+}
+
+// One subagent run: role, engine/model, session, tokens, cost, duration, timestamp, status.
+function InteractionRow({ it }: { it: Interaction }) {
+	const review = it.role.startsWith("review:")
+	return (
+		<li className="int">
+			<span className={`irole ${review ? "r-review" : "r-producer"}`}>{it.role}</span>
+			<span className="muted">{it.engine}{it.model ? `/${it.model}` : ""}</span>
+			{it.sessionId && <span className="sid" title={it.sessionId}>sess {shortId(it.sessionId)}</span>}
+			<span className="tok" title="input → output tokens">{fmtNum(it.inputTokens)}→{fmtNum(it.outputTokens)} tok</span>
+			{(it.cacheReadTokens || it.cacheCreationTokens) ? (
+				<span className="muted" title="cache read / creation tokens">cache {fmtNum(it.cacheReadTokens)}/{fmtNum(it.cacheCreationTokens)}</span>
+			) : null}
+			{it.costUsd != null && it.costUsd > 0 && <span className="cost">${it.costUsd.toFixed(4)}</span>}
+			{it.durationMs != null && <span className="dur">{fmtDur(it.durationMs)}</span>}
+			<span className="ts">{fmtTime(it.createdAt)}</span>
+		</li>
+	)
+}
+
+// Rolled-up usage across the whole production.
+function UsagePanel({ usage }: { usage: UsageSummary }) {
+	return (
+		<div className="usage">
+			<h3>Usage</h3>
+			<div className="ustats">
+				<Stat label="interactions" value={String(usage.interactions)} />
+				<Stat label="sessions" value={String(usage.sessions.length)} />
+				<Stat label="tokens in" value={fmtNum(usage.inputTokens)} />
+				<Stat label="tokens out" value={fmtNum(usage.outputTokens)} />
+				<Stat label="cache read" value={fmtNum(usage.cacheReadTokens)} />
+				<Stat label="cost" value={`$${usage.costUsd.toFixed(4)}`} />
+				<Stat label="duration" value={fmtDur(usage.durationMs)} />
+			</div>
+		</div>
+	)
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="stat">
+			<div className="sv">{value}</div>
+			<div className="sl muted">{label}</div>
+		</div>
+	)
+}
+
+function fmtTime(iso: string | null | undefined): string {
+	if (!iso) return ""
+	const d = new Date(iso)
+	return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString()
+}
+
+function fmtDur(ms: number | null): string {
+	if (ms == null) return ""
+	return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+function fmtNum(n: number | null): string {
+	return n == null ? "—" : n.toLocaleString()
+}
+
+function shortId(id: string): string {
+	return id.length > 10 ? `…${id.slice(-8)}` : id
 }
 
 function ViewArtifact({ versionId }: { versionId: string }) {
