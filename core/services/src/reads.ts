@@ -6,6 +6,10 @@ import type { Store } from "@core/shared"
 
 const MAX_INLINE_ARTIFACT_BYTES = 64 * 1024 // only inline small text artifacts into get_deliverable
 
+// Binary artifacts (render/image/audio) live on disk and are referenced by path only — never read
+// into the deliverable as bytes. The web app streams them via /api/video (and future /api/image).
+const BINARY_ARTIFACT_RE = /\.(mp4|mov|webm|mkv|avi|wav|mp3|m4a|aac|ogg|flac|png|jpe?g|gif|webp|svg|pdf)$/i
+
 export async function getStatus(store: Store, input: { productionId: string }) {
 	const root = await store.getProduction(input.productionId)
 	if (!root) throw new Error(`production ${input.productionId} not found`)
@@ -43,14 +47,14 @@ export async function getDeliverable(store: Store, input: { versionId?: string; 
 	if (!version) throw new Error("get_deliverable: pass version_id or node_id to an existing version")
 
 	let content: string | undefined
-	if (version.artifactPath) {
+	if (version.artifactPath && !BINARY_ARTIFACT_RE.test(version.artifactPath)) {
 		try {
 			const info = await stat(version.artifactPath)
 			if (info.isFile() && info.size <= MAX_INLINE_ARTIFACT_BYTES) {
 				content = await readFile(version.artifactPath, "utf8")
 			}
 		} catch {
-			// artifact not readable (not written yet, binary, too big) — return the path only
+			// artifact not readable (not written yet, too big) — return the path only
 		}
 	}
 
