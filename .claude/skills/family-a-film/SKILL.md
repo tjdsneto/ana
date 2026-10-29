@@ -42,16 +42,9 @@ The rules that make it good, not just working (from the good-video bar, `.claude
 - **CTA + end card.** One ask. The `outro` carries the brand and the next step.
 - **Keep it tight.** Shorter wins; every beat earns its seconds.
 
-## Getting the real product UI (keyless) — WordPress Playground
+## Getting the real product UI — the provided site (never install)
 
-The rubric demands real screens. When the product is a WordPress plugin and you have no live admin to point at, boot a throwaway real WordPress in WASM and capture that — no server, no credentials:
-
-1. **Boot** `@wp-playground/cli` (needs node ≥ 24.18) with a blueprint that installs + activates the plugin and seeds the state you want to show, then `--login --port 9400`:
-   - `installPlugin` the product from `wordpress.org/plugins`.
-   - a `runPHP` step to **pre-seed** the artifact (e.g. create the form/post via `wp_insert_post`) and suppress first-run onboarding, so you can open the editor **directly by id** and skip the setup wizard.
-2. **Capture** with `site-capture` live mode pointed at the deep admin URL (e.g. the builder for that id), using `steps` to `waitFor` the editor panel and `remove`/`capture.remove` the residual onboarding popups (challenge widgets, notices, tooltips). Those stock first-run overlays are the only fight; strip them and the screen is clean.
-
-The result is the literal product admin as a plate — the difference between "weak: recreation" and a pass on Visuals. If Playground can't reach a clean state after a real try, a faithful authored HTML screen still beats slide-cards; note the recreation as the caveat.
+The rubric demands real screens. They come from the **site the brief provides** — the brand's own running site/app — captured via the **`capture-site`** skill. Never install or host the product yourself. Point `site-capture` live mode at the brief's URL; if the brief gives credentials, log in with them (`fill`/`click` steps); navigate to the screen worth showing; capture plates (+ `src/shots.json` marks) and/or a `record: true` flow clip. Capture a plate per state (e.g. before/after an edit) so the render can cut between them and *demonstrate* the change. See `capture-site` for the rules (provided site only, creds are runtime secrets, redact PII).
 
 ## Self-check before handing off (non-negotiable)
 

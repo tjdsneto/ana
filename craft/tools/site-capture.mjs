@@ -13,7 +13,8 @@
 // Browser: Playwright chromium, falling back to the installed Google Chrome channel. Fully local.
 
 import { createRequire } from "node:module"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 
 const require = createRequire(import.meta.url)
@@ -85,7 +86,14 @@ const vh = Math.round((cap.width * 9) / 16)
 const out = {}
 for (const [name, p] of Object.entries(film.plates)) {
 	const spec = typeof p === "string" ? { file: p } : p
-	const page = await ctx.newPage()
+	// Recording plate: a dedicated context captures the whole session to a video (for a "playing
+	// around on the real site" flow clip), converted to mp4. Otherwise the shared context.
+	const recording = !!spec.record
+	const pctx = recording
+		? await browser.newContext({ viewport: { width: cap.width, height: vh }, deviceScaleFactor: 1, recordVideo: { dir: join(outDir, "assets/clips"), size: { width: cap.width, height: vh } } })
+		: ctx
+	if (recording) mkdirSync(join(outDir, "assets/clips"), { recursive: true })
+	const page = await pctx.newPage()
 	if (spec.url) {
 		// live mode: navigate the real site
 		await page.goto(spec.url, { waitUntil: "networkidle", timeout: 45000 }).catch(() => {})
@@ -116,7 +124,22 @@ for (const [name, p] of Object.entries(film.plates)) {
 	await page.screenshot({ path: join(outDir, `assets/shots/${name}.jpg`), type: "jpeg", quality: 90, fullPage: true, clip: { x: 0, y: 0, width: cap.width, height: rects._h } })
 	out[name] = rects
 	console.log(`${name}: ${cap.width}x${rects._h}, marks: ${Object.keys(rects).filter((k) => k !== "_h").join(" ") || "(none)"}`)
-	await page.close()
+	if (recording) {
+		const vid = page.video()
+		await page.close()
+		await pctx.close() // flushes the video to disk
+		const webm = await vid.path()
+		const mp4 = join(outDir, `assets/clips/${name}.mp4`)
+		const ff = spawnSync("ffmpeg", ["-y", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", mp4], { stdio: "ignore" })
+		if (ff.status === 0) {
+			rmSync(webm, { force: true }) // drop the raw Playwright webm; keep the mp4
+			console.log(`  clip -> assets/clips/${name}.mp4`)
+		} else {
+			console.log(`  clip: ffmpeg failed (webm kept: ${webm})`)
+		}
+	} else {
+		await page.close()
+	}
 }
 writeFileSync(join(outDir, "src/shots.json"), JSON.stringify(out, null, 1))
 await browser.close()

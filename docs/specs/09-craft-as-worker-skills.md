@@ -40,7 +40,7 @@ One per producing node, plus a modality-correct reviewer per node, in the craft 
 |---|---|---|
 | `brief` | brief | write the brief AND **classify the family** (A / B / mixed) — the choice gates everything downstream |
 | `moodboard` | moodboard | produce a **visual** moodboard (HTML/CSS + captured/generated imagery), not prose; a reviewer sees it |
-| `capture-site` | input to A | visit the real product with the browser tool, capture **real screens** + short flow clips |
+| `capture-site` | input to A | access the brand's **provided** site/app (never install/host): log in with brief creds, navigate/interact, capture **real screens** + flow clips |
 | `storyboard` | storyboard | author the timeline in the family's dialect (A: word-anchored `film.json`; B: description·VO·SOUND beats) |
 | `voice` | voice | synthesize VO with the `tts` tool and **force-align words** → `words.json` (the timeline spine) |
 | `render` | render | assemble: produce each scene's bits (per family) and mux with ffmpeg to a word-timed, −14 LUFS cut |
@@ -56,7 +56,7 @@ Deterministic/heavy work only. Techniques lifted from the on-disk reference pipe
 
 | tool | does | source technique |
 |---|---|---|
-| `site-capture` | drive the real product (Playwright): screenshots + `page.video` flow clips, with redaction | `ui-test-pr` pattern; `save-page.js`/`plates.mjs` |
+| `site-capture` | drive the brand's **provided** site (Playwright, never install): login with brief creds, navigate, screenshots + `record` flow clips, redaction | `ui-test-pr` pattern; the `capture-site` skill |
 | `tts` | text → WAV, local **Kokoro** (`say` fallback) | `vo.py` / #544 `pr-tts-kokoro` |
 | `word-align` | VO audio → per-word timings (`words.json`) via a forced aligner | `vo.py` (MMS/Whisper aligner) |
 | `html-render` | HTML/GSAP storyboard → frames → MP4 (headless Chrome), the Family-A camera-over-stills render | #544 `pr-video-gen`; HyperFrames (HeyGen's OSS HTML→video layer) |
