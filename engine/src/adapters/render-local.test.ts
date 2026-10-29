@@ -48,6 +48,8 @@ describe("LocalRenderClient", () => {
 		expect(ffmpeg).toHaveLength(3) // 2 scene cards + 1 concat
 		expect(ffmpeg.at(-1)!.args).toContain("concat") // last ffmpeg is the concat
 		expect(ffmpeg[0]!.args.join(" ")).toContain("drawtext") // cards draw the caption
+		expect(out.audioFiles).toHaveLength(2) // one narration audio per scene, kept + returned
+		expect(out.audioFiles!.every((p) => p.endsWith(".wav"))).toBe(true)
 	})
 
 	it("falls back to a placeholder scene when there is no storyboard", async () => {

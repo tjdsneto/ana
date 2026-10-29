@@ -188,6 +188,11 @@ export class Engine {
 			// artifacts plus this summary.
 			const meta = (result.meta ?? {}) as { scenes?: unknown; durationMs?: unknown; voice?: unknown }
 			draft = `[rendered ${node.type}] ${meta.scenes ?? "?"} scenes, ${meta.durationMs ?? "?"}ms, voice=${meta.voice ?? "?"} — file: ${artifactPath}`
+			// Keep the files the render was built from: register each narration audio as a production
+			// asset (path only — the file stays on the shared volume). A later cleanup pass purges them.
+			for (let i = 0; i < (result.audioFiles?.length ?? 0); i++) {
+				await this.store.addAsset({ productionId: node.productionId, nodeId: node.id, name: `narration scene ${i + 1}`, assetType: "vo", fileType: "wav", storagePath: result.audioFiles![i]! })
+			}
 		} else {
 			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
 			producerResult = await this.runSubagent({

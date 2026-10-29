@@ -32,8 +32,9 @@ export async function listVideos(root: string): Promise<VideoFile[]> {
 		}
 		for (const e of entries) {
 			const full = join(dir, e.name)
-			// Skip the LocalRenderClient scratch dirs (local-<uuid>) — they hold per-scene work clips,
-			// not finished videos. Only the final .mp4 sits in the parent (production/sample) folder.
+			// Skip the render working dirs (local-<uuid>) in THIS list — they hold per-scene work clips,
+			// not finished videos; only the final .mp4 sits in the parent folder. The clips are KEPT on
+			// disk (retention, spec 08); they are just not shown in the final-videos gallery.
 			if (e.isDirectory()) {
 				if (!/^local-[0-9a-f]{6,}$/i.test(e.name)) await walk(full)
 			} else if (e.isFile() && e.name.toLowerCase().endsWith(".mp4")) {

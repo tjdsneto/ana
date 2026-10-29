@@ -101,6 +101,10 @@ export interface RenderInput {
 export interface RenderResult {
 	artifactPath: string // file written on the shared volume
 	costEstimate?: number // for the budget gate; 0 for the stub
+	// Input/working files the render used and KEPT on the shared volume, so the production retains the
+	// files it was built from (the loop registers these as production assets). Narration audio in scene
+	// order; empty/absent when the backend produces none. A later cleanup pass decides when to purge.
+	audioFiles?: string[]
 	meta?: Record<string, unknown>
 }
 

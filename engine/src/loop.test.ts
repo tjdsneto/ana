@@ -4,7 +4,7 @@
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
+import type { ChatOutput, RenderClient, RenderInput, RenderResult, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import { FakeStore, FakeSubagentRunner } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
 import { StubRenderClient } from "./adapters/render-stub.js"
@@ -98,6 +98,27 @@ describe("happy path — produce → present → approve, end to end", () => {
 		// the render node produced via the StubRenderClient (a file, not a subagent draft)
 		const render = children.find((c) => c.type === "render")!
 		expect((await store.latestVersion(render.id))?.artifactPath).toContain("render-stub-")
+	})
+
+	it("keeps the render's input audio as production assets (path only)", async () => {
+		// a render backend that reports two narration files it kept on disk
+		const render: RenderClient = {
+			provider: "fake-audio",
+			async render(input: RenderInput): Promise<RenderResult> {
+				return { artifactPath: join(input.outDir, "render.mp4"), audioFiles: [join(input.outDir, "s0.wav"), join(input.outDir, "s1.wav")] }
+			},
+		}
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render, types, config: makeConfig() })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did) break
+		}
+		const audio = (await store.assetsFor(root.id)).filter((a) => a.assetType === "vo")
+		expect(audio).toHaveLength(2)
+		expect(audio.every((a) => a.fileType === "wav" && a.storagePath.endsWith(".wav"))).toBe(true)
 	})
 })
 

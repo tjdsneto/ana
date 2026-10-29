@@ -60,11 +60,13 @@ export class LocalRenderClient implements RenderClient {
 		mkdirSync(work, { recursive: true })
 
 		const sceneFiles: string[] = []
+		const audioFiles: string[] = [] // narration audio kept on disk; returned so the production retains it
 		let totalMs = 0
 		for (let i = 0; i < scenes.length; i++) {
 			const scene = scenes[i]!
 			const audioPath = join(work, `scene-${i}.wav`)
 			await this.voice.synthesize({ text: scene.narration, outPath: audioPath })
+			audioFiles.push(audioPath)
 			const audioMs = await this.probeDurationMs(audioPath)
 			const sceneMs = Math.max(this.cfg.minSceneMs, audioMs)
 			totalMs += sceneMs
@@ -93,6 +95,7 @@ export class LocalRenderClient implements RenderClient {
 		return {
 			artifactPath: outPath,
 			costEstimate: 0,
+			audioFiles,
 			meta: { provider: this.provider, scenes: scenes.length, durationMs: totalMs, voice: this.voice.provider },
 		}
 	}
