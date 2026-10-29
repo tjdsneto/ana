@@ -6,12 +6,12 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { makePool } from "./pg.js"
+import { makeDbPool } from "./pg.js"
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations")
 
 async function main(): Promise<void> {
-	const pool = makePool()
+	const pool = makeDbPool()
 	try {
 		await pool.query(
 			`CREATE TABLE IF NOT EXISTS _migrations (

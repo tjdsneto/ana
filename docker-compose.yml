@@ -63,7 +63,7 @@ services:
       dockerfile: Dockerfile
       target: engine           # the image WITH the Claude Code CLI (claude -p)
     image: production-engine-claude:local
-    command: ["node", "engine/dist/worker.js"]
+    command: ["node", "engine/dist/worker/index.js"]
     # All the worker knobs (subagent engine/model/caps, render + voice providers, the Claude
     # subscription token) live in .engine_env — see .engine_env.example. RENDER_FONT + VOICE_MODEL
     # are intentionally absent from the file so the image's baked paths win (env_file does not shadow

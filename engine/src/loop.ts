@@ -10,7 +10,7 @@ import type { Dirent } from "node:fs"
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
-import type { InteractionRole, Logger, Node, RenderClient, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
+import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { buildProducerPrompt, buildReviewerPrompt, parseVerdict, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -20,7 +20,6 @@ const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work we
 export interface EngineDeps {
 	store: Store
 	runner: SubagentRunner
-	render: RenderClient
 	types: TypeRegistry
 	config: EngineConfig
 	logger?: Logger // default: quiet (NoopLogger). Entrypoints inject a JsonLogger.
@@ -29,7 +28,6 @@ export interface EngineDeps {
 export class Engine {
 	private readonly store: Store
 	private readonly runner: SubagentRunner
-	private readonly render: RenderClient
 	private readonly types: TypeRegistry
 	private readonly config: EngineConfig
 	private readonly log: Logger
@@ -39,7 +37,6 @@ export class Engine {
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
 		this.runner = deps.runner
-		this.render = deps.render
 		this.types = deps.types
 		this.config = deps.config
 		this.log = deps.logger ?? new NoopLogger()
@@ -172,7 +169,8 @@ export class Engine {
 
 		const upstream = await this.collectUpstream(node)
 
-		// produce — via the RenderClient for rendered types (stubbed in v0), else a subagent. The
+		// produce — always via a subagent: a rendered leaf runs the render-film skill (which owns its
+		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. The
 		// producer resumes its prior session (the latest version's subagent.sessionId) so a redo
 		// round continues the same provider session rather than starting cold.
 		let draft: string

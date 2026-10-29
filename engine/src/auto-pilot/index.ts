@@ -1,7 +1,7 @@
 // Dev harness (NOT product): seed a set of briefs and drive the human gate unattended, so a full
 // production runs end to end with no operator at the keyboard. It is a Store/services client like the
 // MCP server and the dashboard — it never calls the engine directly. Run it alongside the worker:
-//   docker compose run --rm --no-deps engine-worker node engine/dist/auto-pilot.js
+//   docker compose run --rm --no-deps engine-worker node engine/dist/auto-pilot/index.js
 //
 // Briefs are runtime data, never baked into source (the repo stays brand-free). Point
 // AUTOPILOT_BRIEFS_FILE at a JSON array of brief strings (mount it into the container); otherwise a
@@ -13,7 +13,7 @@
 // when every production is approved or the time budget runs out.
 
 import { readFileSync } from "node:fs"
-import { makePool, PgStore } from "@core/shared"
+import { makeDbPool, PgStore } from "@core/shared"
 import { approve, approveBudget, requestVideo, submitFeedback } from "@core/services"
 
 const DEFAULT_BRIEF =
@@ -40,8 +40,8 @@ function log(event: string, extra: Record<string, unknown> = {}): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function main(): Promise<void> {
-	const pool = makePool()
-	const store = new PgStore(pool)
+	const dbPool = makeDbPool()
+	const store = new PgStore(dbPool)
 	const briefs = loadBriefs()
 
 	// seed (idempotent): one production per brief, matched by the stored description.
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
 	}
 
 	log("done")
-	await pool.end()
+	await dbPool.end()
 }
 
 main().catch((err) => {

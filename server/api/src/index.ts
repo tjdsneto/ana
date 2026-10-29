@@ -1,9 +1,9 @@
 // Dashboard API entrypoint. Wires PgStore + the read API, then holds a dedicated pg client on
-// LISTEN new_job / presentable and relays each NOTIFY to every connected browser over a WebSocket —
+// LISTEN new_production / presentable and relays each NOTIFY to every connected browser over a WebSocket —
 // so the UI refetches on a real engine event, no polling (spec 06 data flow). stdout free; logs → stderr.
 
 import { createServer } from "node:http"
-import { JsonLogger, makePool, PgStore } from "@core/shared"
+import { JsonLogger, makeDbPool, PgStore } from "@core/shared"
 import { WebSocketServer } from "ws"
 import { buildApi } from "./server.js"
 
@@ -11,8 +11,8 @@ const logger = new JsonLogger({ bound: { svc: "dashboard-api" } })
 const port = Number(process.env.WEB_API_PORT ?? 8788)
 
 async function main(): Promise<void> {
-	const pool = makePool()
-	const store = new PgStore(pool)
+	const dbPool = makeDbPool()
+	const store = new PgStore(dbPool)
 	const app = buildApi(store, logger)
 	const server = createServer(app)
 
@@ -27,8 +27,8 @@ async function main(): Promise<void> {
 	wss.on("connection", () => logger.info("ws.connect", { clients: wss.clients.size }))
 
 	// Dedicated listener client (a pooled client parked on LISTEN; reads still use the pool).
-	const listener = await pool.connect()
-	await listener.query("LISTEN new_job")
+	const listener = await dbPool.connect()
+	await listener.query("LISTEN new_production")
 	await listener.query("LISTEN presentable")
 	await listener.query("LISTEN production_changed") // intra-production updates (producing → review → redo → versions)
 	listener.on("notification", (msg) => {

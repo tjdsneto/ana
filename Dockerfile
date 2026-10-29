@@ -81,7 +81,7 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 FROM engine-tools AS engine
 WORKDIR /repo
 COPY --from=base /repo /repo
-CMD ["node", "engine/dist/worker.js"]
+CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────
 # Produce the static SPA bundle (app/dist). Separate from `base` so the heavy node_modules never ship

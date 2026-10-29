@@ -101,7 +101,7 @@ export class PgStore implements Store {
 		if (!root) throw new Error("createProduction: insert returned no row")
 		await this.db.insert(budget).values({ productionId: id, approved: false }).onConflictDoNothing()
 		// push-wake the worker (spec 03); the poll loop is the fallback if no one is LISTENing
-		await this.db.execute(sql`SELECT pg_notify('new_job', ${id})`)
+		await this.db.execute(sql`SELECT pg_notify('new_production', ${id})`)
 		return root
 	}
 
@@ -403,7 +403,7 @@ export class PgStore implements Store {
 
 	// Live-dashboard nudge: fire after any write that changes a production's visible state. The payload
 	// is empty on purpose — the dashboard refetches whatever production is selected on any nudge (spec
-	// 06), so no productionId lookup is needed on the write path. new_job / presentable stay as their
+	// 06), so no productionId lookup is needed on the write path. new_production / presentable stay as their
 	// own channels for the worker wake-up + inbox badge; this one drives the intra-production updates
 	// (producing → review → redo → versions) the operator watches in real time.
 	private async touch(): Promise<void> {

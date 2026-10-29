@@ -1,5 +1,5 @@
-// Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner + StubRenderClient, no DB, no
-// claude -p. The tests drive the human gate (approve/feedback) between ticks, like the client would.
+// Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
+// tests drive the human gate (approve/feedback) between ticks, like the client would.
 
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -7,7 +7,6 @@ import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import { FakeStore, FakeSubagentRunner } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
-import { StubRenderClient } from "./adapters/render-stub.js"
 import type { EngineConfig } from "./config.js"
 import { Engine } from "./loop.js"
 import { TypeRegistry, type TypeContract } from "./typereg.js"
@@ -79,7 +78,7 @@ beforeEach(() => {
 
 describe("happy path — produce → present → approve, end to end", () => {
 	it("walks the whole pipeline to a done production, approving each present", async () => {
-		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render: new StubRenderClient(), types, config: makeConfig() })
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig() })
 		const root = await newProduction(store)
 
 		for (let guard = 0; guard < 200; guard++) {
@@ -108,7 +107,7 @@ describe("internal review fail → redo cap → escalate (F3)", () => {
 		const runner = new FakeSubagentRunner((input) =>
 			input.skill?.startsWith("review:") ? { output: "VERDICT: revise\nfix the tone" } : { output: "a draft" },
 		)
-		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig({ maxRedos: 3 }) })
+		const engine = new Engine({ store, runner, types, config: makeConfig({ maxRedos: 3 }) })
 		const root = await newProduction(store)
 
 		// advance until the script node escalates (briefing is advisory, so it presents immediately)
@@ -135,7 +134,7 @@ describe("internal review fail → redo cap → escalate (F3)", () => {
 
 describe("agreement cap (F5)", () => {
 	it("escalates the briefing after the actor's cap instead of looping forever", async () => {
-		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render: new StubRenderClient(), types, config: makeConfig({ agreementMaxRoundsAgent: 2 }) })
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig({ agreementMaxRoundsAgent: 2 }) })
 		const root = await newProduction(store, { actorKind: "agent" }) // cap = 2
 
 		await engine.tick() // present briefing v1
@@ -156,7 +155,7 @@ describe("agreement cap (F5)", () => {
 
 describe("interaction log + session capture", () => {
 	it("records one interaction per subagent run (producers + reviewers), with engine/session/usage", async () => {
-		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render: new StubRenderClient(), types, config: makeConfig() })
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig() })
 		const root = await newProduction(store)
 
 		for (let guard = 0; guard < 200; guard++) {
@@ -182,7 +181,7 @@ describe("interaction log + session capture", () => {
 		const runner = new FakeSubagentRunner((input) =>
 			input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "a draft" },
 		)
-		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig({ maxRedos: 3 }) })
+		const engine = new Engine({ store, runner, types, config: makeConfig({ maxRedos: 3 }) })
 		const root = await newProduction(store)
 
 		for (let guard = 0; guard < 200; guard++) {
@@ -227,7 +226,7 @@ class CountingRunner implements SubagentRunner {
 describe("spend guard — real-call budget parks the worker", () => {
 	it("stops claiming new leaves once the real-call budget is spent (fake never counts)", async () => {
 		const runner = new CountingRunner()
-		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig({ maxSubagentCalls: 2 }) })
+		const engine = new Engine({ store, runner, types, config: makeConfig({ maxSubagentCalls: 2 }) })
 		const root = await newProduction(store)
 
 		let parked = false
@@ -251,7 +250,7 @@ describe("spend guard — real-call budget parks the worker", () => {
 
 	it("is uncapped when maxSubagentCalls is unset (walks the whole pipeline)", async () => {
 		const runner = new CountingRunner()
-		const engine = new Engine({ store, runner, render: new StubRenderClient(), types, config: makeConfig() })
+		const engine = new Engine({ store, runner, types, config: makeConfig() })
 		const root = await newProduction(store)
 
 		for (let guard = 0; guard < 200; guard++) {

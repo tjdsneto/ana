@@ -3,11 +3,11 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Autonomy engine worker — the recursive loop. Produces, reviews internally, marks the data. Spawns claude -p; render stubbed.",
+	"description": "Autonomy engine worker — the recursive loop. Produces, reviews internally, marks the data. Spawns claude -p.",
 	"scripts": {
 		"build": "tsc -b",
-		"start": "node dist/worker.js",
-		"dev": "tsx src/worker.ts",
+		"start": "node dist/worker/index.js",
+		"dev": "tsx src/worker/index.ts",
 		"test": "vitest run"
 	},
 	"dependencies": {

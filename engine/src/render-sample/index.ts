@@ -1,14 +1,14 @@
 // Dev utility: render a sample storyboard straight through the RenderClient/VoiceClient ports, with
 // no DB and no gated pipeline — the quickest proof that a real .mp4 comes out. Defaults to the local
 // ffmpeg engine + piper (override with RENDER_PROVIDER / VOICE_PROVIDER). Run inside the engine image:
-//   docker compose run --rm --no-deps engine-worker node engine/dist/render-sample.js
+//   docker compose run --rm --no-deps engine-worker node engine/dist/render-sample/index.js
 
 import { mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { JsonLogger } from "@core/shared"
-import { NodeExec } from "./adapters/exec-node.js"
-import { makeRender, renderConfigFromEnv } from "./adapters/render-factory.js"
-import { makeVoice, voiceConfigFromEnv } from "./adapters/voice-factory.js"
+import { NodeExec } from "../adapters/exec-node.js"
+import { makeRender, renderConfigFromEnv } from "../adapters/render-factory.js"
+import { makeVoice, voiceConfigFromEnv } from "../adapters/voice-factory.js"
 
 const SAMPLE = [
 	"## Scene 1 — Hook",
