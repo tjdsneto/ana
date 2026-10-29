@@ -104,13 +104,45 @@ def whisper_words(clip_wav: Path, model: str) -> list[dict]:
 def line_word_times(disp: list[str], rec: list[dict], clip_s: float) -> list[tuple[float, float]]:
     """Map the SCRIPT line's display words to clip-relative (start,end).
 
-    Keep the script words verbatim (whisper can mis-spell); take whisper's times by index. On a count
-    mismatch, fall back to an even split across the clip so every word still gets a usable time.
+    Keep the script words verbatim (whisper can mis-spell, split or merge words: "WP"+"Forms",
+    "awesomemotive.com" as two tokens). Whisper's token count then differs from the script's, so match by
+    letter position instead of index: each script word takes the whisper tokens whose letters cover the
+    same share of the line. With no whisper tokens at all, split the clip by letters (closer to real
+    speech than an even split).
     """
-    if len(rec) == len(disp) and rec:
-        return [(r["start"], r["end"]) for r in rec]
+    def n_letters(x: str) -> int:
+        return max(1, sum(c.isalnum() for c in x))
+
     n = len(disp)
-    return [(clip_s * i / n, clip_s * (i + 1) / n) for i in range(n)]
+    if len(rec) == n and rec:
+        return [(r["start"], r["end"]) for r in rec]
+    lens = [n_letters(w) for w in disp]
+    total = sum(lens)
+    if not rec:
+        edge = [clip_s * sum(lens[:i]) / total for i in range(n + 1)]
+        return [(edge[i], edge[i + 1]) for i in range(n)]
+    rl = [n_letters(r["word"]) for r in rec]
+    rtot = sum(rl)
+    # whisper-letter midpoint of each token; a script word owns tokens whose midpoint falls in its span
+    mids, acc = [], 0
+    for L in rl:
+        mids.append((acc + L / 2) / rtot)
+        acc += L
+    out, lo, cum = [], 0, 0
+    for i, w in enumerate(lens):
+        cum += w
+        hi_frac = cum / total
+        toks = [k for k, m in enumerate(mids) if (cum - w) / total <= m < hi_frac or (i == n - 1 and m >= (cum - w) / total)]
+        if not toks:  # no token midpoint inside the span: borrow the nearest one
+            toks = [min(range(len(mids)), key=lambda k: abs(mids[k] - (cum - w / 2) / total))]
+        out.append((rec[toks[0]]["start"], rec[toks[-1]]["end"]))
+    fixed, prev = [], 0.0  # keep starts monotonic, every word at least 50 ms
+    for st, en in out:
+        st = max(st, prev)
+        en = max(en, st + 0.05)
+        fixed.append((st, en))
+        prev = en
+    return fixed
 
 
 def main() -> None:
