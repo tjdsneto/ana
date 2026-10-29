@@ -10,7 +10,7 @@ Get the **real** screens for a video from the site the brief gives you — the b
 ## Hard rules
 
 - **Provided site only.** Capture the URL(s) the brief names (the brand's site/app). If the brief names none, ask for one — do not invent a target.
-- **Never install or host the product.** No spinning up WordPress, no plugin installs, no throwaway environments. The brand already runs the product; you capture *their* site. (A dev once used WordPress Playground as a stand-in — that was a workaround, not the flow. Don't.)
+- **Never install or host the product.** No spinning up WordPress, no plugin installs, no throwaway environments. The brand already runs the product; you capture *their* site.
 - **Credentials come from the brief, at runtime.** Use them only to log into the provided site. Treat them as secrets: never echo them into output, never write them to a committed file, never put them in the film.json/script. Redact any real names / emails / keys that show on screen before the capture ships (`capture.redact`).
 - **Read-only intent.** Navigate and screenshot/record. Don't submit destructive actions on a real site unless the brief explicitly asks and authorizes it.
 
