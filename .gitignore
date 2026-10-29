@@ -26,3 +26,6 @@ engine/data/
 # logs / os
 *.log
 .DS_Store
+
+# overnight scratch (briefs, logs, captures) — not committed
+tmp/

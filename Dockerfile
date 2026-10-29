@@ -35,27 +35,27 @@ RUN npm run build
 # Overridden per service in docker-compose.yml.
 CMD ["node", "server/mcp/dist/http.js"]
 
-# ── engine stage ──────────────────────────────────────────────────────────────────────────────────
-# Adds everything the engine shells out to: the Claude Code CLI (real SubagentRunner → `claude -p`),
-# ffmpeg + a font (local RenderClient → a real .mp4), and piper + a default voice model (offline TTS,
-# VOICE_PROVIDER=piper). All kept off the mcp/api/web image. claude-code is pinned (behavior shifts
-# between CLI versions — e.g. -p defaults to Manual permission mode from v2.1.302). Subagents run
-# text-only with tools denied (Manual mode), so the image stays root. Auth is injected at runtime
-# (CLAUDE_CODE_OAUTH_TOKEN, never baked in); the disable-traffic/autoupdater envs stop background
-# update + telemetry calls. piper's binary bundles its own onnxruntime + espeak-ng-data; the voice
-# model (~63MB) is downloaded at build time so there is no network or key at runtime.
-FROM base AS engine
+# ── engine-tools stage ──────────────────────────────────────────────────────────────────────────
+# Everything the engine shells out to, in a SOURCE-INDEPENDENT stage so editing app code never
+# re-runs the apt install or the ~63MB model download (big caching win across the night's rebuilds):
+# the Claude Code CLI (real SubagentRunner → `claude -p`), ffmpeg + a font (local RenderClient →
+# a real .mp4), and piper + a default voice model (offline TTS, VOICE_PROVIDER=piper). claude-code is
+# pinned (behavior shifts between versions — e.g. -p defaults to Manual permission mode from v2.1.302).
+# Subagents run text-only with tools denied (Manual mode), so the image stays root. Auth is injected at
+# runtime (CLAUDE_CODE_OAUTH_TOKEN, never baked). piper's binary bundles its own onnxruntime +
+# espeak-ng-data; the model is baked so there is no network or key at runtime.
+FROM node:24-bookworm-slim AS engine-tools
 ARG TARGETARCH
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends bash curl ca-certificates ripgrep ffmpeg fonts-dejavu-core \
 	&& rm -rf /var/lib/apt/lists/* \
-	# npm 12 blocks dependency install scripts, so claude-code's postinstall (install.cjs, which links
-	# its native binary) is skipped and `claude` won't launch — run it explicitly.
+	# npm blocks dependency install scripts, so claude-code's postinstall (install.cjs, which links its
+	# native binary) is skipped and `claude` won't launch — run it explicitly.
 	&& npm i -g @anthropic-ai/claude-code@2.1.312 \
 	&& node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
-# piper (offline neural TTS) — pinned release; arch picked from the build platform. Extracts to
-# /opt/piper (binary + libs + espeak-ng-data via $ORIGIN rpath), symlinked onto PATH. Plus a default
-# voice baked under /opt/piper-voices.
+# piper (offline neural TTS) — pinned release; arch from the build platform. Extracts to /opt/piper
+# (binary + libs + espeak-ng-data via $ORIGIN rpath), symlinked onto PATH. Default voice under
+# /opt/piper-voices.
 RUN set -eux; \
 	case "${TARGETARCH:-amd64}" in \
 		amd64) PIPER_ARCH=x86_64 ;; \
@@ -74,6 +74,13 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 	DISABLE_AUTOUPDATER=1 \
 	RENDER_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
 	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx
+
+# ── engine stage ──────────────────────────────────────────────────────────────────────────────────
+# The built app (from base) laid over the tools. Only this COPY re-runs when source changes — the
+# apt/piper/model layers above stay cached.
+FROM engine-tools AS engine
+WORKDIR /repo
+COPY --from=base /repo /repo
 CMD ["node", "engine/dist/worker.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────
