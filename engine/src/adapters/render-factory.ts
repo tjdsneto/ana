@@ -16,12 +16,17 @@ export interface RenderConfig {
 }
 
 export function renderConfigFromEnv(env = process.env): RenderConfig {
+	// Coerce "" → undefined (Compose passes unset knobs as empty strings).
 	return {
-		provider: env.RENDER_PROVIDER ?? "stub",
-		font: env.RENDER_FONT,
+		provider: blank(env.RENDER_PROVIDER) ?? "stub",
+		font: blank(env.RENDER_FONT),
 		width: optNum(env.RENDER_WIDTH),
 		height: optNum(env.RENDER_HEIGHT),
 	}
+}
+
+function blank(v: string | undefined): string | undefined {
+	return v === undefined || v === "" ? undefined : v
 }
 
 export interface RenderDeps {

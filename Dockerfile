@@ -6,7 +6,10 @@
 # NOTE: build with an explicit `target` — Compose services use `target: base`, engine-worker uses
 # `target: engine`. Without a target, Docker builds the LAST stage (engine) for everyone.
 
-FROM node:24-alpine AS base
+# Base is debian (bookworm-slim), not alpine: the engine stage needs glibc — ffmpeg, the Claude Code
+# CLI's native binary, and piper/onnxruntime (kokoro later) are all glibc-shaped, and uniform glibc
+# removes the musl special-casing. web stage stays nginx:alpine (static assets only).
+FROM node:24-bookworm-slim AS base
 WORKDIR /repo
 
 # Pin the toolchain in the image (the versioned source of truth, not the host): Node 24 LTS from the
@@ -33,19 +36,44 @@ RUN npm run build
 CMD ["node", "server/mcp/dist/http.js"]
 
 # ── engine stage ──────────────────────────────────────────────────────────────────────────────────
-# Adds the Claude Code CLI so the engine's real SubagentRunner can spawn `claude -p`. Pinned (behavior
-# shifts between CLI versions — e.g. -p defaults to Manual permission mode from v2.1.302). The apk
-# deps are what the CLI needs on musl. Subagents run text-only with tools denied (Manual mode), so no
-# non-root/bypass is needed and the image stays root. Auth is injected at runtime (CLAUDE_CODE_OAUTH_TOKEN,
-# never baked in). The disable-traffic/autoupdater envs stop background update + telemetry calls in CI.
+# Adds everything the engine shells out to: the Claude Code CLI (real SubagentRunner → `claude -p`),
+# ffmpeg + a font (local RenderClient → a real .mp4), and piper + a default voice model (offline TTS,
+# VOICE_PROVIDER=piper). All kept off the mcp/api/web image. claude-code is pinned (behavior shifts
+# between CLI versions — e.g. -p defaults to Manual permission mode from v2.1.302). Subagents run
+# text-only with tools denied (Manual mode), so the image stays root. Auth is injected at runtime
+# (CLAUDE_CODE_OAUTH_TOKEN, never baked in); the disable-traffic/autoupdater envs stop background
+# update + telemetry calls. piper's binary bundles its own onnxruntime + espeak-ng-data; the voice
+# model (~63MB) is downloaded at build time so there is no network or key at runtime.
 FROM base AS engine
-# npm 12 blocks dependency install scripts by default, so claude-code's postinstall (install.cjs, which
-# links its per-platform native binary) is skipped and `claude` won't launch — run it explicitly.
-RUN apk add --no-cache bash curl libgcc libstdc++ ripgrep \
+ARG TARGETARCH
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends bash curl ca-certificates ripgrep ffmpeg fonts-dejavu-core \
+	&& rm -rf /var/lib/apt/lists/* \
+	# npm 12 blocks dependency install scripts, so claude-code's postinstall (install.cjs, which links
+	# its native binary) is skipped and `claude` won't launch — run it explicitly.
 	&& npm i -g @anthropic-ai/claude-code@2.1.312 \
 	&& node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
+# piper (offline neural TTS) — pinned release; arch picked from the build platform. Extracts to
+# /opt/piper (binary + libs + espeak-ng-data via $ORIGIN rpath), symlinked onto PATH. Plus a default
+# voice baked under /opt/piper-voices.
+RUN set -eux; \
+	case "${TARGETARCH:-amd64}" in \
+		amd64) PIPER_ARCH=x86_64 ;; \
+		arm64) PIPER_ARCH=aarch64 ;; \
+		arm) PIPER_ARCH=armv7l ;; \
+		*) echo "unsupported TARGETARCH '${TARGETARCH}'" >&2; exit 1 ;; \
+	esac; \
+	curl -fsSL -o /tmp/piper.tar.gz "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_${PIPER_ARCH}.tar.gz"; \
+	tar -xzf /tmp/piper.tar.gz -C /opt; \
+	ln -s /opt/piper/piper /usr/local/bin/piper; \
+	rm /tmp/piper.tar.gz; \
+	mkdir -p /opt/piper-voices; \
+	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"; \
+	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-	DISABLE_AUTOUPDATER=1
+	DISABLE_AUTOUPDATER=1 \
+	RENDER_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx
 CMD ["node", "engine/dist/worker.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────

@@ -16,12 +16,18 @@ export interface VoiceConfig {
 }
 
 export function voiceConfigFromEnv(env = process.env): VoiceConfig {
+	// Coerce "" → undefined: Compose passes unset knobs as empty strings (environment: VOICE_BIN:
+	// ${VOICE_BIN:-}), and an empty bin/model must fall back to the default, not become spawn("").
 	return {
-		provider: env.VOICE_PROVIDER ?? "silent",
-		model: env.VOICE_MODEL,
-		voice: env.VOICE_ID,
-		bin: env.VOICE_BIN,
+		provider: blank(env.VOICE_PROVIDER) ?? "silent",
+		model: blank(env.VOICE_MODEL),
+		voice: blank(env.VOICE_ID),
+		bin: blank(env.VOICE_BIN),
 	}
+}
+
+function blank(v: string | undefined): string | undefined {
+	return v === undefined || v === "" ? undefined : v
 }
 
 export function makeVoice(config: VoiceConfig, exec: Exec): VoiceClient {

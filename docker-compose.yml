@@ -82,11 +82,13 @@ services:
       # ffmpeg + a drawtext font in the image); VOICE_PROVIDER=piper|kokoro adds offline narration
       # (needs that TTS binary + a voice model baked in). heygen/higgsfield are reserved (keys pending).
       RENDER_PROVIDER: ${RENDER_PROVIDER:-stub}        # stub | local  (heygen|higgsfield reserved)
-      RENDER_FONT: ${RENDER_FONT:-}                    # local: TTF path for drawtext captions
+      # Default to the paths baked into the engine image; listing the var in Compose shadows the image
+      # ENV, so the default must be the real path, not empty, or local render loses its font/voice.
+      RENDER_FONT: ${RENDER_FONT:-/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf}   # local: drawtext TTF
       VOICE_PROVIDER: ${VOICE_PROVIDER:-silent}        # silent | piper | kokoro
-      VOICE_MODEL: ${VOICE_MODEL:-}                    # piper: .onnx voice model path
+      VOICE_MODEL: ${VOICE_MODEL:-/opt/piper-voices/en_US-amy-medium.onnx}           # piper: .onnx voice
       VOICE_ID: ${VOICE_ID:-}                          # kokoro: speaker id (e.g. af_sarah)
-      VOICE_BIN: ${VOICE_BIN:-}                        # override the TTS binary
+      VOICE_BIN: ${VOICE_BIN:-}                        # override the TTS binary (empty → piper/kokoro-tts)
       # Subscription auth. NEVER set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN here — either one silently
       # outranks the OAuth token and bills the API instead of the subscription.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}

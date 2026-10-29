@@ -82,4 +82,14 @@ describe("render + voice factories — swappable by provider", () => {
 		expect(renderConfigFromEnv({}).provider).toBe("stub")
 		expect(voiceConfigFromEnv({}).provider).toBe("silent")
 	})
+
+	it("coerces empty-string env knobs to undefined (Compose passes unset vars as \"\")", () => {
+		const v = voiceConfigFromEnv({ VOICE_PROVIDER: "", VOICE_BIN: "", VOICE_MODEL: "", VOICE_ID: "" })
+		expect(v.provider).toBe("silent") // not ""
+		expect(v.bin).toBeUndefined() // would otherwise spawn("")
+		expect(v.model).toBeUndefined()
+		const r = renderConfigFromEnv({ RENDER_PROVIDER: "", RENDER_FONT: "" })
+		expect(r.provider).toBe("stub")
+		expect(r.font).toBeUndefined()
+	})
 })
