@@ -275,3 +275,38 @@ describe("type registry", () => {
 		expect(disk.get("briefing").agreement).toBe(true)
 	})
 })
+
+describe("reviewer skills — two axes (quality + conformance)", () => {
+	it("dispatches each declared reviewer skill to the runner (per-step rubric owns the axis)", async () => {
+		const contracts: TypeContract[] = [
+			{ type: "video-project", name: "Mini", checklist: [{ id: "script", type: "script", deps: [] }] },
+			{
+				type: "script",
+				name: "Script",
+				produce: "script",
+				reviews: [
+					{ name: "quality", kind: "craft", skill: "review-script-quality" },
+					{ name: "conformance", kind: "coverage", skill: "review-script-conformance" },
+				],
+			},
+		]
+		const runner = new FakeSubagentRunner()
+		const engine = new Engine({ store, runner, types: TypeRegistry.fromContracts(contracts), config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 50; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		const skills = runner.calls.map((c) => c.skill)
+		// each axis dispatched its declared reviewer skill (not the generic review:<kind> label)
+		expect(skills).toContain("review-script-quality")
+		expect(skills).toContain("review-script-conformance")
+		expect(skills).toContain("script") // the producer still ran under the script producer skill
+		// reviewer skills pass via the fake default (review-* ⇒ VERDICT: pass), so the leaf rolled up
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+	})
+})

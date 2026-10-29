@@ -45,7 +45,13 @@ export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, 
 		consistency: "Check that it matches the design language and the sibling artifacts.",
 	}
 	const parts: string[] = []
-	parts.push(`You are the "${review.name}" reviewer for a ${contract.type} deliverable. ${lens[review.kind]}`)
+	// A reviewer skill (if declared) owns the per-step rubric for this axis — the runner injects it as a
+	// directive, so here we only name the role. Without a skill, fall back to the generic kind lens.
+	parts.push(
+		review.skill
+			? `You are the "${review.name}" reviewer for a ${contract.type} deliverable. Judge it against your reviewer skill's rubric.`
+			: `You are the "${review.name}" reviewer for a ${contract.type} deliverable. ${lens[review.kind]}`,
+	)
 	parts.push("Respond with exactly one line: `VERDICT: pass` or `VERDICT: revise`, then (if revise) the specific, actionable fixes.")
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {

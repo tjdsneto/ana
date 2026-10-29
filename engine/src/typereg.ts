@@ -15,7 +15,8 @@ export interface ChecklistEntry {
 
 export interface ReviewSpec {
 	name: string
-	kind: "craft" | "coverage" | "consistency"
+	kind: "craft" | "coverage" | "consistency" // the axis: craft = quality, coverage = conformance-to-params, consistency = matches siblings
+	skill?: string // reviewer skill that owns this axis's per-step rubric; omitted → generic kind lens (prompts.ts)
 }
 
 export interface TypeContract {
