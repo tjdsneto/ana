@@ -209,7 +209,7 @@ def html():
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width={W}, height={H}">
 <title>{film.get("title", "Launch film")}</title>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>{font_css}
-<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=round(H * 0.035))}</style></head>
+<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=max(8, round(H * inset / 2 - 28)))}</style></head>
 <body>
 <div id="root">
   <div id="bg"><div class="glow" id="glow"></div><div class="dots"></div></div>{title}
