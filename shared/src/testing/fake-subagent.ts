@@ -38,7 +38,7 @@ export class FakeSubagentRunner implements SubagentRunner {
 		}
 		const base = this.handler
 			? await this.handler(input)
-			: input.skill?.startsWith("review:")
+			: input.skill?.startsWith("review:") || input.skill === "review-render"
 				? { output: "VERDICT: pass" }
 				: input.skill === "render-film"
 					? { output: "[stub render-film] wrote fake-render.mp4" }

@@ -230,9 +230,15 @@ export class Engine {
 		const verdicts: ("pass" | "revise")[] = []
 		for (const rv of contract.reviews ?? []) {
 			const rt0 = Date.now()
+			// Rendered node: the reviewer WATCHES the produced .mp4 (frames + signals) via the review-render
+			// skill — it must not judge a text descriptor (spec 08's blind-gate failure). Other nodes keep
+			// the inline rubric reviewer.
+			const watching = Boolean(contract.rendered)
 			const rres = await this.runSubagent({
-				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
-				skill: `review:${rv.kind}`, // label only; the runner injects no skill directive for reviewers
+				prompt: watching
+					? buildRenderReviewPrompt({ artifactPath, brief: root.description ?? "" })
+					: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
+				skill: watching ? "review-render" : `review:${rv.kind}`, // review-render loads; review:* is a label only
 				cwd: this.config.craftRoot,
 			})
 			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0)
@@ -396,4 +402,15 @@ function buildRenderPrompt(_contract: TypeContract, a: { brief: string; workDir:
 	]
 		.filter(Boolean)
 		.join("\n\n")
+}
+
+// The render reviewer's prompt: it must WATCH the produced .mp4, not judge a text summary. The
+// /review-render skill owns the how (extract frames, measure, grade); this points it at the file.
+function buildRenderReviewPrompt(a: { artifactPath: string; brief: string }): string {
+	return [
+		`Review the RENDERED video by watching it — judge the frames and audio, never a description.`,
+		`Video file: ${a.artifactPath}`,
+		`Brief: ${a.brief}`,
+		`End with a line "VERDICT: pass" or "VERDICT: revise"; if revise, give ranked, timecoded fixes. A blank/near-empty frame, a camera panned off the content, or an early/overlong card is a FAIL.`,
+	].join("\n\n")
 }
