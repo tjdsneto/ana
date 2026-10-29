@@ -68,3 +68,41 @@ export function parseVerdict(output: string): "pass" | "revise" {
 	const match = output.match(/VERDICT:\s*(pass|revise)/i)
 	return match?.[1]?.toLowerCase() === "pass" ? "pass" : "revise"
 }
+
+// The holistic final review (final-review node) names which upstream STEP to reopen and why, one per
+// line: `REOPEN: <type> — <reason>`. Parse them into {type, reason}. The engine resolves <type> to the
+// production's node of that type and reopens it (+ cascades to its dependents). No REOPEN lines on a
+// revise = the reviewer flagged problems but named nothing actionable; the engine then escalates
+// rather than reopening blindly.
+export interface ReopenTarget {
+	type: string
+	reason: string
+}
+
+export function parseReopen(output: string): ReopenTarget[] {
+	const out: ReopenTarget[] = []
+	for (const line of output.split("\n")) {
+		const m = line.match(/^\s*REOPEN:\s*([a-zA-Z0-9_-]+)\s*(?:[—:-]\s*(.*))?$/)
+		if (m?.[1]) out.push({ type: m[1], reason: (m[2] ?? "").trim() || "revised on whole-video review" })
+	}
+	return out
+}
+
+// The final-review producer prompt: the critic watches the finished (polished) video and either passes
+// the whole production or names the steps to redo. The engine owns the output contract; the reviewer
+// skill owns the good-video rubric.
+export function buildHolisticPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+	const parts: string[] = []
+	parts.push(
+		`You are the final whole-video reviewer for this ${contract.type}. Judge the finished video as a whole against your reviewer skill's good-video rubric — pacing, clarity, does it deliver the brief, do the parts play well together.`,
+	)
+	parts.push(
+		"Respond with `VERDICT: pass` if it is ready for the human, or `VERDICT: revise` if a specific earlier step must be redone. On revise, add one line per fix: `REOPEN: <step> — <reason>` (step = the pipeline node to redo, e.g. moodboard, script, storyboard, render, polish). Name only the steps that must change.",
+	)
+	parts.push(`\n## Brief\n${ctx.brief}`)
+	if (ctx.upstream.length > 0) {
+		parts.push("\n## The finished video + its inputs")
+		for (const u of ctx.upstream) parts.push(`\n### ${u.type}\n${u.content}`)
+	}
+	return parts.join("\n")
+}

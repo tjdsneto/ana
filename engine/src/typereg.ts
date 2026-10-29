@@ -31,6 +31,7 @@ export interface TypeContract {
 	agreement?: boolean // agreement-terminal (briefing): client approval is the gate, capped back-and-forth
 	router?: boolean // emits VERDICT to gate a sibling — v0-flat: not exercised
 	rendered?: boolean // file-output leaf: a worker runs the render skill (writes a file artifact), not a text producer
+	holisticReview?: boolean // final whole-production review: on revise it reopens named upstream nodes (approved → pending) + cascades, capped by maxGlobalRevisions
 	skill?: string // producer skill name, or "self"
 }
 

@@ -12,7 +12,7 @@ import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import type { EngineConfig } from "./config.js"
-import { buildProducerPrompt, buildReviewerPrompt, parseVerdict, type UpstreamArtifact } from "./prompts.js"
+import { buildHolisticPrompt, buildProducerPrompt, buildReviewerPrompt, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
 const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work well below this
@@ -33,6 +33,7 @@ export class Engine {
 	private readonly log: Logger
 	private realCalls = 0 // real (non-fake) subagent calls made this process — the spend-guard counter
 	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
+	private readonly globalRevisions = new Map<string, number>() // productionId → holistic-reopen passes used (per-process; v0 single worker)
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -138,6 +139,10 @@ export class Engine {
 		const contract = this.types.get(node.type)
 		if (contract.checklist) throw new Error(`dispatch: nested sub-project "${node.type}" not supported in v0-flat`)
 		if (contract.planner || contract.router) throw new Error(`dispatch: planner/router "${node.type}" not supported in v0-flat`)
+		if (contract.holisticReview) {
+			await this.dispatchHolisticReview(node, contract)
+			return
+		}
 		await this.dispatchLeaf(node, contract)
 	}
 
@@ -257,6 +262,98 @@ export class Engine {
 			log.info("node.redo", { versionId: version.id, attempt: redosSoFar })
 			await this.store.updateNodeStatus(node.id, "pending") // redo next tick, fed the reviewer feedback
 		}
+	}
+
+	// The holistic final review (holisticReview types, e.g. final-review): the critic judges the finished
+	// video as a whole and either passes it (present → human) or names upstream steps to redo. A reopen
+	// sends those approved nodes — and everything downstream of them — back to pending and re-produces,
+	// capped by maxGlobalRevisions so the whole-video loop can't thrash. This node is itself a dependent
+	// of the steps it reopens, so it re-runs once the reopened subtree rolls back up. The root stays
+	// in-progress throughout (this terminal node is never approved during a reopen), so rollup is untouched.
+	private async dispatchHolisticReview(node: Node, contract: TypeContract): Promise<void> {
+		const root = await this.store.getProduction(node.productionId)
+		if (!root) throw new Error(`dispatchHolisticReview: production ${node.productionId} missing`)
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		log.info("node.dispatch")
+
+		const priorVersions = await this.store.versionsFor(node.id)
+		const latest = priorVersions.at(-1)
+		const n = (latest?.n ?? 0) + 1
+		const upstream = await this.collectUpstream(node)
+
+		const t0 = Date.now()
+		const result = await this.runSubagent({
+			prompt: buildHolisticPrompt(contract, { brief: root.description ?? "", upstream }),
+			skill: contract.skill ?? "final-review",
+			cwd: this.config.craftRoot,
+			resumeSessionId: latest?.subagent?.sessionId,
+		})
+		const draft = result.output
+		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest?.id,
+			status: "producing",
+			artifactPath,
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+		})
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+
+		if (parseVerdict(draft) === "pass") {
+			log.info("review.holistic", { versionId: version.id, verdict: "pass" })
+			await this.present(node, contract, version.id, root, log)
+			return
+		}
+
+		// revise — reopen the named upstream steps, within the global budget; else escalate to the human
+		const targets = parseReopen(draft)
+		const used = this.globalRevisions.get(node.productionId) ?? 0
+		if (targets.length === 0 || used >= this.config.maxGlobalRevisions) {
+			const reason =
+				targets.length === 0
+					? "flagged whole-video issues but named no step to redo"
+					: `couldn't resolve the whole-video notes after ${this.config.maxGlobalRevisions} revision passes`
+			log.warn("review.holistic_escalate", { versionId: version.id, used, targets: targets.map((t) => t.type) })
+			await this.store.updateVersion(version.id, { status: "needs-work" })
+			await this.present(node, contract, version.id, root, log, reason)
+			return
+		}
+		this.globalRevisions.set(node.productionId, used + 1)
+		const reopened = await this.reopenWithCascade(node, targets)
+		log.info("review.holistic_reopen", { versionId: version.id, pass: used + 1, reopened })
+	}
+
+	// Send the named upstream nodes back to revise and cascade: any node transitively downstream of a
+	// reopened one is stale (built on the old version) and reopens too. Named targets carry the critic's
+	// reason as denial feedback (re-produced to address it); cascaded dependents are marked superseded
+	// (re-produced against the fresh upstream). Returns the node types actually reopened.
+	private async reopenWithCascade(reviewNode: Node, targets: ReopenTarget[]): Promise<string[]> {
+		const all = (await this.store.nodesFor(reviewNode.productionId)).filter((n) => n.parentId !== null)
+		const named = new Map<string, string>() // node id → reason
+		for (const t of targets) {
+			const hit = all.find((n) => n.type === t.type)
+			if (hit) named.set(hit.id, t.reason)
+		}
+		if (named.size === 0) return []
+		// transitive dependents of the named set (fixpoint over the deps edges)
+		const invalid = new Set(named.keys())
+		for (let changed = true; changed; ) {
+			changed = false
+			for (const node of all) {
+				if (!invalid.has(node.id) && node.deps.some((d) => invalid.has(d))) {
+					invalid.add(node.id)
+					changed = true
+				}
+			}
+		}
+		for (const node of all) {
+			if (!invalid.has(node.id)) continue
+			const v = await this.store.latestVersion(node.id)
+			if (v) await this.store.updateVersion(v.id, named.has(node.id) ? { status: "denied", feedback: named.get(node.id) } : { status: "superseded" })
+			await this.store.updateNodeStatus(node.id, "pending")
+		}
+		return [...named.keys()].map((id) => all.find((n) => n.id === id)?.type ?? "?")
 	}
 
 	private async present(node: Node, contract: TypeContract, versionId: string, root: Node, log: Logger, caveat?: string): Promise<void> {

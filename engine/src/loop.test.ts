@@ -22,7 +22,7 @@ const CONTRACTS: TypeContract[] = [
 			{ id: "storyboard", type: "storyboard", deps: ["script", "moodboard"] },
 			{ id: "render", type: "render", deps: ["storyboard"] },
 			{ id: "polish", type: "polish", deps: ["render"] },
-			{ id: "deliver", type: "deliver", deps: ["polish"] },
+			{ id: "final-review", type: "final-review", deps: ["polish"] },
 		],
 	},
 	{ type: "briefing", name: "Briefing", produce: "brief", agreement: true, advisoryReview: true, reviews: [{ name: "coverage", kind: "coverage" }] },
@@ -31,7 +31,7 @@ const CONTRACTS: TypeContract[] = [
 	{ type: "storyboard", name: "Storyboard", produce: "board", reviews: [{ name: "craft", kind: "craft" }, { name: "consistency", kind: "consistency" }] },
 	{ type: "render", name: "Render", rendered: true, reviews: [{ name: "consistency", kind: "consistency" }] },
 	{ type: "polish", name: "Polish", produce: "polish", reviews: [{ name: "craft", kind: "craft" }] },
-	{ type: "deliver", name: "Deliver", produce: "deliver", reviews: [{ name: "coverage", kind: "coverage" }] },
+	{ type: "final-review", name: "Final review", holisticReview: true },
 ]
 
 const types = TypeRegistry.fromContracts(CONTRACTS)
@@ -42,6 +42,7 @@ function makeConfig(over: Partial<EngineConfig> = {}): EngineConfig {
 		maxRedos: 3,
 		agreementMaxRoundsHuman: 5,
 		agreementMaxRoundsAgent: 2,
+		maxGlobalRevisions: 2,
 		pollIntervalMs: 1000,
 		...over,
 	}
@@ -167,10 +168,10 @@ describe("interaction log + session capture", () => {
 		}
 
 		const ints = await store.interactionsFor(root.id)
-		// 7 producers (all 7 leaves — render is now a worker running the render skill, a subagent too) +
-		// 9 reviewers (reviews across the leaves, render's consistency reviewer included).
+		// 7 producers (all 7 leaves — render runs the render skill, final-review runs the critique, both
+		// subagents logged as producers) + 8 reviewers (final-review is holistic: no specialist reviewers).
 		expect(ints.filter((i) => i.role === "producer")).toHaveLength(7)
-		expect(ints.filter((i) => i.role.startsWith("review:"))).toHaveLength(9)
+		expect(ints.filter((i) => i.role.startsWith("review:"))).toHaveLength(8)
 		expect(ints.every((i) => i.engine === "fake")).toBe(true)
 		expect(ints.every((i) => typeof i.sessionId === "string")).toBe(true)
 		expect(ints.every((i) => i.inputTokens === 0 && i.costUsd === 0)).toBe(true) // usage plumbed, fake = zero
@@ -268,11 +269,12 @@ describe("type registry", () => {
 	it("loads the on-disk pipeline", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		expect(disk.has("video-project")).toBe(true)
-		for (const t of ["briefing", "script", "moodboard", "storyboard", "render", "polish", "deliver"]) {
+		for (const t of ["briefing", "script", "moodboard", "storyboard", "render", "polish", "final-review"]) {
 			expect(disk.has(t)).toBe(true)
 		}
 		expect(disk.get("render").rendered).toBe(true)
 		expect(disk.get("briefing").agreement).toBe(true)
+		expect(disk.get("final-review").holisticReview).toBe(true)
 	})
 })
 
@@ -308,5 +310,37 @@ describe("reviewer skills — two axes (quality + conformance)", () => {
 		expect(skills).toContain("script") // the producer still ran under the script producer skill
 		// reviewer skills pass via the fake default (review-* ⇒ VERDICT: pass), so the leaf rolled up
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
+	})
+})
+
+describe("holistic final review — reopen + cascade (produce-until-approved, globally)", () => {
+	it("reopens a named upstream step, cascades its dependents, and converges", async () => {
+		// final-review says revise + REOPEN moodboard on the first pass, then passes.
+		let critiques = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: moodboard — tone too cold" } : { output: "VERDICT: pass" }
+			}
+			if (/^review[:-]/.test(input.skill ?? "")) return { output: "VERDICT: pass" }
+			return { output: "a draft" }
+		})
+		const engine = new Engine({ store, runner, types, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const nodes = await store.nodesFor(root.id)
+		const versionsOf = async (type: string) => (await store.versionsFor(nodes.find((n) => n.type === type)!.id)).length
+		expect(critiques).toBeGreaterThanOrEqual(2) // revise, then pass
+		expect(await versionsOf("moodboard")).toBeGreaterThanOrEqual(2) // reopened → re-produced
+		expect(await versionsOf("render")).toBeGreaterThanOrEqual(2) // downstream of moodboard → rebuilt
+		expect(await versionsOf("script")).toBe(1) // NOT downstream of moodboard → untouched
 	})
 })

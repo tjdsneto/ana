@@ -6,6 +6,10 @@ export interface EngineConfig {
 	maxRedos: number
 	agreementMaxRoundsHuman: number
 	agreementMaxRoundsAgent: number
+	// Production-wide cap on holistic-review reopen cycles (the final-review node sending approved
+	// upstream work back to revise). Analogous to maxRedos but global, so the whole-video loop can't
+	// thrash: once hit, final-review presents to the human with a caveat instead of reopening again.
+	maxGlobalRevisions: number
 	pollIntervalMs: number
 	// Process-lifetime ceiling on REAL (non-fake) subagent calls, a spend guardrail. Once the worker
 	// has made this many real calls, it stops claiming new leaves (the in-flight one finishes) and
@@ -25,6 +29,7 @@ export function configFromEnv(env = process.env): EngineConfig {
 		maxRedos: num(env.MAX_REDOS, 3),
 		agreementMaxRoundsHuman: num(env.AGREEMENT_MAX_ROUNDS_HUMAN, 5),
 		agreementMaxRoundsAgent: num(env.AGREEMENT_MAX_ROUNDS_AGENT, 2),
+		maxGlobalRevisions: num(env.MAX_GLOBAL_REVISIONS, 2),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,

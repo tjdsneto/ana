@@ -8,6 +8,6 @@
 		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
 		{ "id": "render", "type": "render", "deps": ["storyboard"] },
 		{ "id": "polish", "type": "polish", "deps": ["render"] },
-		{ "id": "deliver", "type": "deliver", "deps": ["polish"] }
+		{ "id": "final-review", "type": "final-review", "deps": ["polish"] }
 	]
 }
