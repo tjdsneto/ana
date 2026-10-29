@@ -15,6 +15,9 @@ SUBAGENT_ENGINE=fake
 # SUBAGENT_MAX_BUDGET_USD=     # per-call client-side spend cap (uncapped if empty)
 # SUBAGENT_MAX_CALLS=          # process-lifetime cap on REAL subagent calls; worker parks idle once hit
 # CLAUDE_BIN=claude            # the `claude -p` binary
+# AUTONOMY_CRAFT_ROOT=         # worker cwd: a dir with .claude/skills/ (the craft skills) + tools on PATH.
+#                              # The node's skill resolves as /skill-name from here (spec 09). Unset = engine cwd.
+# SUBAGENT_PERMISSION_MODE=bypassPermissions  # worker tool-permission mode; skills need tool use (Skill/Bash/Write)
 
 # Render + voice engines (independent ports). Defaults: stub + silent (no video, no speech, zero cost).
 # RENDER_PROVIDER=stub         # stub | local  (heygen|higgsfield reserved)

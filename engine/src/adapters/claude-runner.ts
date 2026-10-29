@@ -49,16 +49,26 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 	async run(input: SubagentInput): Promise<SubagentResult> {
 		const model = input.model ?? this.defaultModel
 		const args = ["-p", "--output-format", "json"]
-		// Headless safety: never wait on a permission prompt (deny instead of hang). Producers/reviewers
-		// are text-only, and Manual mode (the -p default from v2.1.302) already denies tool use. These
-		// flags are the seam to verify against the installed CLI on the first real (authed) run.
-		args.push("--permission-prompts", "none")
+		// The craft lives in a skill (spec 09): the worker must be able to invoke the Skill tool and the
+		// tools that skill runs (Bash for video-gen/tts/site-capture, Read/Write for artifacts). So it
+		// runs with an autonomous permission mode — it never waits on a prompt, but unlike the old
+		// text-only deny it is ALLOWED to use tools. The worker runs in a sandboxed container, so the
+		// default is bypassPermissions; override with SUBAGENT_PERMISSION_MODE.
+		args.push("--permission-mode", process.env.SUBAGENT_PERMISSION_MODE ?? "bypassPermissions")
 		if (this.maxBudgetUsd !== undefined) args.push("--max-budget-usd", String(this.maxBudgetUsd))
 		if (model) args.push("--model", model)
 		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
+		// Direct the worker to the node's skill. Skill names map to slash commands (`review:craft` →
+		// `/review-craft`); the skill resolves from the craft root's `.claude/skills/` (input.cwd). "self"
+		// means produce inline with no skill. Combined with any caller systemPrompt into one append.
+		const skillSlug = input.skill && input.skill !== "self" ? input.skill.replace(/:/g, "-") : undefined
+		const sys = [
+			skillSlug ? `Complete this task by invoking the /${skillSlug} skill and following it exactly. Do not produce the deliverable any other way.` : undefined,
+			input.systemPrompt,
+		].filter(Boolean) as string[]
 		// Strip null bytes: execFile rejects argv with embedded \0 (e.g. if a prompt ever carries binary
 		// artifact content). Belt — the loop also avoids feeding binary into prompts.
-		if (input.systemPrompt) args.push("--append-system-prompt", stripNull(input.systemPrompt))
+		if (sys.length > 0) args.push("--append-system-prompt", stripNull(sys.join("\n\n")))
 		args.push(stripNull(input.prompt)) // positional query
 		const { stdout } = await run(this.bin, args, { cwd: input.cwd, maxBuffer: 10 * 1024 * 1024 })
 		const json = parse(stdout)

@@ -198,6 +198,7 @@ export class Engine {
 			producerResult = await this.runSubagent({
 				prompt: producePrompt,
 				skill: contract.skill ?? node.type,
+				cwd: this.config.craftRoot,
 				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			draft = producerResult.output
@@ -226,6 +227,7 @@ export class Engine {
 			const rres = await this.runSubagent({
 				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
 				skill: `review:${rv.kind}`,
+				cwd: this.config.craftRoot,
 			})
 			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0)
 			const verdict = parseVerdict(rres.output)

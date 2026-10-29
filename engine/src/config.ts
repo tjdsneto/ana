@@ -12,6 +12,11 @@ export interface EngineConfig {
 	// parks idle until restart. Guards against a worker draining a backlog of stale queued work on a
 	// retained volume and spending far more than intended. undefined = uncapped (fake is always free).
 	maxSubagentCalls?: number
+	// The directory a worker subagent runs in (its cwd). It must carry `.claude/skills/` so the node's
+	// skill resolves as `/skill-name` in headless `claude -p`, and the craft tools on PATH. This is the
+	// ONLY place the generic engine touches the craft: it hands the worker a working directory, then the
+	// skill does the video work. undefined = run in the engine's own cwd (fake runner ignores it).
+	craftRoot?: string
 }
 
 export function configFromEnv(env = process.env): EngineConfig {
@@ -22,6 +27,7 @@ export function configFromEnv(env = process.env): EngineConfig {
 		agreementMaxRoundsAgent: num(env.AGREEMENT_MAX_ROUNDS_AGENT, 2),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
+		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,
 	}
 }
 
