@@ -60,8 +60,9 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
 		// Direct the worker to the node's skill. Skill names map to slash commands (`review:craft` →
 		// `/review-craft`); the skill resolves from the craft root's `.claude/skills/` (input.cwd). "self"
-		// means produce inline with no skill. Combined with any caller systemPrompt into one append.
-		const skillSlug = input.skill && input.skill !== "self" ? input.skill.replace(/:/g, "-") : undefined
+		// means produce inline with no skill. Reviewers (review:<kind>) are a label only — they judge
+		// from the rubric prompt, so no skill directive either. Combined with any caller systemPrompt.
+		const skillSlug = input.skill && input.skill !== "self" && !input.skill.startsWith("review:") ? input.skill.replace(/:/g, "-") : undefined
 		const sys = [
 			skillSlug ? `Complete this task by invoking the /${skillSlug} skill and following it exactly. Do not produce the deliverable any other way.` : undefined,
 			input.systemPrompt,

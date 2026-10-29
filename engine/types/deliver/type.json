@@ -2,5 +2,11 @@
 	"type": "deliver",
 	"name": "Deliver",
 	"produce": "Assemble the final deliverable plus a short handoff note: formats produced, where the assets live, and anything the user should know.",
-	"reviews": [{ "name": "coverage", "kind": "coverage" }]
+	"reviews": [
+		{
+			"name": "coverage",
+			"kind": "coverage"
+		}
+	],
+	"skill": "self"
 }

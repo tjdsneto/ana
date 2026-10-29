@@ -232,7 +232,7 @@ export class Engine {
 			const rt0 = Date.now()
 			const rres = await this.runSubagent({
 				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
-				skill: `review:${rv.kind}`,
+				skill: `review:${rv.kind}`, // label only; the runner injects no skill directive for reviewers
 				cwd: this.config.craftRoot,
 			})
 			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0)
