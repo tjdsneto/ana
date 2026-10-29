@@ -29,6 +29,7 @@ const outPath = resolve(arg("--out", ""))
 const fps = Number(arg("--fps", "30"))
 const width = Number(arg("--width", "1920"))
 const height = Number(arg("--height", "1080"))
+const master = !process.argv.includes("--no-master") // loudnorm the audio unless it's already mastered (mix.wav)
 if (!htmlPath || !outPath) {
 	console.error("render: --html and --out are required")
 	process.exit(2)
@@ -68,7 +69,10 @@ await browser.close()
 
 // Encode frames + mux the voiceover, mastered to -14 LUFS (true peak -1.5 dBFS).
 const args = ["-y", "-framerate", String(fps), "-i", join(dir, "f%05d.jpg")]
-if (audioPath) args.push("-i", resolve(audioPath), "-af", "loudnorm=I=-14:TP=-1.5:LRA=11")
+if (audioPath) {
+	args.push("-i", resolve(audioPath))
+	if (master) args.push("-af", "loudnorm=I=-14:TP=-1.5:LRA=11")
+}
 args.push("-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", String(fps))
 if (audioPath) args.push("-c:a", "aac", "-b:a", "192k", "-shortest")
 args.push(outPath)
