@@ -3,7 +3,7 @@
 // ffmpeg engine + piper (override with RENDER_PROVIDER / VOICE_PROVIDER). Run inside the engine image:
 //   docker compose run --rm --no-deps engine-worker node engine/dist/render-sample.js
 
-import { mkdirSync } from "node:fs"
+import { mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { JsonLogger } from "@core/shared"
 import { NodeExec } from "./adapters/exec-node.js"
@@ -29,9 +29,11 @@ async function main(): Promise<void> {
 	const voice = makeVoice(voiceConfigFromEnv(), exec)
 	const render = makeRender(renderConfigFromEnv(), { voice, exec, logger })
 
-	const outDir = join(process.env.ARTIFACTS_DIR ?? "/data/artifacts", "sample")
+	// Render a real storyboard artifact when RENDER_SAMPLE_FILE is set, else the built-in sample.
+	const content = process.env.RENDER_SAMPLE_FILE ? readFileSync(process.env.RENDER_SAMPLE_FILE, "utf8") : SAMPLE
+	const outDir = join(process.env.ARTIFACTS_DIR ?? "/data/artifacts", process.env.RENDER_SAMPLE_OUT ?? "sample")
 	mkdirSync(outDir, { recursive: true })
-	const result = await render.render({ kind: "sample", spec: { upstream: [{ type: "storyboard", content: SAMPLE }] }, outDir })
+	const result = await render.render({ kind: "sample", spec: { upstream: [{ type: "storyboard", content }] }, outDir })
 
 	process.stdout.write(`${JSON.stringify({ render: render.provider, voice: voice.provider, ...result }, null, 2)}\n`)
 }

@@ -12,6 +12,12 @@ const MD_HEADING = /^\s*#{1,6}\s+(.+?)\s*#*\s*$/
 const NARRATION_LABEL = /^\s*(?:narration|voice[\s-]?over|vo|v\/o|script|dialogue|audio|say)\s*[:\-]\s*(.*)$/i
 const CAPTION_MAX = 180
 
+// Keep the video short: cap scenes and the spoken length per scene. Real storyboards are verbose prose
+// (full visual descriptions), which, read whole, make 10+ minute slideshows — so narration is clipped
+// to the first sentence(s) up to NARRATION_MAX, and scenes to MAX_SCENES. Both env-tunable.
+const MAX_SCENES = Math.max(1, Number(process.env.RENDER_MAX_SCENES ?? 6))
+const NARRATION_MAX = Math.max(40, Number(process.env.RENDER_NARRATION_MAX ?? 140))
+
 export function parseScenes(text: string): Scene[] {
 	const raw = (text ?? "").replace(/\r\n/g, "\n").trim()
 	if (!raw) return [{ caption: "(no storyboard provided)", narration: "" }]
@@ -33,7 +39,8 @@ export function parseScenes(text: string): Scene[] {
 	// No headings at all → fall back to paragraph blocks (blank-line separated), capped.
 	const hasHeadings = blocks.some((b) => b.title !== undefined)
 	const scenes = (hasHeadings ? blocks : paragraphBlocks(raw)).map(toScene).filter((s) => s.caption || s.narration)
-	return scenes.length > 0 ? scenes : [{ caption: clip(raw), narration: stripBody(raw) }]
+	const capped = scenes.slice(0, MAX_SCENES)
+	return capped.length > 0 ? capped : [{ caption: clip(raw), narration: clipNarration(stripBody(raw)) }]
 }
 
 function toScene(block: { title?: string; body: string[] }): Scene {
@@ -42,9 +49,23 @@ function toScene(block: { title?: string; body: string[] }): Scene {
 		.filter((v): v is string => Boolean(v && v.trim()))
 		.map(clean)
 	const bodyText = stripBody(block.body.join("\n"))
-	const narration = (labelled.length > 0 ? labelled.join(" ") : bodyText || block.title || "").trim()
+	const narration = clipNarration((labelled.length > 0 ? labelled.join(" ") : bodyText || block.title || "").trim())
 	const caption = block.title ? clip(block.title) : clip(narration)
 	return { caption, narration: narration || caption }
+}
+
+// Keep narration to the first whole sentence(s) up to NARRATION_MAX chars, so a verbose scene body
+// does not become a minute of speech.
+function clipNarration(text: string): string {
+	const t = text.trim()
+	if (t.length <= NARRATION_MAX) return t
+	const sentences = t.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) ?? [t]
+	let out = ""
+	for (const s of sentences) {
+		if (out && (out + s).length > NARRATION_MAX) break
+		out += s
+	}
+	return (out.trim() || t.slice(0, NARRATION_MAX)).trim()
 }
 
 function paragraphBlocks(raw: string): { title?: string; body: string[] }[] {

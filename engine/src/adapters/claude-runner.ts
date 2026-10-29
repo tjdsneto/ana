@@ -56,8 +56,10 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		if (this.maxBudgetUsd !== undefined) args.push("--max-budget-usd", String(this.maxBudgetUsd))
 		if (model) args.push("--model", model)
 		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
-		if (input.systemPrompt) args.push("--append-system-prompt", input.systemPrompt)
-		args.push(input.prompt) // positional query
+		// Strip null bytes: execFile rejects argv with embedded \0 (e.g. if a prompt ever carries binary
+		// artifact content). Belt — the loop also avoids feeding binary into prompts.
+		if (input.systemPrompt) args.push("--append-system-prompt", stripNull(input.systemPrompt))
+		args.push(stripNull(input.prompt)) // positional query
 		const { stdout } = await run(this.bin, args, { cwd: input.cwd, maxBuffer: 10 * 1024 * 1024 })
 		const json = parse(stdout)
 		return {
@@ -92,6 +94,10 @@ function toUsage(json: ClaudeJson): SubagentUsage | undefined {
 
 function modelOf(json: ClaudeJson): string | undefined {
 	return json.modelUsage ? Object.keys(json.modelUsage)[0] : undefined
+}
+
+function stripNull(s: string): string {
+	return s.replace(/\0/g, "")
 }
 
 function numOrUndef(value: string | undefined): number | undefined {

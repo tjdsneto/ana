@@ -183,7 +183,11 @@ export class Engine {
 			mkdirSync(outDir, { recursive: true })
 			const result = await this.render.render({ kind: node.type, spec: { brief: root.description ?? "", upstream }, outDir })
 			artifactPath = result.artifactPath
-			draft = readArtifact(artifactPath) ?? `[rendered ${node.type} — stub]`
+			// The rendered artifact may be binary (an .mp4) — NEVER read it into the reviewer prompt
+			// (null bytes crash the subagent CLI). Describe it; the reviewer judges against the upstream
+			// artifacts plus this summary.
+			const meta = (result.meta ?? {}) as { scenes?: unknown; durationMs?: unknown; voice?: unknown }
+			draft = `[rendered ${node.type}] ${meta.scenes ?? "?"} scenes, ${meta.durationMs ?? "?"}ms, voice=${meta.voice ?? "?"} — file: ${artifactPath}`
 		} else {
 			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
 			producerResult = await this.runSubagent({
