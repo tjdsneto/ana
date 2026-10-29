@@ -306,7 +306,11 @@ export class Engine {
 			if (!dep) continue
 			const version = await this.store.latestVersion(dep.id)
 			const content = readArtifact(version?.artifactPath ?? null)
-			if (content) out.push({ type: dep.type, content })
+			if (!content) continue
+			// A dep's artifact may be binary (a rendered .mp4). Never put raw bytes in a subagent prompt
+			// (null bytes crash the CLI); hand down a descriptor instead. Text artifacts pass through.
+			const safe = content.includes("\0") ? `[binary ${dep.type} artifact: ${version?.artifactPath ?? "?"}]` : content
+			out.push({ type: dep.type, content: safe })
 		}
 		return out
 	}
