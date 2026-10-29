@@ -38,9 +38,9 @@ One per producing node, plus a modality-correct reviewer per node, in the craft 
 
 | skill | node | what the worker does |
 |---|---|---|
-| `brief` | brief | write the brief AND **classify the family** (A / B / mixed) — the choice gates everything downstream |
+| `brief` | brief | write the brief AND **classify the family** (A / B / mixed); uses `capture-site` to **ground** in the real product — the script may only feature what discovery confirmed exists (kills spec-08's scripted fiction) |
 | `moodboard` | moodboard | produce a **visual** moodboard (HTML/CSS + captured/generated imagery), not prose; a reviewer sees it |
-| `capture-site` | input to A | access the brand's **provided** site/app (never install/host): log in with brief creds, navigate/interact, capture **real screens** + flow clips |
+| `capture-site` | discovery (briefing/script) + input to A | access the brand's **provided** site/app (never install/host): log in with brief creds, navigate/interact. Two phases — **discovery** (explore to ground the brief/script in what's real) and **footage** (record a real flow clip) |
 | `storyboard` | storyboard | author the timeline in the family's dialect (A: word-anchored `film.json`; B: description·VO·SOUND beats) |
 | `voice` | voice | synthesize VO with the `tts` tool and **force-align words** → `words.json` (the timeline spine) |
 | `render` | render | assemble: produce each scene's bits (per family) and mux with ffmpeg to a word-timed, −14 LUFS cut |
