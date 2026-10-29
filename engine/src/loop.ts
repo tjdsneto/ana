@@ -6,7 +6,8 @@
 // (no sub-projects / fan-out), so dispatch is always a leaf.
 
 import { randomUUID } from "node:crypto"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import type { Dirent } from "node:fs"
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, RenderClient, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -179,20 +180,25 @@ export class Engine {
 		let producerResult: SubagentResult | undefined
 		const t0 = Date.now()
 		if (contract.rendered) {
-			const outDir = join(this.config.artifactsDir, node.productionId)
-			mkdirSync(outDir, { recursive: true })
-			const result = await this.render.render({ kind: node.type, spec: { brief: root.description ?? "", upstream }, outDir })
-			artifactPath = result.artifactPath
-			// The rendered artifact may be binary (an .mp4) — NEVER read it into the reviewer prompt
-			// (null bytes crash the subagent CLI). Describe it; the reviewer judges against the upstream
-			// artifacts plus this summary.
-			const meta = (result.meta ?? {}) as { scenes?: unknown; durationMs?: unknown; voice?: unknown }
-			draft = `[rendered ${node.type}] ${meta.scenes ?? "?"} scenes, ${meta.durationMs ?? "?"}ms, voice=${meta.voice ?? "?"} — file: ${artifactPath}`
-			// Keep the files the render was built from: register each narration audio as a production
-			// asset (path only — the file stays on the shared volume). A later cleanup pass purges them.
-			for (let i = 0; i < (result.audioFiles?.length ?? 0); i++) {
-				await this.store.addAsset({ productionId: node.productionId, nodeId: node.id, name: `narration scene ${i + 1}`, assetType: "vo", fileType: "wav", storagePath: result.audioFiles![i]! })
-			}
+			// A rendered leaf is produced by a WORKER running the render skill (skills + tools, spec 09),
+			// not by engine code. Stage the upstream (the storyboard film.json) into a work dir, dispatch a
+			// worker that runs the craft tools and writes an .mp4 there, then record that file as the
+			// artifact. No RenderClient, no stub. The worker runs from craftRoot (its .claude/skills), and
+			// the work dir is passed in the prompt.
+			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
+			mkdirSync(workDir, { recursive: true })
+			stageRenderInputs(workDir, upstream)
+			producerResult = await this.runSubagent({
+				prompt: buildRenderPrompt(contract, { brief: root.description ?? "", workDir, feedback }),
+				skill: contract.skill ?? "render-film",
+				cwd: this.config.craftRoot,
+				resumeSessionId: latest?.subagent?.sessionId,
+			})
+			const mp4 = newestMp4(workDir)
+			if (!mp4) throw new Error(`render: the skill produced no .mp4 in ${workDir} — ${producerResult.output.slice(0, 200)}`)
+			artifactPath = mp4
+			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
+			draft = `[rendered ${node.type}] file: ${mp4}`
 		} else {
 			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
 			producerResult = await this.runSubagent({
@@ -340,4 +346,54 @@ function readArtifact(path: string | null | undefined): string | undefined {
 	} catch {
 		return undefined
 	}
+}
+
+// Stage a rendered leaf's upstream artifacts as files the render skill reads: the storyboard artifact
+// becomes film.json (the worker's make-film input); any other text upstream is written beside it.
+function stageRenderInputs(workDir: string, upstream: UpstreamArtifact[]): void {
+	for (const u of upstream) {
+		if (u.content.includes("\0")) continue // never stage binary
+		const name = /storyboard|film/i.test(u.type) ? "film.json" : `${u.type}.txt`
+		writeFileSync(join(workDir, name), u.content, "utf8")
+	}
+}
+
+// The most-recently-written .mp4 under a work dir — what the render skill produced.
+function newestMp4(dir: string): string | null {
+	let bestPath: string | null = null
+	let bestT = -1
+	const walk = (d: string): void => {
+		let entries: Dirent[]
+		try {
+			entries = readdirSync(d, { withFileTypes: true })
+		} catch {
+			return
+		}
+		for (const e of entries) {
+			const p = join(d, e.name)
+			if (e.isDirectory()) walk(p)
+			else if (e.name.toLowerCase().endsWith(".mp4")) {
+				const t = statSync(p).mtimeMs
+				if (t > bestT) {
+					bestT = t
+					bestPath = p
+				}
+			}
+		}
+	}
+	walk(dir)
+	return bestPath
+}
+
+// The render leaf's task prompt: point the worker at the staged work dir; the /render-film skill (the
+// directive the runner injects) owns the steps (extract the script, run make-film, write the .mp4).
+function buildRenderPrompt(_contract: TypeContract, a: { brief: string; workDir: string; feedback?: string }): string {
+	return [
+		`Produce the finished video for this node.`,
+		`Work dir: ${a.workDir} — it holds film.json (the approved storyboard). Write the final MP4 into that same work dir.`,
+		`Brief: ${a.brief}`,
+		a.feedback ? `Revision feedback to address this round:\n${a.feedback}` : "",
+	]
+		.filter(Boolean)
+		.join("\n\n")
 }

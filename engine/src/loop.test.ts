@@ -1,10 +1,10 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner + StubRenderClient, no DB, no
 // claude -p. The tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdtempSync } from "node:fs"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ChatOutput, RenderClient, RenderInput, RenderResult, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
+import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import { FakeStore, FakeSubagentRunner } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
 import { StubRenderClient } from "./adapters/render-stub.js"
@@ -95,30 +95,10 @@ describe("happy path — produce → present → approve, end to end", () => {
 		const children = (await store.nodesFor(root.id)).filter((n) => n.parentId === root.id)
 		expect(children).toHaveLength(7)
 		expect(children.every((c) => c.status === "approved")).toBe(true)
-		// the render node produced via the StubRenderClient (a file, not a subagent draft)
+		// the render node is produced by a WORKER running the render skill, which writes an .mp4 the
+		// loop records (the fake runner drops a placeholder file — spec 09 skills+tools, no stub client)
 		const render = children.find((c) => c.type === "render")!
-		expect((await store.latestVersion(render.id))?.artifactPath).toContain("render-stub-")
-	})
-
-	it("keeps the render's input audio as production assets (path only)", async () => {
-		// a render backend that reports two narration files it kept on disk
-		const render: RenderClient = {
-			provider: "fake-audio",
-			async render(input: RenderInput): Promise<RenderResult> {
-				return { artifactPath: join(input.outDir, "render.mp4"), audioFiles: [join(input.outDir, "s0.wav"), join(input.outDir, "s1.wav")] }
-			},
-		}
-		const engine = new Engine({ store, runner: new FakeSubagentRunner(), render, types, config: makeConfig() })
-		const root = await newProduction(store)
-		for (let guard = 0; guard < 200; guard++) {
-			const did = await engine.tick()
-			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
-			if ((await store.getProduction(root.id))?.status === "approved") break
-			if (!did) break
-		}
-		const audio = (await store.assetsFor(root.id)).filter((a) => a.assetType === "vo")
-		expect(audio).toHaveLength(2)
-		expect(audio.every((a) => a.fileType === "wav" && a.storagePath.endsWith(".wav"))).toBe(true)
+		expect((await store.latestVersion(render.id))?.artifactPath?.endsWith(".mp4")).toBe(true)
 	})
 })
 
@@ -188,9 +168,9 @@ describe("interaction log + session capture", () => {
 		}
 
 		const ints = await store.interactionsFor(root.id)
-		// 6 producers (all leaves but render, which is rendered — no subagent) + 9 reviewers (reviews
-		// across all 7 leaves, render's consistency reviewer included).
-		expect(ints.filter((i) => i.role === "producer")).toHaveLength(6)
+		// 7 producers (all 7 leaves — render is now a worker running the render skill, a subagent too) +
+		// 9 reviewers (reviews across the leaves, render's consistency reviewer included).
+		expect(ints.filter((i) => i.role === "producer")).toHaveLength(7)
 		expect(ints.filter((i) => i.role.startsWith("review:"))).toHaveLength(9)
 		expect(ints.every((i) => i.engine === "fake")).toBe(true)
 		expect(ints.every((i) => typeof i.sessionId === "string")).toBe(true)
@@ -233,6 +213,13 @@ class CountingRunner implements SubagentRunner {
 	calls = 0
 	async run(input: SubagentInput): Promise<SubagentResult> {
 		this.calls++
+		if (input.skill === "render-film") {
+			const m = /Work dir:\s*(\S+)/.exec(input.prompt)
+			if (m?.[1]) {
+				mkdirSync(m[1], { recursive: true })
+				writeFileSync(join(m[1], "fake-render.mp4"), "fake")
+			}
+		}
 		return { output: input.skill?.startsWith("review:") ? "VERDICT: pass" : "a draft", sessionId: `sess-${this.calls}` }
 	}
 }
