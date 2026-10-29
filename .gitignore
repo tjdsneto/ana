@@ -19,6 +19,9 @@ engine/data/
 # secrets
 .env
 .env.local
+# per-service container env files (real files gitignored; the .*_env.example are committed)
+/*_env
+!/*_env.example
 
 # logs / os
 *.log

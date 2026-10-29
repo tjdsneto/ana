@@ -1,0 +1,30 @@
+# engine-worker CONTAINER env (the heavy knob set). Copy to .engine_env (gitignored) and edit. Every
+# var is OPTIONAL — omit a line to use the code/image default. env_file does NOT shadow the image ENV
+# for keys it omits, so RENDER_FONT and VOICE_MODEL are deliberately left out: the engine image bakes
+# them (DejaVuSans + en_US-amy-medium). Set them only to override a baked path.
+
+# Loop knobs (code defaults in engine/src/config.ts: poll 3000ms, redos 3, agreement caps 5/2).
+# POLL_INTERVAL_MS=3000
+# MAX_REDOS=3                  # rubric gate: redos before escalate
+# AGREEMENT_MAX_ROUNDS_HUMAN=5 # briefing agreement loop, actor_kind=human
+# AGREEMENT_MAX_ROUNDS_AGENT=2 # briefing agreement loop, actor_kind=agent
+
+# Subagent engine. Code default: claude. Set fake for canned output, ZERO spend, no `claude` call.
+SUBAGENT_ENGINE=fake
+# SUBAGENT_MODEL=
+# SUBAGENT_MAX_BUDGET_USD=     # per-call client-side spend cap (uncapped if empty)
+# SUBAGENT_MAX_CALLS=          # process-lifetime cap on REAL subagent calls; worker parks idle once hit
+# CLAUDE_BIN=claude            # the `claude -p` binary
+
+# Render + voice engines (independent ports). Defaults: stub + silent (no video, no speech, zero cost).
+# RENDER_PROVIDER=stub         # stub | local  (heygen|higgsfield reserved)
+# VOICE_PROVIDER=silent        # silent | piper | kokoro
+# VOICE_ID=                    # kokoro speaker id (e.g. af_sarah)
+# VOICE_BIN=                   # override the TTS binary
+# RENDER_FONT=                 # override the baked drawtext TTF
+# VOICE_MODEL=                 # override the baked piper .onnx voice
+
+# Claude subscription auth (the engine image bundles the Claude Code CLI). Generate once on the host
+# with `claude setup-token`, store in 1Password, inject here. NEVER set ANTHROPIC_API_KEY /
+# ANTHROPIC_AUTH_TOKEN — either silently outranks the OAuth token and bills the API.
+# CLAUDE_CODE_OAUTH_TOKEN=

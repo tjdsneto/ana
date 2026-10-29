@@ -1,0 +1,15 @@
+# Shared CONTAINER env — pulled by every service via `env_file` in docker-compose.yml. Copy to
+# .common_env (gitignored). These are injected into containers; host-side interpolation knobs (ports,
+# Postgres creds) stay in the root .env. Only values that differ from the code/image defaults belong
+# here.
+
+# Postgres connection for the app. The code default is localhost:5432 (a bare `node` run); the
+# containers must reach the `db` service by name on the Compose network.
+DATABASE_URL=postgres://app:app@db:5432/app
+
+# Shared artifacts dir inside the containers (bind-mounted to ./server/data/artifacts on the host).
+# Code default is ./server/data/artifacts; the containers mount it at /data/artifacts.
+ARTIFACTS_DIR=/data/artifacts
+
+# Log level for the structured JSON logger (debug | info | warn | error). Omit for the code default.
+# LOG_LEVEL=info

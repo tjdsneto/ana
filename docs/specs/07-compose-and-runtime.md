@@ -22,7 +22,12 @@ service images fill in as the code lands (it will not `up` end-to-end until then
     `mcp-server`, and `web-api` (all reference files by path; big I/O never hits the DB).
   - engine's Claude Code state (`~/.claude`: session transcripts + cached creds) → a bind-mount of
     `engine/data/claude` (engine-owned; survives recreation; keeps `--resume` working across restarts).
-- **Secrets / render keys** come from `.env` (gitignored); render stays stubbed until keys land. The
+- **Container env** comes from `env_file`: `.common_env` (DATABASE_URL, ARTIFACTS_DIR — all services)
+  and `.engine_env` (the worker's subagent/render/voice knobs + the Claude token). Both are gitignored;
+  copy the committed `.*_env.example`. Only host-side `${VAR}` interpolation (ports, Postgres creds)
+  lives in `.env`. `env_file` does **not** shadow the image ENV for keys it omits, so the engine
+  image's baked `RENDER_FONT` + `VOICE_MODEL` win unless overridden — no empty-string clobber.
+- **Secrets / render keys**: render stays stubbed until keys land. The
   real `claude` engine authenticates with the subscription via `CLAUDE_CODE_OAUTH_TOKEN` (never
   `ANTHROPIC_API_KEY` — it outranks the token and bills the API). Default `SUBAGENT_ENGINE=fake` = no
   calls, no spend. `SUBAGENT_MAX_CALLS` caps **real** subagent calls per worker process: once hit the
