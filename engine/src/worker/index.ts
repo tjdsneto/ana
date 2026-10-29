@@ -21,9 +21,8 @@ const logger = new JsonLogger({ bound: { svc: "engine" } })
 // runs end-to-end with no `claude` binary and no network. Same seam as MCP_FAKE_STORE.
 //
 // Rendering is NOT an engine concern: a render leaf is produced by a worker running the render-film
-// skill, which calls its own TTS/ffmpeg tools and writes the .mp4 (loop.ts). So the engine wires no
-// RenderClient/VoiceClient — the render-* / voice-* adapters are craft tools, used by that skill and
-// by the render-sample dev util, not by the loop.
+// skill, which drives the craft tools in craft/tools (vo / build / mix / render) and writes the .mp4
+// (loop.ts). So the engine wires no render/voice client — there is none; the craft layer owns it.
 const runnerConfig = runnerConfigFromEnv()
 
 async function main(): Promise<void> {

@@ -29,7 +29,7 @@ export interface TypeContract {
 	advisoryReview?: boolean // rollup/review never blocks (agreement types)
 	agreement?: boolean // agreement-terminal (briefing): client approval is the gate, capped back-and-forth
 	router?: boolean // emits VERDICT to gate a sibling — v0-flat: not exercised
-	rendered?: boolean // produce via the RenderClient (stubbed in v0) instead of a subagent
+	rendered?: boolean // file-output leaf: a worker runs the render skill (writes a file artifact), not a text producer
 	skill?: string // producer skill name, or "self"
 }
 

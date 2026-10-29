@@ -181,7 +181,7 @@ export class Engine {
 			// A rendered leaf is produced by a WORKER running the render skill (skills + tools, spec 09),
 			// not by engine code. Stage the upstream (the storyboard film.json) into a work dir, dispatch a
 			// worker that runs the craft tools and writes an .mp4 there, then record that file as the
-			// artifact. No RenderClient, no stub. The worker runs from craftRoot (its .claude/skills), and
+			// artifact. The engine owns no renderer — craft/tools does. The worker runs from craftRoot (its .claude/skills), and
 			// the work dir is passed in the prompt.
 			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
 			mkdirSync(workDir, { recursive: true })
