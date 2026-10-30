@@ -291,6 +291,24 @@ describe("type registry", () => {
 		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
 	})
 
+	it("wires research + brainstorm as real chain steps before the script", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		for (const t of ["research", "brainstorm", "idea", "brainstorm-select"]) expect(disk.has(t)).toBe(true)
+		// brainstorm is a planner that fans out idea agents and exposes them to its dependents (the judge)
+		expect(disk.get("brainstorm").planner).toBe(true)
+		expect(disk.get("brainstorm").childType).toBe("idea")
+		expect(disk.get("brainstorm").exposeChildrenToDependents).toBe(true)
+		// the chain: briefing → research → brainstorm → brainstorm-select → script, and script no longer
+		// hangs straight off briefing (it writes from the winning concept + the dossier)
+		const chain = disk.get("video-project").checklist ?? []
+		const byId = new Map(chain.map((e) => [e.id, e]))
+		expect(chain.map((e) => e.type).slice(0, 5)).toEqual(["briefing", "research", "brainstorm", "brainstorm-select", "script"])
+		expect(byId.get("research")?.deps).toEqual(["briefing"])
+		expect(byId.get("brainstorm")?.deps).toEqual(["briefing", "research"])
+		expect(byId.get("brainstorm-select")?.deps).toEqual(["brainstorm"])
+		expect(byId.get("script")?.deps).toEqual(["brainstorm-select", "research"])
+	})
+
 	it("loads the generative (Family B) scene pipeline", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
@@ -448,6 +466,60 @@ describe("recursive fan-out — plan node, dynamic children, rollup at depth", (
 		expect(scenes.every((s) => s.deps.includes(storyboard.id))).toBe(true)
 		// the per-unit brief from the plan rode into the scene node's description
 		expect(scenes.map((s) => s.description).sort()).toEqual(["the cta scene", "the hook scene"])
+	})
+})
+
+// Brainstorm phase: a planner fans out N `idea` candidates, then a `brainstorm-select` judge that
+// depends on the brainstorm node must SEE the developed ideas (not just the plan) — the
+// exposeChildrenToDependents path. Proves the fresh-judge gets the fanned-out units as upstream.
+const BRAINSTORM_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "brainstorm", type: "brainstorm", deps: [] },
+			{ id: "select", type: "brainstorm-select", deps: ["brainstorm"] },
+			{ id: "script", type: "script", deps: ["select"] },
+		],
+	},
+	{ type: "brainstorm", name: "Brainstorm", planner: true, childType: "idea", exposeChildrenToDependents: true, skill: "brainstorm", produce: "seed concepts" },
+	{ type: "idea", name: "Idea", produce: "develop", skill: "idea" },
+	{ type: "brainstorm-select", name: "Select", produce: "pick the winner", skill: "brainstorm-select" },
+	{ type: "script", name: "Script", produce: "script", reviews: [{ name: "craft", kind: "craft" }] },
+]
+const brainstormTypes = TypeRegistry.fromContracts(BRAINSTORM_CONTRACTS)
+
+describe("brainstorm phase — fan out ideas, fresh judge sees the developed ideas", () => {
+	it("fans out 3 idea candidates and hands all three to the select judge's upstream", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "brainstorm") {
+				return { output: '```json\n[{"name":"Angle A","brief":"a"},{"name":"Angle B","brief":"b"},{"name":"Angle C","brief":"c"}]\n```' }
+			}
+			if (input.skill === "idea") return { output: "IDEA TREATMENT (a developed concept)" }
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const engine = new Engine({ store, runner, types: brainstormTypes, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const all = await store.nodesFor(root.id)
+		const brainstorm = all.find((n) => n.type === "brainstorm")!
+		const ideas = all.filter((n) => n.type === "idea")
+		expect(ideas).toHaveLength(3) // fanned out one candidate per seed
+		expect(ideas.every((i) => i.parentId === brainstorm.id && i.status === "approved")).toBe(true)
+		// the select judge's producer call saw every developed idea in its upstream (exposeChildrenToDependents)
+		const selectCall = runner.calls.find((c) => c.skill === "brainstorm-select")!
+		expect(selectCall).toBeDefined()
+		const ideaMentions = (selectCall.prompt.match(/### idea/g) ?? []).length
+		expect(ideaMentions).toBe(3) // all three idea artifacts handed to the judge, not just the plan
 	})
 })
 

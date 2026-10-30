@@ -3,8 +3,11 @@
 	"name": "Video project",
 	"checklist": [
 		{ "id": "briefing", "type": "briefing", "deps": [] },
-		{ "id": "script", "type": "script", "deps": ["briefing"] },
-		{ "id": "moodboard", "type": "moodboard", "deps": ["briefing"] },
+		{ "id": "research", "type": "research", "deps": ["briefing"] },
+		{ "id": "brainstorm", "type": "brainstorm", "deps": ["briefing", "research"] },
+		{ "id": "brainstorm-select", "type": "brainstorm-select", "deps": ["brainstorm"] },
+		{ "id": "script", "type": "script", "deps": ["brainstorm-select", "research"] },
+		{ "id": "moodboard", "type": "moodboard", "deps": ["brainstorm-select", "research"] },
 		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
 		{ "id": "render", "type": "render", "deps": ["storyboard"] },
 		{ "id": "polish", "type": "polish", "deps": ["render"] },

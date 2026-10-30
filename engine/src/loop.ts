@@ -556,16 +556,30 @@ export class Engine {
 
 	private async collectUpstream(node: Node): Promise<UpstreamArtifact[]> {
 		const out: UpstreamArtifact[] = []
+		// A dep's artifact may be binary (a rendered .mp4). Never put raw bytes in a subagent prompt
+		// (null bytes crash the CLI); hand down a descriptor instead. Text artifacts pass through.
+		const push = (type: string, path: string | null | undefined, content: string) =>
+			out.push({ type, content: content.includes("\0") ? `[binary ${type} artifact: ${path ?? "?"}]` : content })
 		for (const depId of node.deps) {
 			const dep = await this.store.getNode(depId)
 			if (!dep) continue
 			const version = await this.store.latestVersion(dep.id)
 			const content = readArtifact(version?.artifactPath ?? null)
-			if (!content) continue
-			// A dep's artifact may be binary (a rendered .mp4). Never put raw bytes in a subagent prompt
-			// (null bytes crash the CLI); hand down a descriptor instead. Text artifacts pass through.
-			const safe = content.includes("\0") ? `[binary ${dep.type} artifact: ${version?.artifactPath ?? "?"}]` : content
-			out.push({ type: dep.type, content: safe })
+			if (content) push(dep.type, version?.artifactPath, content)
+			// If the dep fanned out and opts in (exposeChildrenToDependents, e.g. brainstorm), also hand
+			// down each approved child's artifact, so a node depending on the fan-out sees the produced
+			// units (the developed ideas), not just the plan. Off by default — a planner like `build`
+			// is unaffected, so the B-branch (build → assemble) keeps its current upstream.
+			if (this.types.has(dep.type) && this.types.get(dep.type).exposeChildrenToDependents) {
+				const kids = (await this.store.nodesFor(node.productionId))
+					.filter((n) => n.parentId === dep.id && n.status === "approved")
+					.sort((a, b) => a.position - b.position)
+				for (const kid of kids) {
+					const kv = await this.store.latestVersion(kid.id)
+					const kc = readArtifact(kv?.artifactPath ?? null)
+					if (kc) push(kid.type, kv?.artifactPath, kc)
+				}
+			}
 		}
 		return out
 	}
