@@ -353,7 +353,7 @@ function ArtifactView({
 			) : loading ? (
 				<p className="muted">Loading artifact…</p>
 			) : missing ? (
-				<p className="note">No inline content — <code>{missing}</code></p>
+				<p className="note">No inline content yet — <code>{baseName(missing)}</code> not written.</p>
 			) : content == null ? (
 				<p className="muted">—</p>
 			) : raw || kind === "text" ? (
@@ -437,14 +437,18 @@ function StoryboardBoard({ content }: { content: string }) {
 // telemetry beneath it.
 function ReviewCard({ review, interaction, defaultOpen }: { review: Review; interaction?: Interaction; defaultOpen?: boolean }) {
 	const [open, setOpen] = useState(!!defaultOpen && review.verdict === "revise")
-	const summary = firstLine(review.body) ?? review.verdict
+	const summary = firstLine(review.body)
+	// Drop a summary that just echoes the verdict ("pass"); keep real revise feedback.
+	const showSummary = summary && summary.toLowerCase() !== review.verdict.toLowerCase()
 	return (
 		<div className={`verdict ${open ? "open" : ""}`}>
 			<button className="vd-head" onClick={() => setOpen((o) => !o)}>
-				<VerdictChip verdict={review.verdict} />
-				<span className="who">{review.name}</span>
-				<span className="sum">{summary}</span>
-				<Chevron small />
+				<span className="vd-label">{reviewLabel(review)}</span>
+				{showSummary && <span className="sum">{summary}</span>}
+				<span className="vd-right">
+					<VerdictChip verdict={review.verdict} />
+					<Chevron small />
+				</span>
 			</button>
 			<div className="vd-body">
 				{review.body ? <p className="vd-text">{review.body}</p> : <p className="muted">No detail.</p>}
@@ -452,6 +456,13 @@ function ReviewCard({ review, interaction, defaultOpen }: { review: Review; inte
 			</div>
 		</div>
 	)
+}
+
+// The review axis as a human label: "Quality review", "Conformance review". Falls back to the
+// reviewer's own name (or kind) title-cased if it is something else.
+function reviewLabel(review: Review): string {
+	const base = (review.name || review.kind || "review").trim()
+	return /review$/i.test(base) ? titleCase(base) : `${titleCase(base)} review`
 }
 
 // One subagent run as aligned columns: lead (producer/reviewer), model, session, tokens, cache,
@@ -653,7 +664,12 @@ function titleCase(s: string): string {
 }
 
 function baseName(p: string): string {
-	return p.split("/").slice(-2).join("/")
+	const parts = p.split("/")
+	// Keep the last two segments (e.g. "render-v3/film.mp4") — but drop a parent that is just the
+	// production's nd_ id, which is noise in a caption, leaving only the filename.
+	const parent = parts[parts.length - 2]
+	if (parent && /^nd_[0-9a-f]+$/i.test(parent)) return parts[parts.length - 1] ?? p
+	return parts.slice(-2).join("/")
 }
 
 function firstLine(s: string | null): string | null {

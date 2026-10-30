@@ -907,9 +907,10 @@ code {
 	background: var(--surface-3);
 }
 
-.vd-head .who {
-	font-weight: 560;
+.vd-head .vd-label {
+	font-weight: 600;
 	font-size: 12.5px;
+	white-space: nowrap;
 }
 
 .vd-head .sum {
@@ -920,6 +921,13 @@ code {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.vd-head .vd-right {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
 .verdict .chev {
