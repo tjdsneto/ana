@@ -119,7 +119,7 @@ export function App() {
 					</aside>
 					<main className="detail">
 						{!detail && <p className="muted pad">Select a production.</p>}
-						{detail && <Detail detail={detail} onAction={() => selectedId && refreshDetail(selectedId)} />}
+						{detail && <Detail detail={detail} videos={videos} onAction={() => selectedId && refreshDetail(selectedId)} />}
 					</main>
 				</div>
 			)}
@@ -127,7 +127,7 @@ export function App() {
 	)
 }
 
-function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () => void }) {
+function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos: VideoFile[]; onAction: () => void }) {
 	const stages = childrenOf(detail, detail.root.id)
 	const fv = finalVideoOf(detail)
 	const head = (
@@ -161,7 +161,7 @@ function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () =
 			<div className="stages">
 				{stages.length === 0 && <p className="muted pad">No stages yet — the worker hasn't expanded this production.</p>}
 				{stages.map((nv) => (
-					<StageCard key={nv.node.id} nv={nv} detail={detail} />
+					<StageCard key={nv.node.id} nv={nv} detail={detail} videos={videos} />
 				))}
 			</div>
 			{detail.assets.length > 0 && (
@@ -182,12 +182,11 @@ function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () =
 
 // One major pipeline step as a big card. Collapsed = name + status + latest version + a preview.
 // Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
-function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: ProductionDetail; depth?: number }) {
+function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: ProductionDetail; videos: VideoFile[]; depth?: number }) {
 	const [open, setOpen] = useState(() => needsAttention(nv.node.status))
 	const kids = childrenOf(detail, nv.node.id)
 	const versions = [...nv.versions].sort((a, b) => a.version.n - b.version.n)
 	const latest = versions[versions.length - 1]
-	const nRevise = versions.reduce((s, v) => s + v.reviews.filter((r) => r.verdict === "revise").length, 0)
 
 	return (
 		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""}`}>
@@ -197,9 +196,8 @@ function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: Production
 					<span className="stage-name">
 						{titleCase(nv.node.type)}
 						<StatusChip status={nv.node.status} />
-						{nRevise > 0 && <span className="chip danger">{nRevise} revise</span>}
 					</span>
-					<span className="stage-prev">{previewOf(nv, latest)}</span>
+					<span className="stage-prev">{stageMeta(nv, latest, videos)}</span>
 				</span>
 				<span className="stage-right">
 					<Chevron />
@@ -226,7 +224,7 @@ function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: Production
 						<div className="sub-h">Sub-steps</div>
 						<div className="stages nested-stages">
 							{kids.map((k) => (
-								<StageCard key={k.node.id} nv={k} detail={detail} depth={depth + 1} />
+								<StageCard key={k.node.id} nv={k} detail={detail} videos={videos} depth={depth + 1} />
 							))}
 						</div>
 					</>
@@ -762,12 +760,34 @@ function Loop() {
 	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
 }
 
-function previewOf(nv: NodeView, latest?: { version: Version; reviews: Review[] }): string {
+// The collapsed card's sub-line: version (vN of N), then the step's rolled-up telemetry — runs,
+// cost, duration — and, for a render, the finished file's size. Only the parts that have data show,
+// so a cheap fake-engine step stays short.
+function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[]): string {
 	if (!latest) return "Nothing produced yet."
 	const n = nv.versions.length
-	const lead = n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`
-	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) return `${lead} · ${baseName(latest.version.artifactPath)}`
-	return lead
+	const parts = [n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`]
+
+	const runs = nv.interactions.length
+	if (runs > 0) parts.push(`${runs} run${runs === 1 ? "" : "s"}`)
+	const cost = nv.interactions.reduce((s, it) => s + (it.costUsd ?? 0), 0)
+	if (cost > 0) parts.push(`$${cost.toFixed(2)}`)
+	const dur = nv.interactions.reduce((s, it) => s + (it.durationMs ?? 0), 0)
+	if (dur > 0) parts.push(fmtDur(dur))
+
+	// Step-specific fact: a render's finished file size, matched from the videos list by path.
+	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
+		const vid = findVideo(videos, latest.version.artifactPath)
+		if (vid) parts.push(fmtBytes(vid.sizeBytes))
+	}
+	return parts.join(" · ")
+}
+
+// Match a version's stored (possibly absolute) artifact path to a VideoFile whose `path` is relative
+// to the artifacts root, by suffix.
+function findVideo(videos: VideoFile[], artifactPath: string): VideoFile | undefined {
+	const norm = artifactPath.replace(/\\/g, "/")
+	return videos.find((v) => norm.endsWith(v.path))
 }
 
 function titleCase(s: string): string {
