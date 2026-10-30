@@ -1,6 +1,6 @@
 ---
 name: review-storyboard-quality
-description: Quality-axis reviewer for a storyboard (film.json) — judge the board's craft on its own merits: hook, one idea, camera as a sensible tour, and especially framing/composition (does each beat fill the frame, or leave dead space with content too small to read). Emit VERDICT: pass | revise.
+description: Quality-axis reviewer for a storyboard (film.json) — judge the board's craft on its own merits: hook, one idea, camera as a sensible tour, and especially framing/composition — does each beat scale its focal element to dominate the frame, or leave the subject small at native scale with dead space and unreadable text. Emit VERDICT: pass | revise.
 ---
 
 # review-storyboard-quality
@@ -14,14 +14,16 @@ Family A (real-UI): the board is a word-anchored Ken-Burns tour of a captured pa
 - **Hook + ONE idea.** `title_card.text` is a short payoff (the outcome/value), not a logo or the brand. The board builds one idea; no beat serves a second.
 - **Camera is a deliberate tour, not a drift.** 3–5 beats, each anchored to a spoken word, each `focus` landing on the element that word names. No beat pans to a region with nothing in it.
 
-### Framing & composition — fill the frame (the load-bearing check)
+### Framing & composition — the focal element must dominate the frame (the load-bearing check)
 
-The single most common failure is a beat that **leaves too much empty space**: the content sits small in the middle with large dead margins, and any text is too small to read. Catch it here.
+The costliest failure is subtler than raw empty margins: the beat shows its subject **at native/small scale** — one product card the same size as the eight around it, a form shown at page width — so the thing the VO is naming never becomes the dominant, readable anchor. "Reduce dead space" is downstream of this. Lead with the scale check.
 
-- **Zoom fills the frame.** A beat whose `zoom` is near 1.0 shows the whole page wide, so the actual thing being discussed (a form, a button, a result) is tiny with big empty margins. Each content beat should zoom in enough that its subject dominates the frame — as a rule of thumb raise a weak beat toward `zoom` ~1.2–1.4 and set `focus` on the subject, not just the page centre. A beat that is mostly empty canvas = revise, with the specific beat and a higher zoom + tighter focus.
-- **Focus on dense content.** `focus` should land where the UI actually is (use a `mark` or the element's pixel point), not a blank header/footer band. If a beat's `focus` sits in empty page chrome, call it.
-- **Text is large enough to read.** `title_card.text` / `title_size` and `chips` must be short and big. Long chip/title text shrinks or wraps and reads small on a phone. Flag any card/chip that is too long or too small, and say to shorten it and/or raise `title_size`.
-- **No persistent dead zone.** If the framing leaves a large constant empty region across beats, say what to do: zoom in, reposition `focus`, add a `chip`/label to occupy it, or crop tighter. Name concrete space-filling moves, not just "it feels empty".
+1. **Scale the focal element to dominate.** For each content beat, identify the one element the VO names at that moment, and check the `camera` beat zooms/focuses so that element fills roughly half the frame or more — not the whole page at native size. A beat that frames nine equal tiles when one is being named = revise: raise `zoom` (rule of thumb ~1.3–1.6 for a single UI element, higher than a page-level tour) and set `focus` on that element's `mark`, so it reads as the subject, not one tile among many.
+2. **Focal hierarchy — one clear anchor.** When a beat shows several similar elements (a grid, a list), the active one must be visibly separated: larger, or emphasized with a `ring`/`chip` on it, while the rest recede. A thin outline alone is not enough — if the only cue to "which one" is a tiny caption, call it, and say to enlarge/ring the active element and let the others fall away via the zoom.
+3. **Fill the frame edge to edge.** A plate that floats with a constant border on all sides (a letterbox of page chrome/background) wastes the frame. Say to scale the capture/zoom so the UI reaches the edges, cropping the dead border.
+4. **No empty band on entry.** A beat that lands on a near-empty header/hero band before the real content scrolls in reads as dead air. Anchor the beat (via `focus`/the plate's scroll `steps`) so the content is already filling the viewport when the beat starts.
+5. **Text large enough to read.** `title_card.text` / `title_size` and `chips` must be short and big — readable on a phone. Long chip/title text shrinks or wraps. Flag any card/chip too long or too small; shorten it and/or raise `title_size`.
+6. **The end card is not a sparse frozen hold.** An `outro` whose brand mark sits tiny in a vast near-black field, held for seconds, is dead space at the worst moment. The brand mark should occupy a real share of the frame, the entrance should move, and the hold should be tight (`tail` short) — call an outro that is small, static, and long.
 
 - **Pacing.** Beats are spread sensibly across the script (no two cuts stacked on one word, no 6-second hold on a static frame). Short wins.
 - **One clear close.** `outro` carries the brand + one CTA; it is not where the hook lives.
