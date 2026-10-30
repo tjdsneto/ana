@@ -26,11 +26,12 @@ or
 ```
 VERDICT: revise
 REOPEN: moodboard — tone reads cold vs. the upbeat brief
-REOPEN: scene — scene 3 drags; tighten to the VO
+REOPEN: scene[3] — too much empty space; scale the UI/text up to fill the frame
 ```
 
-- `REOPEN: <step> — <reason>` — `<step>` is the pipeline node to redo (`script`, `moodboard`, `storyboard`, `render`, `polish`, or a scene). The engine reopens that node **and everything downstream of it** (reopen `moodboard` ⇒ storyboard, render, polish all rebuild), re-produces, and brings the result back to you.
-- Name **only** the steps that must change — each reopen cascades a rebuild, so be specific; don't reopen the whole pipeline for one weak scene.
+- `REOPEN: <step> — <reason>` — `<step>` is the pipeline node to redo (`script`, `moodboard`, `storyboard`, `render`, `polish`). The engine reopens that node **and everything downstream of it** (reopen `moodboard` ⇒ storyboard, build, render, polish all rebuild), re-produces, and brings the result back to you.
+- **Target one fanned-out unit** with `REOPEN: <step>[<n>] — <reason>` (1-based, e.g. `scene[3]`). Only that scene re-produces; its sibling scenes and the shared upstream are left untouched, and only what depends on it (render, polish) rebuilds. Use this for a single weak shot — don't reopen the whole `storyboard` or every `scene` for one bad frame.
+- Name **only** the steps that must change — each reopen cascades a rebuild, so be specific.
 - No `REOPEN` lines on a revise = you flagged problems but named nothing actionable; the engine then escalates to the human instead of reopening blindly. Always pair a `revise` with at least one `REOPEN`.
 - The reopen budget is capped — after a few passes the engine presents to the human with your notes rather than looping.
 

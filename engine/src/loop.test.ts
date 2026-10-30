@@ -399,3 +399,68 @@ describe("recursive fan-out — plan node, dynamic children, rollup at depth", (
 		expect(scenes.map((s) => s.description).sort()).toEqual(["the cta scene", "the hook scene"])
 	})
 })
+
+// The headline capability: the final review reopens ONE fanned-out scene, and only that scene's own
+// re-production + everything downstream rebuilds — its sibling scenes and the upstream are left alone.
+const SURGICAL_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "storyboard", type: "storyboard", deps: [] },
+			{ id: "build", type: "build", deps: ["storyboard"] },
+			{ id: "render", type: "render", deps: ["build"] },
+			{ id: "polish", type: "polish", deps: ["render"] },
+			{ id: "final-review", type: "final-review", deps: ["polish"] },
+		],
+	},
+	{ type: "storyboard", name: "Storyboard", produce: "board" },
+	{ type: "build", name: "Build", planner: true, childType: "scene", skill: "plan-scenes", produce: "plan scenes" },
+	{ type: "scene", name: "Scene", produce: "scene", reviews: [{ name: "craft", kind: "craft" }, { name: "consistency", kind: "consistency" }] },
+	{ type: "render", name: "Render", produce: "render" },
+	{ type: "polish", name: "Polish", produce: "polish" },
+	{ type: "final-review", name: "Final review", holisticReview: true },
+]
+const surgicalTypes = TypeRegistry.fromContracts(SURGICAL_CONTRACTS)
+
+describe("surgical reopen — one fanned-out scene, siblings untouched", () => {
+	it("reopens scene[2] alone, rebuilds downstream, leaves scenes 1 & 3 and the upstream intact", async () => {
+		let critiques = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				return { output: '```json\n[{"name":"Hook","brief":"hook"},{"name":"Problem","brief":"problem"},{"name":"CTA","brief":"cta"}]\n```' }
+			}
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1
+					? { output: "VERDICT: revise\nREOPEN: scene[2] — too much empty space, text too small" }
+					: { output: "VERDICT: pass" }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `[stub ${input.skill}] draft` }
+		})
+		const engine = new Engine({ store, runner, types: surgicalTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const all = await store.nodesFor(root.id)
+		const vcount = async (id: string) => (await store.versionsFor(id)).length
+		const scenes = all.filter((n) => n.type === "scene").sort((a, b) => a.position - b.position)
+		expect(scenes).toHaveLength(3)
+		expect(await vcount(scenes[1]!.id)).toBeGreaterThanOrEqual(2) // scene[2] (position 1) reopened → re-produced
+		expect(await vcount(scenes[0]!.id)).toBe(1) // sibling — untouched
+		expect(await vcount(scenes[2]!.id)).toBe(1) // sibling — untouched
+		const build = all.find((n) => n.type === "build")!
+		expect(build.status).toBe("approved") // re-rolled-up after the one scene re-approved
+		expect(await vcount(build.id)).toBe(1) // NOT re-planned — the fan-out stood; only the bad scene redid
+		expect(await vcount(all.find((n) => n.type === "render")!.id)).toBeGreaterThanOrEqual(2) // downstream of build → rebuilt
+		expect(await vcount(all.find((n) => n.type === "storyboard")!.id)).toBe(1) // upstream of build → untouched
+	})
+})

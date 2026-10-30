@@ -406,36 +406,70 @@ export class Engine {
 		log.info("review.holistic_reopen", { versionId: version.id, pass: used + 1, reopened })
 	}
 
-	// Send the named upstream nodes back to revise and cascade: any node transitively downstream of a
-	// reopened one is stale (built on the old version) and reopens too. Named targets carry the critic's
-	// reason as denial feedback (re-produced to address it); cascaded dependents are marked superseded
-	// (re-produced against the fresh upstream). Returns the node types actually reopened.
+	// Send the named upstream node(s) back to revise and cascade. Surgical by design: reopening one
+	// fanned-out instance (e.g. scene[2]) must NOT disturb its siblings (scenes 1, 3). Three effects,
+	// taken together over a fixpoint:
+	//   • forward — any node transitively downstream via deps edges is stale (built on the old version),
+	//     so it reopens too;
+	//   • ancestor — a node with a reopened child is no longer fully approved, so it drops back to
+	//     in-progress to re-roll-up (it does NOT re-produce — a reopened scene doesn't re-plan its build);
+	//     that un-approval then cascades forward to the ancestor's own dependents (render deps build).
+	// Named targets carry the critic's reason as denial feedback (re-produced to address it); cascaded
+	// leaves are marked superseded (re-produced against the fresh upstream); ancestors keep their version
+	// and only re-roll-up. Returns a readable label per directly-reopened node.
 	private async reopenWithCascade(reviewNode: Node, targets: ReopenTarget[]): Promise<string[]> {
-		const all = (await this.store.nodesFor(reviewNode.productionId)).filter((n) => n.parentId !== null)
+		const tree = await this.store.nodesFor(reviewNode.productionId)
+		const childrenOf = new Map<string, Node[]>()
+		for (const n of tree) {
+			if (!n.parentId) continue
+			const arr = childrenOf.get(n.parentId) ?? []
+			arr.push(n)
+			childrenOf.set(n.parentId, arr)
+		}
+
+		// resolve each target to specific node(s): an index picks one instance (1-based, by position
+		// among that type's siblings); no index reopens every node of that type.
 		const named = new Map<string, string>() // node id → reason
 		for (const t of targets) {
-			const hit = all.find((n) => n.type === t.type)
-			if (hit) named.set(hit.id, t.reason)
+			const pool = tree.filter((n) => n.parentId !== null && n.type === t.type).sort((a, b) => a.position - b.position)
+			const picks = t.index != null ? [pool[t.index - 1]] : pool
+			for (const p of picks) if (p) named.set(p.id, t.reason)
 		}
 		if (named.size === 0) return []
-		// transitive dependents of the named set (fixpoint over the deps edges)
+
+		// invalid = named ∪ forward-deps-closure ∪ ancestor-closure (to fixpoint)
 		const invalid = new Set(named.keys())
 		for (let changed = true; changed; ) {
 			changed = false
-			for (const node of all) {
-				if (!invalid.has(node.id) && node.deps.some((d) => invalid.has(d))) {
+			for (const node of tree) {
+				if (invalid.has(node.id)) continue
+				const dependsOnInvalid = node.deps.some((d) => invalid.has(d))
+				const hasInvalidChild = (childrenOf.get(node.id) ?? []).some((c) => invalid.has(c.id))
+				if (dependsOnInvalid || hasInvalidChild) {
 					invalid.add(node.id)
 					changed = true
 				}
 			}
 		}
-		for (const node of all) {
+
+		for (const node of tree) {
 			if (!invalid.has(node.id)) continue
+			const hasChildren = (childrenOf.get(node.id)?.length ?? 0) > 0
+			if (!named.has(node.id) && hasChildren) {
+				// an ancestor / parent — re-rolls-up once its subtree re-approves; keep its version
+				await this.store.updateNodeStatus(node.id, "in-progress")
+				continue
+			}
 			const v = await this.store.latestVersion(node.id)
 			if (v) await this.store.updateVersion(v.id, named.has(node.id) ? { status: "denied", feedback: named.get(node.id) } : { status: "superseded" })
 			await this.store.updateNodeStatus(node.id, "pending")
 		}
-		return [...named.keys()].map((id) => all.find((n) => n.id === id)?.type ?? "?")
+		return [...named.keys()].map((id) => {
+			const n = tree.find((x) => x.id === id)
+			if (!n) return "?"
+			const siblings = tree.filter((x) => x.parentId === n.parentId && x.type === n.type)
+			return siblings.length > 1 ? `${n.type}[${siblings.findIndex((x) => x.id === id) + 1}]` : n.type
+		})
 	}
 
 	private async present(node: Node, contract: TypeContract, versionId: string, root: Node, log: Logger, caveat?: string): Promise<void> {

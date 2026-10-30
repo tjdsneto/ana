@@ -126,21 +126,28 @@ export function parseVerdict(output: string): "pass" | "revise" {
 	return match?.[1]?.toLowerCase() === "pass" ? "pass" : "revise"
 }
 
-// The holistic final review (final-review node) names which upstream STEP to reopen and why, one per
-// line: `REOPEN: <type> — <reason>`. Parse them into {type, reason}. The engine resolves <type> to the
-// production's node of that type and reopens it (+ cascades to its dependents). No REOPEN lines on a
-// revise = the reviewer flagged problems but named nothing actionable; the engine then escalates
-// rather than reopening blindly.
+// The holistic final review (final-review node) names which upstream node to reopen and why, one per
+// line: `REOPEN: <type> — <reason>`, or `REOPEN: <type>[<n>] — <reason>` to target one instance when a
+// step has fanned out (e.g. `scene[3]` = the 3rd scene, 1-based). Parse them into {type, index?,
+// reason}. The engine resolves the target to the production's node(s) and reopens just those (+ cascade
+// to their dependents and ancestors). An index picks one instance; no index reopens every node of that
+// type (one for a single-instance step; the whole fan-out for a multi-instance one). No REOPEN lines on
+// a revise = the reviewer flagged problems but named nothing actionable; the engine escalates rather
+// than reopening blindly.
 export interface ReopenTarget {
 	type: string
+	index?: number // 1-based instance selector among siblings of that type; absent = all of that type
 	reason: string
 }
 
 export function parseReopen(output: string): ReopenTarget[] {
 	const out: ReopenTarget[] = []
 	for (const line of output.split("\n")) {
-		const m = line.match(/^\s*REOPEN:\s*([a-zA-Z0-9_-]+)\s*(?:[—:-]\s*(.*))?$/)
-		if (m?.[1]) out.push({ type: m[1], reason: (m[2] ?? "").trim() || "revised on whole-video review" })
+		const m = line.match(/^\s*REOPEN:\s*([a-zA-Z0-9_-]+)(?:\[(\d+)\])?\s*(?:[—:-]\s*(.*))?$/)
+		if (m?.[1]) {
+			const index = m[2] ? Number.parseInt(m[2], 10) : undefined
+			out.push({ type: m[1], index, reason: (m[3] ?? "").trim() || "revised on whole-video review" })
+		}
 	}
 	return out
 }
@@ -154,7 +161,7 @@ export function buildHolisticPrompt(contract: TypeContract, ctx: { brief: string
 		`You are the final whole-video reviewer for this ${contract.type}. Judge the finished video as a whole against your reviewer skill's good-video rubric — pacing, clarity, does it deliver the brief, do the parts play well together.`,
 	)
 	parts.push(
-		"Respond with `VERDICT: pass` if it is ready for the human, or `VERDICT: revise` if a specific earlier step must be redone. On revise, add one line per fix: `REOPEN: <step> — <reason>` (step = the pipeline node to redo, e.g. moodboard, script, storyboard, render, polish). Name only the steps that must change.",
+		"Respond with `VERDICT: pass` if it is ready for the human, or `VERDICT: revise` if a specific earlier step must be redone. On revise, add one line per fix: `REOPEN: <step> — <reason>` (step = the pipeline node to redo, e.g. moodboard, script, storyboard, render, polish). When a step has fanned out into numbered units, target just the bad one with `REOPEN: <step>[<n>] — <reason>` (e.g. `scene[3]`, 1-based) so its siblings are left alone. Name only the steps that must change — each reopen rebuilds everything downstream of it.",
 	)
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {
