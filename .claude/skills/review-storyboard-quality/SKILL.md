@@ -32,6 +32,26 @@ The costliest failure is subtler than raw empty margins: the beat shows its subj
 
 If the brief marks the video an explainer / case-study / walkthrough, relax the structure rules: a **sequential walkthrough** (one beat per section/step — hero, stats, each pipeline stage) is the intended shape, not a single payoff idea; **more than 5 beats is fine** and expected; the plate may be our own app dashboard. Do **not** revise for "serves a second idea" or "too many beats." Keep enforcing the load-bearing checks: framing/scale (the section a beat narrates must dominate the frame, not sit tiny in a tall page), focal hierarchy, edge-to-edge fill, no empty band on entry, and readable text. A `tail_clip` field (an appended produced clip) is allowed.
 
+## Visual review (required) — judge the board, not just the JSON
+
+You must review the **rendered board**, not only read params. Produce it yourself (independent of the producer) and look at every card:
+
+```
+node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>   # if assets/shots not already present
+python3 craft/tools/storyboard-board.py --root <workDir>
+```
+
+Open `<workDir>/board/sheet.jpg` — one card per beat: the **exact region the render will frame** beside that beat's VO line, chip and ring. A verdict given without reading the board is invalid.
+
+### Grounding — the picture must depict what the line says (load-bearing)
+
+For **every** beat, check the card's picture against its VO line and chip:
+
+- Does the framed content actually show what the VO is naming at that moment? A "seven steps" line over a crop of a briefing paragraph, a "runs on Sonnet" line over a model row reading something else, a "here's what it produced" line over a static poster — each is a **revise**. Name the beat, say what the VO claims vs. what the crop shows, and give the fix (point `focus` at the right `mark`, adjust `zoom`).
+- Any specific claim the VO makes (a number, a name, a reason) that the card does not actually show on screen is a grounding gap — revise, and say which element to frame/ring so the claim is visible.
+
+**No weak board passes.** If any beat fails grounding or the framing/scale checks above, the verdict is `revise` — do not wave a board through because the JSON looks plausible. The board is the gate; a board that misleads the viewer is a weak board however tidy its params.
+
 ## Output
 
-Exactly one line — `VERDICT: pass` or `VERDICT: revise` — then, if revise, the specific fixes: name the offending `camera` beat / `chip` / card, quote its current params (e.g. `zoom: 1.06, focus: [720, 400]`), and give the concrete change (e.g. "raise to `zoom: 1.3`, move `focus` to the form at `[720, 900]` so it fills the frame"). Judge only craft; an on-brief board that frames badly still fails here.
+Exactly one line — `VERDICT: pass` or `VERDICT: revise` — then, if revise, the specific fixes: name the offending `camera` beat / `chip` / card, quote its current params (e.g. `zoom: 1.06, focus: [720, 400]`), cite the board card (what the crop shows vs. what the VO says), and give the concrete change (e.g. "raise to `zoom: 1.3`, move `focus` to the mark `steplist` so the seven-step list fills the frame"). Judge only craft + grounding; an on-brief board that frames badly or misleads still fails here.

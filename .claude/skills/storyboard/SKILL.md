@@ -70,6 +70,26 @@ If the brief marks the video an **explainer / case-study / walkthrough**, the Fa
 - **`tail_clip`.** Set `"tail_clip": "<absolute path to an .mp4>"` to append a produced clip after the explainer ("…and here's what it produced:"). The render skill concatenates it onto the end. `outro.at` (if used) goes on the last narrated line **before** the tail; the tail plays after.
 - The hook/payoff is the *idea of the process*, not a product; on-screen chips label the current step, and the dashboard UI itself carries the detail.
 
-## 4. Before you output
+## 3c. Focus by MARK, not guessed pixels (grounds the camera)
 
-Re-check: valid JSON · `outro.at` = `line:<LAST>` (the last line) · every camera/chip `at`/`until` word is in `script` · no camera beat on the final line · all `y` ≤ `_h`. Output the JSON only.
+A beat's `focus` decides what the viewer sees while a line is spoken. Guessing a raw pixel `y` into a tall page is how a beat ends up framing the wrong thing (VO says "seven steps" while the shot still shows the briefing paragraph). Prefer a **mark**:
+
+- Add a CSS selector per focal element to `marks` (e.g. `"marks": { "steplist": ".stage-list", "f2": ".stage:nth-of-type(2) .rev.fail .feeds" }`). site-capture resolves each to a real rect; `focus: "steplist"` then frames that element exactly, whatever the layout.
+- Use a raw `[x,y]` only when there is no stable element to name. If you do, you MUST verify it on the board (step 4) — the crop shows precisely what that pixel frames.
+
+## 4. Visual board (required) — see what each beat frames, before you output
+
+The storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, capture the real plates and render the board, then look at it:
+
+```
+node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>
+python3 craft/tools/storyboard-board.py --root <workDir>
+```
+
+Open `<workDir>/board/sheet.jpg`. It is one card per camera beat: the **exact region the render will frame** (same camera math as build.py) next to that beat's VO line, chip and ring. For **every** card, confirm the picture depicts what the VO line says. If a card's picture does not match its line — wrong section, briefing text under a "steps" line, a model row that contradicts the narration — fix that beat's `focus` (point it at a `mark`, §3c) and/or `zoom`, rerun the board, and look again. A mockup frame may stand in for a beat that has no real capture: set `"mock": "<path under workDir>"` on that camera beat.
+
+Do not output `film.json` until every board card is honest. This is the gate that stops a weak board reaching render.
+
+## 5. Before you output
+
+Re-check: valid JSON · `outro.at` = `line:<LAST>` (the last line) · every camera/chip `at`/`until` word is in `script` · no camera beat on the final line · all `y` ≤ `_h` · the board (`board/sheet.jpg`) was rendered and every card's picture matches its VO line. Output the JSON only.
