@@ -33,8 +33,8 @@ The engine worker is a single long-running process (v0 — no queue/broker):
    association (spec 01) to avoid re-dispatching in-flight work.
 
 **A node is ready when:** it is `pending`, every node in its `deps` is `approved`, and its parent is
-active. The loop walks the **whole tree** (not just the root's children) — though v0 is flat (spec 01),
-so in practice one level.
+active. The loop walks the **whole tree** at any depth (not just the root's children) — expand, plan
+fan-out, and rollup all work recursively now (spec 10).
 
 ## Dispatch — resolve `node.type`, then act
 
@@ -43,8 +43,8 @@ Per ready node, resolve the type contract (spec 01) and dispatch:
 | condition | action |
 |-----------|--------|
 | `when` is present and **false** | **skip** — mark done, counts as satisfied, gates nothing |
-| static `checklist` | **expand** — create the declared child nodes, then the node waits on them *(v0-flat: not exercised)* |
-| `planner: true` | **plan** — producer emits a manifest; create one child per entry *(v0-flat: not exercised)* |
+| static `checklist` | **expand** — create the declared child nodes, then the node waits on them *(implemented at any depth — spec 10)* |
+| `planner: true` | **plan** — producer emits a manifest; create one child per entry *(implemented — spec 10)* |
 | `router: true` | **produce a verdict** — run producer, store `VERDICT: <token>`, auto-approve (gates a sibling's `when`) |
 | otherwise | **leaf** — produce → specialist reviewer set → gate |
 | parent whose children are all done | **set-level review → roll up** (artifact = its `output` child's, for a static sub-project) |
@@ -79,8 +79,9 @@ The design's three "processes" are not special cases in code; they fall out of t
 | process | types | how it concludes |
 |---------|-------|------------------|
 | **agreement-loop** | briefing | expandable + `advisory_review` + feedback reopens the `role: output` child. Terminal = **client approval** (the AI reviewer is advisory only, never blocks), with a **per-actor back-and-forth cap → escalate** (below) so it can't spin. |
-| **produce-review** | script, moodboard, storyboard, render, polish, deliver | leaf: produce → reviewer set → present. Terminal = all reviewers pass (or MAX_REDOS escalate) then client approve/feedback. |
-| **decompose** | assets, audio | `planner` fan-out → each child produce-review → set-level review → roll up. *(v0-flat: deferred.)* |
+| **produce-review** | script, moodboard, storyboard, render, polish | leaf: produce → reviewer set → present. Terminal = all reviewers pass (or MAX_REDOS escalate) then client approve/feedback. |
+| **holistic-review** | final-review | watches the whole finished video; on revise it reopens named upstream nodes and cascades (spec 10). Replaces the old `deliver`. |
+| **decompose** | build → scenes | `planner` fan-out → each child produce-review → set-level review → roll up. *(implemented — spec 10; generative path is keyless.)* |
 
 **Why briefing differs:** its input may be a full prompt or just an idea. It explores and asks until
 it has good-enough info, then presents the extracted key points for agreement. It must end with an
@@ -138,5 +139,6 @@ the data; the client/dashboard presents.**
 ## Ports this loop depends on (spec 03)
 
 The loop talks only to interfaces, never concretes: `Store` (all DB access), `SubagentRunner` (spawns
-`claude -p`; a fake returns canned output), `RenderClient` (stubbed first), `Clock` / `IdGen`
-(deterministic). So the whole loop unit-tests with no DB, no network, no `claude -p`.
+`claude -p`; a fake returns canned output), `Clock` / `IdGen` (deterministic). So the whole loop
+unit-tests with no DB, no network, no `claude -p`. Render/voice are not ports — a rendered leaf runs
+its skill (spec 09), and the fake runner writes a placeholder file in tests.

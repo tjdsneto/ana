@@ -22,8 +22,8 @@ concrete implementation.
 
 - `Store` — all DB reads/writes (productions, nodes, versions, reviews, interactions, feedback,
   budget). Tool handlers and the loop talk to `Store`, never to Postgres directly.
-- `RenderClient` — each render engine behind one interface. **Stub implementation first**; real
-  adapters when keys land.
+- Render and voice are **not** engine ports — they are worker skills (spec 09): a leaf whose skill
+  runs the craft tools (ffmpeg, TTS) directly and the engine records the artifact the skill writes.
 - `SubagentRunner` — the LLM-call backend (the "engine"). The real one shells out to `claude -p`
   (`--output-format json`, so one call returns the text, the `session_id`, and token usage + cost);
   a fake returns canned output so the loop tests with no real subagent and no network. A factory

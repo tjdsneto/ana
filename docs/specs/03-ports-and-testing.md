@@ -65,17 +65,10 @@ export interface Store {
 - The adapter is **Drizzle + `pg`** (TS-native, SQL-first). The port keeps the DB swappable; only the
   adapter + DDL are Postgres-specific.
 
-### RenderClient — each render engine behind one interface
-
-```ts
-export interface RenderClient {
-	render(input: RenderRequest): Promise<RenderResult>   // returns an artifact path + cost
-}
-```
-
-**Stub implementation first** (`StubRenderClient`) — writes a text placeholder artifact and a zero
-cost. Real adapters (HeyGen / Higgsfield / HyperFrames / local ffmpeg) land when keys arrive (pending
-Angie). The loop never knows which is behind the port.
+> **Render/voice are not ports.** An earlier draft had a `RenderClient` (and `VoiceClient` / `Exec`)
+> port; those were removed. A rendered leaf runs its skill (spec 09), which drives the craft tools
+> (ffmpeg, TTS) directly and writes the `.mp4`; the engine only records the file. There is no render
+> engine behind an interface — the craft layer owns it.
 
 ### SubagentRunner — spawns `claude -p`
 
@@ -248,12 +241,12 @@ convenience), so tests stay deterministic.
 
 ## Test strategy
 
-- **Core (loop + tool handlers):** unit tests against `FakeStore` + `FakeSubagentRunner` +
-  `StubRenderClient` + fixed `Clock`/`IdGen`. No I/O. These are the tests that matter most — they pin
-  the dispatch logic, the redo cap, the rollup, the `chat_output` emission.
+- **Core (loop + tool handlers):** unit tests against `FakeStore` + `FakeSubagentRunner` + fixed
+  `Clock`/`IdGen`. No I/O. These are the tests that matter most — they pin the dispatch logic, the
+  redo cap, the rollup, the reopen/revalidation cascade (spec 10), the `chat_output` emission.
 - **Adapters:** thin focused tests. The Postgres `Store` against a throwaway test database (a
   disposable container / Testcontainers, or a scratch schema); the `claude -p` runner
-  behind a flag (not in the default suite — it costs real calls); the render stub trivially.
+  behind a flag (not in the default suite — it costs real calls).
 - **Runner:** vitest (locked). Keep the suite fast and deterministic.
 
 > Unit testing is a goal, **not a blocker** for the first spike — don't let scaffolding stall it.

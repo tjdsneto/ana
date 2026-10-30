@@ -115,8 +115,9 @@ blocked ... not covered by allowScripts` and something then fails for a missing 
 ## Testing seam — ports and adapters (bake in from the start)
 
 An interface (port) at every external edge; core logic depends on the interface, never the concrete:
-**Store** (all DB access), **RenderClient** (each render engine; stub first), **SubagentRunner**
-(spawns `claude -p`; fake returns canned output), **Clock / id generator** (deterministic tests).
+**Store** (all DB access), **SubagentRunner** (spawns `claude -p`; fake returns canned output),
+**Clock / id generator** (deterministic tests). Render/voice are **worker skills, not ports** (spec
+09): a rendered leaf runs its skill, which drives the craft tools directly.
 Result: the loop and tool handlers unit-test against fakes — no DB, no network, no `claude -p`.
 
 ## Status

@@ -24,18 +24,16 @@ share one Postgres DB and an artifacts directory. v0 proof-of-concept, internal 
    shape, removes the single-writer ceiling, and gives `LISTEN/NOTIFY` push + `jsonb` + `SKIP LOCKED`
    claiming, so no Phase-4 migration). Adapter: Drizzle + `pg`, behind the `Store` port. v0 still runs
    **one worker**; multi-worker is a later config change (the `SKIP LOCKED` seam), not a redesign.
-4. **Ports and adapters** at every external edge (Store / RenderClient / SubagentRunner / Clock+IdGen)
+4. **Ports and adapters** at every external edge (Store / SubagentRunner / Clock+IdGen)
    so the core unit-tests against fakes. See `docs/code-standards.md`.
-5. **Render + voice are two independent, swappable ports** (`RenderClient`, `VoiceClient`), each
-   chosen by env via a factory, exactly like `SubagentRunner`. Default `RENDER_PROVIDER=stub` (text
-   placeholder) + `VOICE_PROVIDER=silent` = zero cost. `RENDER_PROVIDER=local` assembles a **real
-   `.mp4` offline with ffmpeg** (storyboard → slide cards + narration) needing **no external key**;
-   `VOICE_PROVIDER=piper|kokoro` adds offline neural narration. `heygen`/`higgsfield`/`hyperframes`
-   are reserved (keys pending Angie). The local ffmpeg assembler stays even once those land: external
-   engines swap the per-scene *visual*, ffmpeg still stitches/captions/lays-audio/transcodes. ffmpeg
-   + TTS binaries run through the `Exec` port, so every adapter unit-tests against a fake (no real
-   binary). **Live `.mp4` output needs ffmpeg + a font (+ a voice model for piper/kokoro) in the
-   engine image — not baked yet (base-image decision pending; onnxruntime/kokoro is glibc-shaped).**
+5. **Render and voice are worker skills, not engine ports.** A rendered leaf runs its skill (e.g.
+   `render-film`), which drives the craft tools directly — `site-capture` + a GSAP build + ffmpeg to
+   assemble a **real `.mp4` offline** (no external key), and `voice-production` for TTS
+   (`piper`/`kokoro`, offline). The engine owns no renderer and no `RenderClient`/`VoiceClient`/`Exec`
+   port; it records the file the skill writes. Generative engines (HeyGen/Higgsfield) are reserved for
+   the Family-B scene pipeline (keys pending Angie). **Live `.mp4` output needs ffmpeg + a font (+ a
+   voice model for piper/kokoro) in the engine image — not baked yet (base-image decision pending;
+   onnxruntime/kokoro is glibc-shaped).**
 6. **Test runner: vitest** (default; confirm on scaffolding).
 7. **Web app from v0** — a dev/observability SPA (`app/`, React + Vite) over a thin read API
    (`server/api`, Node/TS) that renders productions/nodes live (via `LISTEN/NOTIFY` → WebSocket) and

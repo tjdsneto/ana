@@ -6,7 +6,7 @@
 
 The autonomy engine knows nothing about video. Everything video-specific — brief, moodboard, storyboard, capture, render, voice, mix, and the review of each — is a **skill a worker agent follows**, not TypeScript in the loop. Where a skill needs heavy or deterministic work (encode video, synthesize speech, drive a browser, force-align words), it calls a **thin tool** (a binary/script on the worker's PATH), but the orchestration and judgment stay in the skill, run by the worker.
 
-The engine's only job for a leaf: dispatch a `claude -p` worker with the node's skill available (cwd = craft root with `.claude/skills/`, spec step below) and the node's inputs, then record the artifact. No `RenderClient`, no `VoiceClient`, no `contract.rendered` special case.
+The engine's only job for a leaf: dispatch a `claude -p` worker with the node's skill available (cwd = craft root with `.claude/skills/`, spec step below) and the node's inputs, then record the artifact. No `RenderClient`, no `VoiceClient`. A `rendered: true` leaf keeps only a thin file-handling branch — it stages the upstream into a work dir and records the `.mp4` the skill writes (binary, never read into a reviewer prompt) — but there is no render engine in the loop.
 
 ## Principle 2 — one storyboard, many bits, one assembler
 
@@ -30,7 +30,7 @@ The storyboard artifact carries **two row dialects** under one schema: Family A 
 Spec 08's renders were scaffolding for two reasons, both being fixed:
 
 1. **The skill seam was nominal** — the worker never loaded a skill. **FIXED (commit 745f9cd):** the node's skill now loads into the worker — see "Skill-loading, resolved" below.
-2. **Render was pure engine TS** — `loop.ts`'s `contract.rendered` branch called `LocalRenderClient` (ffmpeg drawtext cards) and fed the reviewer a text summary of a file it never saw. **Retire** that branch and the `RenderClient` / `VoiceClient` ports + the `render-*` / `voice-*` / `storyboard-parse` adapters as the craft path. Render becomes an ordinary subagent leaf whose skill assembles the storyboard via tools. The `Exec` port stays — it is how a tool is run, not craft logic.
+2. **Render was pure engine TS** — `loop.ts`'s `contract.rendered` branch called `LocalRenderClient` (ffmpeg drawtext cards) and fed the reviewer a text summary of a file it never saw. **DONE:** that branch and the `RenderClient` / `VoiceClient` / `Exec` ports + the `render-*` / `voice-*` / `storyboard-parse` adapters are removed. Render is now an ordinary subagent leaf whose skill assembles the storyboard via the craft tools, and the worker's skill runs those tools directly (its own shell) — there is no engine port in the craft path at all.
 
 ## Skills (worker follows — markdown)
 
