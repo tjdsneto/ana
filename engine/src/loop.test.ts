@@ -275,6 +275,10 @@ describe("type registry", () => {
 		expect(disk.get("render").rendered).toBe(true)
 		expect(disk.get("briefing").agreement).toBe(true)
 		expect(disk.get("final-review").holisticReview).toBe(true)
+		// storyboard carries the quality + conformance reviewer pair (composition lives in quality)
+		expect(disk.get("storyboard").reviews?.map((r) => r.skill)).toEqual(
+			expect.arrayContaining(["review-storyboard-quality", "review-storyboard-conformance"]),
+		)
 	})
 })
 
