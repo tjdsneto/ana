@@ -793,7 +793,7 @@ code {
 /* ---- revision timeline ---- */
 .revs {
 	display: grid;
-	margin-top: 4px;
+	margin-top: 10px;
 }
 
 .rev {
@@ -848,15 +848,15 @@ code {
 
 .rev-content {
 	min-width: 0;
-	padding: 2px 0 20px 8px;
+	padding: 5px 0 24px 10px;
 }
 
 .rev-top {
 	display: flex;
 	align-items: center;
-	gap: 9px;
+	gap: 9px 12px;
 	flex-wrap: wrap;
-	margin-bottom: 9px;
+	margin-bottom: 14px;
 }
 
 .rev-time {
