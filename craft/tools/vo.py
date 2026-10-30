@@ -122,6 +122,27 @@ def trimmed_f32(wav: Path) -> np.ndarray:
     return np.frombuffer(raw, np.float32)
 
 
+def squeeze_pauses(x: np.ndarray, max_pause: float = 0.2, floor_db: float = -45.0) -> np.ndarray:
+    """Cut silent runs inside a clip down to `max_pause` seconds (TTS comma pauses read as dead air)."""
+    hop = SR // 100  # 10 ms frames
+    n = len(x) // hop
+    if n == 0:
+        return x
+    rms = np.sqrt(np.mean(np.square(x[: n * hop].reshape(n, hop)), axis=1)) + 1e-9
+    quiet = 20 * np.log10(rms) < floor_db
+    keep, i = [], 0
+    limit = int(max_pause * 100)
+    while i < n:
+        j = i
+        while j < n and quiet[j] == quiet[i]:
+            j += 1
+        run = min(j - i, limit) if quiet[i] else j - i
+        keep.append(x[i * hop:(i + run) * hop])
+        i = j
+    keep.append(x[n * hop:])
+    return np.concatenate(keep)
+
+
 def whisper_words(clip_wav: Path, model: str) -> list[dict]:
     """Per-word {word,start,end} (clip-relative seconds) from the whisper CLI."""
     with tempfile.TemporaryDirectory() as td:
@@ -222,7 +243,7 @@ def main() -> None:
     for i, line in enumerate(lines, 1):
         raw_wav = vodir / f"s{i:02d}.wav"
         synth(line, raw_wav)
-        clips.append(trimmed_f32(raw_wav))
+        clips.append(squeeze_pauses(trimmed_f32(raw_wav)))
 
     starts, t = [], a.lead
     for c in clips:
