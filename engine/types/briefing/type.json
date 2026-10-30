@@ -5,10 +5,7 @@
 	"agreement": true,
 	"advisoryReview": true,
 	"reviews": [
-		{
-			"name": "coverage",
-			"kind": "coverage"
-		}
+		{ "name": "coverage", "kind": "coverage", "skill": "review-briefing-coverage" }
 	],
 	"skill": "self"
 }

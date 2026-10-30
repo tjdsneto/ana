@@ -3,10 +3,8 @@
 	"name": "Moodboard",
 	"produce": "Define the visual direction: palette, typography, imagery references, and the motion feel. Keep it consistent with the brief's tone.",
 	"reviews": [
-		{
-			"name": "craft",
-			"kind": "craft"
-		}
+		{ "name": "quality", "kind": "craft", "skill": "review-moodboard-quality" },
+		{ "name": "conformance", "kind": "coverage", "skill": "review-moodboard-conformance" }
 	],
 	"skill": "self"
 }

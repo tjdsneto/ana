@@ -279,6 +279,13 @@ describe("type registry", () => {
 		expect(disk.get("storyboard").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-storyboard-quality", "review-storyboard-conformance"]),
 		)
+		// every step owns its reviewer rubric (no generic lenses): moodboard gets the pair, polish +
+		// briefing their single axis. moodboard's conformance axis is what lets revalidation keep it.
+		expect(disk.get("moodboard").reviews?.map((r) => r.skill)).toEqual(
+			expect.arrayContaining(["review-moodboard-quality", "review-moodboard-conformance"]),
+		)
+		expect(disk.get("polish").reviews?.[0]?.skill).toBe("review-polish-quality")
+		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
 	})
 
 	it("loads the generative (Family B) scene pipeline", async () => {

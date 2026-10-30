@@ -3,10 +3,7 @@
 	"name": "Polish",
 	"produce": "Tighten timing, captions, and audio levels; fix the rough edges from the render pass.",
 	"reviews": [
-		{
-			"name": "craft",
-			"kind": "craft"
-		}
+		{ "name": "quality", "kind": "craft", "skill": "review-polish-quality" }
 	],
 	"skill": "self"
 }
