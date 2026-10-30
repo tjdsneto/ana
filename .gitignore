@@ -6,6 +6,8 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+# but the "build" node type is source, not build output
+!engine/types/build/
 
 # runtime state — produced artifacts on the shared volume (Postgres data lives in the db container volume)
 server/data/artifacts/

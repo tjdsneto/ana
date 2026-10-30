@@ -280,6 +280,21 @@ describe("type registry", () => {
 			expect.arrayContaining(["review-storyboard-quality", "review-storyboard-conformance"]),
 		)
 	})
+
+	it("loads the generative (Family B) scene pipeline", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
+		expect(disk.has("video-project-generative")).toBe(true)
+		const genChecklist = disk.get("video-project-generative").checklist?.map((e) => e.type) ?? []
+		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard", "build", "render"]))
+		// build is the planner that fans out one scene child per storyboard scene
+		expect(disk.get("build").planner).toBe(true)
+		expect(disk.get("build").childType).toBe("scene")
+		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
+		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
+			expect.arrayContaining(["review-scene-quality", "review-scene-conformance", "review-scene-consistency"]),
+		)
+	})
 })
 
 describe("reviewer skills — two axes (quality + conformance)", () => {
