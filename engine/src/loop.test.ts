@@ -335,35 +335,54 @@ describe("reviewer skills — two axes (quality + conformance)", () => {
 	})
 })
 
-describe("holistic final review — reopen + cascade (produce-until-approved, globally)", () => {
-	it("reopens a named upstream step, cascades its dependents, and converges", async () => {
-		// final-review says revise + REOPEN moodboard on the first pass, then passes.
+describe("holistic final review — reopen + revalidation cascade (rebuild only what the change breaks)", () => {
+	// Drive a production to done while the final review reopens `moodboard` once. `verdictFor` lets each
+	// test decide what the storyboard's consistency reviewer says WHEN REVALIDATING (the changed-upstream
+	// re-check) — pass = storyboard still holds, revise = the change broke it.
+	async function runReopen(verdictForStoryboardRevalidation: "pass" | "revise") {
 		let critiques = 0
+		let draftN = 0
 		const runner = new FakeSubagentRunner((input) => {
 			if (input.skill === "final-review") {
 				critiques++
 				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: moodboard — tone too cold" } : { output: "VERDICT: pass" }
 			}
+			// the storyboard consistency reviewer, only on a revalidation pass, returns the test's verdict
+			if (input.skill === "review:consistency" && input.prompt.includes("REVALIDATING")) {
+				return { output: `VERDICT: ${verdictForStoryboardRevalidation}` }
+			}
 			if (/^review[:-]/.test(input.skill ?? "")) return { output: "VERDICT: pass" }
-			return { output: "a draft" }
+			// unique per call so a re-produced node genuinely changes (otherwise revalidation keeps it)
+			return { output: `draft ${++draftN}` }
 		})
 		const engine = new Engine({ store, runner, types, config: makeConfig({ maxGlobalRevisions: 2 }) })
 		const root = await newProduction(store)
-
 		for (let guard = 0; guard < 400; guard++) {
 			const did = await engine.tick()
 			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
 			if ((await store.getProduction(root.id))?.status === "approved") break
 			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
 		}
-
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(critiques).toBeGreaterThanOrEqual(2) // revised once, then passed
 		const nodes = await store.nodesFor(root.id)
-		const versionsOf = async (type: string) => (await store.versionsFor(nodes.find((n) => n.type === type)!.id)).length
-		expect(critiques).toBeGreaterThanOrEqual(2) // revise, then pass
-		expect(await versionsOf("moodboard")).toBeGreaterThanOrEqual(2) // reopened → re-produced
-		expect(await versionsOf("render")).toBeGreaterThanOrEqual(2) // downstream of moodboard → rebuilt
-		expect(await versionsOf("script")).toBe(1) // NOT downstream of moodboard → untouched
+		return (type: string) => store.versionsFor(nodes.find((n) => n.type === type)!.id).then((v) => v.length)
+	}
+
+	it("keeps downstream when it still holds — the change does not propagate past what it affects", async () => {
+		const versionsOf = await runReopen("pass") // storyboard's consistency re-check passes
+		expect(await versionsOf("moodboard")).toBeGreaterThanOrEqual(2) // named target → re-produced
+		expect(await versionsOf("storyboard")).toBe(1) // revalidated against the new moodboard, still holds → KEPT
+		expect(await versionsOf("render")).toBe(1) // storyboard unchanged → render kept, cascade stopped
+		expect(await versionsOf("script")).toBe(1) // not downstream of moodboard → never touched
+	})
+
+	it("rebuilds downstream when the change breaks it — and propagates to its dependents", async () => {
+		const versionsOf = await runReopen("revise") // storyboard's consistency re-check fails
+		expect(await versionsOf("moodboard")).toBeGreaterThanOrEqual(2) // named target → re-produced
+		expect(await versionsOf("storyboard")).toBeGreaterThanOrEqual(2) // revalidation failed → rebuilt
+		expect(await versionsOf("render")).toBeGreaterThanOrEqual(2) // storyboard changed → render rebuilt (propagated)
+		expect(await versionsOf("script")).toBe(1) // still not downstream of moodboard → untouched
 	})
 })
 
@@ -448,6 +467,7 @@ const surgicalTypes = TypeRegistry.fromContracts(SURGICAL_CONTRACTS)
 describe("surgical reopen — one fanned-out scene, siblings untouched", () => {
 	it("reopens scene[2] alone, rebuilds downstream, leaves scenes 1 & 3 and the upstream intact", async () => {
 		let critiques = 0
+		let draftN = 0
 		const runner = new FakeSubagentRunner((input) => {
 			if (input.skill === "plan-scenes") {
 				return { output: '```json\n[{"name":"Hook","brief":"hook"},{"name":"Problem","brief":"problem"},{"name":"CTA","brief":"cta"}]\n```' }
@@ -459,7 +479,8 @@ describe("surgical reopen — one fanned-out scene, siblings untouched", () => {
 					: { output: "VERDICT: pass" }
 			}
 			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
-			return { output: `[stub ${input.skill}] draft` }
+			// unique per call so a re-produced node genuinely changes (otherwise revalidation keeps it)
+			return { output: `draft ${++draftN}` }
 		})
 		const engine = new Engine({ store, runner, types: surgicalTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
 		const root = await newProduction(store)

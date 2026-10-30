@@ -41,6 +41,7 @@ export type VersionStatus =
 	| "denied"
 	| "needs-work"
 	| "superseded"
+	| "stale" // an upstream was reopened; this version must be revalidated (kept if it still holds, else rebuilt) before it counts as approved again
 
 export type ReviewKind = "craft" | "coverage" | "consistency"
 export type ReviewVerdict = "pass" | "revise"

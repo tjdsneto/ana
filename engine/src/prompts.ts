@@ -93,6 +93,7 @@ export interface ReviewContext {
 	draft: string
 	brief: string
 	upstream: UpstreamArtifact[]
+	revalidation?: boolean // true = the deliverable was already approved and an upstream has since changed; judge whether it still holds, don't re-review from scratch
 }
 
 export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, ctx: ReviewContext): string {
@@ -109,6 +110,11 @@ export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, 
 			? `You are the "${review.name}" reviewer for a ${contract.type} deliverable. Judge it against your reviewer skill's rubric.`
 			: `You are the "${review.name}" reviewer for a ${contract.type} deliverable. ${lens[review.kind]}`,
 	)
+	if (ctx.revalidation) {
+		parts.push(
+			"You are REVALIDATING: the deliverable below was already approved, and an upstream input has since changed. Pass if it STILL holds against the changed upstream; revise ONLY if the change actually breaks your axis. A trivial upstream edit that does not affect you is a pass — do not rebuild for its own sake.",
+		)
+	}
 	parts.push("Respond with exactly one line: `VERDICT: pass` or `VERDICT: revise`, then (if revise) the specific, actionable fixes.")
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {

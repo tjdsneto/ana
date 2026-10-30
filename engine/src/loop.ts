@@ -11,7 +11,7 @@ import type { Dirent } from "node:fs"
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
-import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
+import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -161,6 +161,11 @@ export class Engine {
 
 	private async dispatch(node: Node): Promise<void> {
 		const contract = this.types.get(node.type)
+		// A node reopened as a cascade dependent is STALE: revalidate before anything else. If it still
+		// holds, revalidate approves it in place and we're done; if the upstream change broke it, we fall
+		// through to the normal produce path below and rebuild it.
+		const latest = await this.store.latestVersion(node.id)
+		if (latest?.status === "stale" && (await this.revalidate(node, contract, latest))) return
 		if (contract.checklist) {
 			await this.expandNode(node)
 			return
@@ -417,9 +422,11 @@ export class Engine {
 	//   • ancestor — a node with a reopened child is no longer fully approved, so it drops back to
 	//     in-progress to re-roll-up (it does NOT re-produce — a reopened scene doesn't re-plan its build);
 	//     that un-approval then cascades forward to the ancestor's own dependents (render deps build).
-	// Named targets carry the critic's reason as denial feedback (re-produced to address it); cascaded
-	// leaves are marked superseded (re-produced against the fresh upstream); ancestors keep their version
-	// and only re-roll-up. Returns a readable label per directly-reopened node.
+	// Named targets carry the critic's reason as denial feedback (re-produced to address it). Cascaded
+	// dependents are marked STALE, not rebuilt: each revalidates against the changed upstream and is kept
+	// if it still holds, rebuilt only if it doesn't (see revalidate). The final-review node is the
+	// exception — it always re-runs once the cascade settles. Ancestors keep their version and only
+	// re-roll-up. Returns a readable label per directly-reopened node.
 	private async reopenWithCascade(reviewNode: Node, targets: ReopenTarget[]): Promise<string[]> {
 		const tree = await this.store.nodesFor(reviewNode.productionId)
 		const childrenOf = new Map<string, Node[]>()
@@ -464,7 +471,15 @@ export class Engine {
 				continue
 			}
 			const v = await this.store.latestVersion(node.id)
-			if (v) await this.store.updateVersion(v.id, named.has(node.id) ? { status: "denied", feedback: named.get(node.id) } : { status: "superseded" })
+			if (v) {
+				if (named.has(node.id)) {
+					await this.store.updateVersion(v.id, { status: "denied", feedback: named.get(node.id) }) // the critic named it — re-produce to address the reason
+				} else if (this.types.get(node.type).holisticReview) {
+					await this.store.updateVersion(v.id, { status: "superseded" }) // the final review always re-runs once the cascade settles
+				} else {
+					await this.store.updateVersion(v.id, { status: "stale" }) // revalidate: kept if it still holds against the changed upstream, else rebuilt
+				}
+			}
 			await this.store.updateNodeStatus(node.id, "pending")
 		}
 		return [...named.keys()].map((id) => {
@@ -576,6 +591,69 @@ export class Engine {
 		const content = v?.artifactPath ? readArtifact(v.artifactPath) : null
 		return createHash("sha256").update(content ?? "∅").digest("hex").slice(0, 16)
 	}
+
+	// Decide a STALE node's fate against its now-changed upstream. Returns true if the existing artifact
+	// is KEPT (approved in place — the cascade stops here because this node's output did not change), or
+	// false if it must be REBUILT (the caller falls through to the produce path). Three cases:
+	//   • upstream hash unchanged  → keep (a no-op reopen reached this node);
+	//   • mechanical (rendered) node, or one with no upstream-sensitive reviewer → rebuild (can't cheaply
+	//     judge that the change is harmless, so re-produce against the new upstream);
+	//   • authoring node → re-run its coverage/consistency reviewers on the EXISTING artifact: all pass =>
+	//     keep (still holds despite the change); any revise => rebuild, fed the reviewers' notes.
+	// Quality (craft) is never re-checked — it is intrinsic and an upstream change can't lower it.
+	private async revalidate(node: Node, contract: TypeContract, latest: Version): Promise<boolean> {
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		const current = await this.computeBuiltFrom(node)
+		if (builtFromEqual(current, latest.builtFrom ?? {})) {
+			await this.store.updateVersion(latest.id, { status: "approved" })
+			await this.store.updateNodeStatus(node.id, "approved")
+			log.info("node.revalidate_keep", { reason: "upstream-unchanged" })
+			return true
+		}
+
+		const sensitive = (contract.reviews ?? []).filter((r) => r.kind === "coverage" || r.kind === "consistency")
+		if (contract.rendered || sensitive.length === 0) {
+			await this.store.updateVersion(latest.id, { status: "superseded" })
+			log.info("node.revalidate_rebuild", { reason: contract.rendered ? "mechanical" : "no-upstream-reviewer" })
+			return false
+		}
+
+		const root = await this.store.getProduction(node.productionId)
+		const draft = readArtifact(latest.artifactPath ?? null) ?? ""
+		const upstream = await this.collectUpstream(node)
+		const revise: string[] = []
+		for (const rv of sensitive) {
+			const rt0 = Date.now()
+			const rres = await this.runSubagent({
+				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, revalidation: true }),
+				skill: rv.skill ?? `review:${rv.kind}`,
+				cwd: this.config.craftRoot,
+			})
+			await this.logInteraction(node, latest.id, `review:${rv.kind}`, rres, Date.now() - rt0)
+			const verdict = parseVerdict(rres.output)
+			await this.store.addReview({ nodeId: node.id, versionId: latest.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
+			if (verdict === "revise") revise.push(rres.output)
+		}
+		if (revise.length === 0) {
+			// still holds — keep the artifact, but record that it is now validated against the new upstream
+			await this.store.updateVersion(latest.id, { status: "approved", builtFrom: current })
+			await this.store.updateNodeStatus(node.id, "approved")
+			log.info("node.revalidate_keep", { reason: "reviewers-pass" })
+			return true
+		}
+		await this.store.updateVersion(latest.id, { status: "denied", feedback: revise.join("\n\n") })
+		log.info("node.revalidate_rebuild", { reason: "reviewers-revise" })
+		return false
+	}
+}
+
+// Two builtFrom maps are equal when they carry the same deps at the same effective hashes. Used by
+// revalidation to tell a real upstream change from a no-op reopen that happened to reach this node.
+function builtFromEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+	const ak = Object.keys(a)
+	if (ak.length !== Object.keys(b).length) return false
+	for (const k of ak) if (a[k] !== b[k]) return false
+	return true
 }
 
 // ── artifact files (on the shared volume; the DB only references the path) ─────────────────────────
