@@ -3,11 +3,16 @@
 // stays in the server"), so there is no second copy of the gate logic to drift. Returns an express
 // app; index.ts wraps it in an http.Server and attaches the WebSocket.
 
+import { readFile, stat } from "node:fs/promises"
 import { approve, approveBudget, getDeliverable, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
-import { artifactsRoot, listVideos, resolveUnderRoot } from "./media.js"
+import { artifactsRoot, listVideos, locateUnderRoot } from "./media.js"
 import { listProductions, productionDetail } from "./queries.js"
+
+// Inline only small text artifacts, matching the service's own cap. Binary artifacts stream instead.
+const MAX_INLINE_ARTIFACT_BYTES = 64 * 1024
+const BINARY_ARTIFACT_RE = /\.(mp4|mov|webm|mkv|avi|wav|mp3|m4a|aac|ogg|flac|png|jpe?g|gif|webp|svg|pdf)$/i
 
 // Open CORS: the Vite dev app (port 5173) calls this API (port 8788) cross-origin. Dev tool only.
 function cors(_req: express.Request, res: express.Response, next: express.NextFunction): void {
@@ -48,9 +53,30 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 		if (typeof id !== "string") throw new Error("missing production id") // express 5 types params as string | string[]
 		return productionDetail(store, id)
 	}))
+	// The service reads content off the version's stored path, but that path may be a host-absolute
+	// path this container can't open (the engine writes two path shapes). If the content came back
+	// empty, re-root the path under the mounted artifacts dir and read it here — the same remap the
+	// video route relies on — so briefing/script/moodboard/storyboard render instead of showing a path.
 	app.get(
 		"/api/deliverable",
-		handle("deliverable", (req) => getDeliverable(store, { versionId: req.query.version_id as string | undefined, nodeId: req.query.node_id as string | undefined })),
+		handle("deliverable", async (req) => {
+			const d = await getDeliverable(store, {
+				versionId: req.query.version_id as string | undefined,
+				nodeId: req.query.node_id as string | undefined,
+			})
+			if (d.content != null || !d.artifact_path || BINARY_ARTIFACT_RE.test(d.artifact_path)) return d
+			const abs = locateUnderRoot(artifactsRoot(), d.artifact_path)
+			if (!abs) return d
+			try {
+				const info = await stat(abs)
+				if (info.isFile() && info.size <= MAX_INLINE_ARTIFACT_BYTES) {
+					return { ...d, content: await readFile(abs, "utf8") }
+				}
+			} catch {
+				// still not readable — fall through and return the path only
+			}
+			return d
+		}),
 	)
 
 	// ── video (the produced .mp4 artifacts) ───────────────────────────────────────────────────────
@@ -68,7 +94,7 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 			} else if (typeof req.query.path === "string") {
 				target = req.query.path
 			}
-			const abs = target ? resolveUnderRoot(root, target) : null
+			const abs = target ? locateUnderRoot(root, target) : null
 			if (!abs) {
 				res.status(400).json({ error: "pass ?path= (relative) or ?version_id= of an .mp4 under the artifacts root" })
 				return

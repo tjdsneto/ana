@@ -58,3 +58,18 @@ export function resolveUnderRoot(root: string, p: string): string | null {
 	if (abs !== root && !abs.startsWith(root + sep)) return null
 	return abs
 }
+
+// Map ANY stored artifact path onto this container's artifacts root, then guard it. The engine has
+// stored two shapes: a container path (/data/artifacts/…) and a host-absolute path
+// (…/server/data/artifacts/…). Only the former is mounted here, so when a path does not already sit
+// under root we re-root it on its last "artifacts/" segment — the same file, reached through the
+// mount. Returns null if it can't be placed under root. Used by both the deliverable read and the
+// video stream so neither depends on which shape the engine happened to write.
+export function locateUnderRoot(root: string, p: string): string | null {
+	const direct = resolveUnderRoot(root, p)
+	if (direct) return direct
+	const marker = `artifacts${sep}`
+	const idx = p.lastIndexOf(marker)
+	if (idx === -1) return null
+	return resolveUnderRoot(root, p.slice(idx + marker.length))
+}
