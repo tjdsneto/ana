@@ -286,6 +286,8 @@ describe("type registry", () => {
 		)
 		expect(disk.get("polish").reviews?.[0]?.skill).toBe("review-polish-quality")
 		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
+		// render's consistency gate is an owned pixel-watch (faithful execution of the board)
+		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
 	})
 
 	it("loads the generative (Family B) scene pipeline", async () => {
