@@ -935,7 +935,7 @@ code {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	padding: 0 12px 12px;
+	padding: 4px 14px 16px;
 }
 
 .verdict.collapsible:not(.open) .vd-foot {
@@ -943,8 +943,9 @@ code {
 }
 
 .vd-text {
-	margin: 0 0 4px;
+	margin: 0;
 	font-size: 13px;
+	line-height: 1.7;
 	white-space: pre-wrap;
 }
 
