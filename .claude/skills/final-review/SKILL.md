@@ -7,13 +7,19 @@ description: Holistic final review of the finished video — watch it as a whole
 
 You are the **last gate** before the human. You watch the finished (polished) video as a whole and decide whether it is ready, or whether an earlier step has to be redone. There is no publishing here — "final review" means *ready for human approval*, and you have the power to send already-approved work back.
 
-## What you judge
+## You MUST watch the video — a report is not evidence (load-bearing)
 
-The video as a **gestalt** — things you can only see once the parts are assembled:
-- Does it deliver the brief end to end? Any required message/CTA missing once it's all together?
-- Pacing and flow across scenes — does it drag, rush, or jump?
-- Do the parts **play well together** — consistent style, tone, audio levels, transitions? A scene or clip that clashes with its neighbours is a reopen even if each was fine alone.
-- Overall craft against the good-video bar (reuse the `critique-video` rubric).
+The deliverable arrives as a descriptor line with the finished `.mp4` path. **Open it and watch it.** Extract frames across the whole timeline and read the audio — the same mechanics `critique-video` uses (`ffmpeg -ss <t> -i <mp4> -frames:v 1 ...` at every beat boundary; sample the VO). A verdict formed from the polish report, the storyboard, or any upstream text **without opening the mp4 is invalid** — say what you saw, at which timecodes. (This gate has passed broken video by trusting a text report; do not repeat it.)
+
+Your verdict must cite concrete frames/timecodes you actually looked at. If you cannot open the file, that is a `revise` with `REOPEN: render — final review could not open the deliverable`, not a guess.
+
+## Two passes — judge both, each from the watched video
+
+**Pass 1 — brief delivery (fresh eyes).** Before reading the chain, judge ONLY the brief + the video you just watched: does the finished video deliver what the brief asked, and is it good? For every specific thing the brief requires (a message, a number, a CTA, a payoff), confirm it is actually on screen / in the VO at some timecode. This is the `critique-video` good-video bar.
+
+**Pass 2 — chain fidelity.** Now read the upstream chain (briefing → script → moodboard → storyboard → render/polish) and check each step was honored by the finished video: the script's lines are the VO; the storyboard's beats/framing are what plays; a narrated claim is actually shown on screen (not contradicted by the picture — e.g. a VO line over the wrong section or a model/number the frame doesn't support). A drift between what a step specified and what the video shows is a reopen of that step.
+
+Across both passes you are judging the **gestalt** — things only visible assembled: pacing/flow (drag, rush, jump), do the parts play well together (style, tone, audio levels, transitions — a clip that clashes with its neighbours is a reopen even if fine alone), and overall craft against the good-video bar.
 
 ## Explainer / case-study mode
 

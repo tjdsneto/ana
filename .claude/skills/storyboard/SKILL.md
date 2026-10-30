@@ -67,7 +67,10 @@ If the brief marks the video an **explainer / case-study / walkthrough**, the Fa
   ] } }
   ```
 - **Length & beats.** The ~12-18s / one-idea limit does **not** apply. Target the brief's length (often 40-90s) and use **one camera beat per section/step** you narrate (hero, the stats strip, each pipeline stage, …) — more than 5 beats is fine. The page is tall; set each beat's `focus` `y` on the section that beat narrates (read the real page height from a probe capture first, as in step 1).
-- **`tail_clip`.** Set `"tail_clip": "<absolute path to an .mp4>"` to append a produced clip after the explainer ("…and here's what it produced:"). The render skill concatenates it onto the end. `outro.at` (if used) goes on the last narrated line **before** the tail; the tail plays after.
+- **`tail_clip`.** Set `"tail_clip": "<absolute path to an .mp4>"` to append a produced clip after the explainer ("…and here's what it produced:"). The render skill concatenates it onto the end.
+- **Payoff ordering (the reveal must be the clip, not a poster).** When the video's payoff is "here's what it produced" followed by the produced clip:
+  - The payoff line is the **last narrated line before the tail**, and the tail must play **immediately** after it. Do **not** place a camera beat that frames a static video *poster/thumbnail* on the payoff line — a frozen thumbnail is not "watching what it produced"; the tail playing is.
+  - Do **not** wedge a sign-off card between the payoff and the tail. A pre-tail `outro` card with a sign-off ("built by the very same engine") makes the viewer watch a static card instead of the clip, then the clip. If you want that sign-off, either speak it **over the tail's closing seconds**, or omit the pre-tail outro card and let the produced clip be the ending. Keep any pre-tail `outro` to a brief transition at most, never a multi-second static hold.
 - The hook/payoff is the *idea of the process*, not a product; on-screen chips label the current step, and the dashboard UI itself carries the detail.
 
 ## 3c. Focus by MARK, not guessed pixels (grounds the camera)
