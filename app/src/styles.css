@@ -436,6 +436,66 @@ code {
 	background: var(--surface-2);
 }
 
+/* ---- live progress: dim pending work, spin + emphasise active work ---- */
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.spinner {
+	display: inline-flex;
+	align-items: center;
+	color: var(--info);
+	vertical-align: middle;
+}
+
+.spinner svg {
+	animation: spin 0.8s linear infinite;
+	transform-origin: 50% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.spinner svg {
+		animation: none;
+	}
+}
+
+/* pending steps/productions are dimmed until they start */
+.stage.pending {
+	opacity: 0.55;
+}
+
+.prod.pending {
+	opacity: 0.6;
+}
+
+/* active work: full strength + an accent edge so the eye lands on what's running */
+.stage.active {
+	opacity: 1;
+	border-color: color-mix(in srgb, var(--info) 55%, var(--line));
+	box-shadow: inset 3px 0 0 var(--info);
+}
+
+.rev.active .rev-dot {
+	color: #fff;
+	background: var(--info);
+	border-color: var(--info);
+}
+
+.verdict.flat.active {
+	border-color: color-mix(in srgb, var(--info) 45%, var(--line));
+}
+
+.vd-running {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--info);
+}
+
 .stage-head {
 	width: 100%;
 	display: flex;

@@ -108,10 +108,11 @@ export function App() {
 						<div className="rail-head"><span>Productions</span><span>{productions.length}</span></div>
 						{productions.length === 0 && <p className="muted pad">No productions yet.</p>}
 						{productions.map((p) => (
-							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""}`} onClick={() => setSelectedId(p.id)}>
+							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""} ${isActive(p.status) ? "active" : ""} ${isPending(p.status) ? "pending" : ""}`} onClick={() => setSelectedId(p.id)}>
 								<div className="ptitle">{p.name}</div>
 								<div className="pmeta">
 									<StatusChip status={p.status} />
+									{isActive(p.status) && <Spinner label="running" />}
 									<span className="muted">{fmtTime(p.createdAt)}</span>
 								</div>
 							</button>
@@ -132,7 +133,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 	const fv = finalVideoOf(detail)
 	const head = (
 		<>
-			<h2>{detail.root.name} <StatusChip status={detail.root.status} /></h2>
+			<h2>{detail.root.name} <StatusChip status={detail.root.status} />{isActive(detail.root.status) && <Spinner label="production running" />}</h2>
 			<div className="hmeta muted">
 				<span>started {fmtTime(detail.root.createdAt)}</span>
 				<span>· {detail.root.autonomyLever ?? "—"}</span>
@@ -189,13 +190,14 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 	const latest = versions[versions.length - 1]
 
 	return (
-		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""}`}>
+		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""} ${isActive(nv.node.status) ? "active" : ""} ${isPending(nv.node.status) ? "pending" : ""}`}>
 			<button className="stage-head" onClick={() => setOpen((o) => !o)}>
 				<span className="stage-ico" aria-hidden="true"><StageIcon type={nv.node.type} /></span>
 				<span className="stage-main">
 					<span className="stage-name">
 						{titleCase(nv.node.type)}
 						<StatusChip status={nv.node.status} />
+						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
 					</span>
 					<span className="stage-prev">{stageMeta(nv, latest, videos)}</span>
 				</span>
@@ -251,12 +253,14 @@ function VersionBlock({
 	const { version, reviews } = vw
 	const producer = interactions.find((i) => i.versionId === version.id && i.role === "producer")
 	const revStatus = version.status === "needs-work" || version.status === "revise" || version.status === "denied"
+	const active = isActive(version.status)
 	return (
-		<div className={`rev ${isLast ? "cur" : ""} ${revStatus && !isLast ? "fail" : ""}`}>
+		<div className={`rev ${isLast ? "cur" : ""} ${revStatus && !isLast ? "fail" : ""} ${active ? "active" : ""}`}>
 			<div className="rev-mark"><span className="rev-dot">v{version.n}</span><span className="rev-line" /></div>
 			<div className="rev-content">
 				<div className="rev-top">
 					<StatusChip status={version.status} />
+					{active && <Spinner label={`producing v${version.n}`} />}
 					<span className="rev-time">{fmtTime(version.createdAt)}</span>
 					{producer && <RunButton interaction={producer} title={`${titleCase(nodeType)} · producer · v${version.n}`} versionId={version.id} />}
 				</div>
@@ -434,12 +438,14 @@ function StoryboardBoard({ content }: { content: string }) {
 // run-details modal, so there is nothing left to expand.
 function ReviewCard({ review, interaction }: { review: Review; interaction?: Interaction }) {
 	const detail = review.verdict === "revise" ? stripVerdict(review.body) : null
+	// A review with no settled verdict yet is still running — show a spinner instead of a chip.
+	const running = !/^(pass|revise|fail|failed|denied)$/i.test((review.verdict ?? "").trim())
 	const [open, setOpen] = useState(false)
-	// Only a review with feedback to read is collapsible; a pass is just the one-line head.
+	// Only a review with feedback to read is collapsible; a pass (or a running one) is just the head.
 	const collapsible = detail != null
 	const toggle = () => collapsible && setOpen((o) => !o)
 	return (
-		<div className={`verdict flat ${collapsible ? "collapsible" : ""} ${open ? "open" : ""}`}>
+		<div className={`verdict flat ${collapsible ? "collapsible" : ""} ${open ? "open" : ""} ${running ? "active" : ""}`}>
 			<div
 				className={`vd-head ${collapsible ? "clickable" : ""}`}
 				onClick={toggle}
@@ -450,7 +456,11 @@ function ReviewCard({ review, interaction }: { review: Review; interaction?: Int
 				<span className="vd-label">{reviewLabel(review)}</span>
 				<span className="vd-right">
 					{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
-					<VerdictChip verdict={review.verdict} />
+					{running ? (
+						<span className="vd-running"><Spinner label="reviewing" />reviewing</span>
+					) : (
+						<VerdictChip verdict={review.verdict} />
+					)}
 					{collapsible && <Chevron small />}
 				</span>
 			</div>
@@ -719,6 +729,31 @@ function chipVariant(status: string): string {
 
 function needsAttention(status: string): boolean {
 	return ["in-progress", "producing", "review", "needs-work", "presentable", "escalated", "denied"].includes(status)
+}
+
+// Lifecycle buckets for the live view. Active = work is running right now (show a spinner, full
+// opacity). Pending = not started yet (dim it). Everything else (done/approved/failed) renders normally.
+const ACTIVE_STATUSES = ["in-progress", "producing", "queued-running", "running", "review", "reviewing"]
+const PENDING_STATUSES = ["pending", "queued", "blocked", "waiting", "not-started"]
+
+function isActive(status: string): boolean {
+	return ACTIVE_STATUSES.includes(status)
+}
+
+function isPending(status: string): boolean {
+	return PENDING_STATUSES.includes(status)
+}
+
+// A spinning ring marking the one thing currently executing. Respects prefers-reduced-motion (the CSS
+// stops the animation and leaves a static ring).
+function Spinner({ label }: { label?: string }) {
+	return (
+		<span className="spinner" role="status" aria-label={label ?? "running"} title={label ?? "running"}>
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
+				<path d="M12 3a9 9 0 1 0 9 9" />
+			</svg>
+		</span>
+	)
 }
 
 function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "text" {
