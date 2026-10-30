@@ -155,6 +155,7 @@ export const interactions = pgTable(
 		nodeId: text("node_id").notNull().references(() => nodes.id),
 		versionId: text("version_id").references(() => versions.id), // the version produced / reviewed (nullable)
 		role: text("role").notNull(), // producer | review:craft | review:coverage | …
+		prompt: text("prompt"), // the full prompt sent to the subagent; nullable (old rows + pre-prompt failures)
 		engine: text("engine").notNull(), // claude | codex | openai | fake
 		model: text("model"), // resolved model, when the engine reports one
 		sessionId: text("session_id"), // provider session (claude session_id); nullable

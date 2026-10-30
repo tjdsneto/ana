@@ -517,7 +517,7 @@ function RunModal({ interaction, title, versionId, output, onClose }: { interact
 				<TelemGrid it={interaction} />
 				<div className="modal-body">
 					<div className="sub-h">Prompt</div>
-					<p className="muted run-empty">Not recorded — the engine does not persist the subagent prompt yet.</p>
+					{interaction.prompt ? <pre className="raw">{interaction.prompt}</pre> : <p className="muted run-empty">Not recorded — this run predates prompt capture.</p>}
 					<div className="sub-h">Output</div>
 					{loading ? <p className="muted">Loading…</p> : body ? <pre className="raw">{body}</pre> : <p className="muted">—</p>}
 				</div>

@@ -175,6 +175,7 @@ describe("interaction log + session capture", () => {
 		expect(ints.every((i) => i.engine === "fake")).toBe(true)
 		expect(ints.every((i) => typeof i.sessionId === "string")).toBe(true)
 		expect(ints.every((i) => i.inputTokens === 0 && i.costUsd === 0)).toBe(true) // usage plumbed, fake = zero
+		expect(ints.every((i) => typeof i.prompt === "string" && i.prompt.length > 0)).toBe(true) // the prompt sent to each subagent is persisted
 	})
 
 	it("resumes the producer's session across redo rounds (one session per leaf producer)", async () => {

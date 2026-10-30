@@ -162,6 +162,7 @@ export interface NewInteraction {
 	nodeId: string
 	versionId?: string
 	role: InteractionRole
+	prompt?: string
 	engine: SubagentEngine
 	model?: string
 	sessionId?: string

@@ -202,8 +202,9 @@ export class Engine {
 		const n = (latest?.n ?? 0) + 1
 
 		const t0 = Date.now()
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream })
 		const result = await this.runSubagent({
-			prompt: buildPlannerPrompt(contract, { brief: root.description ?? "", upstream }),
+			prompt: plannerPrompt,
 			skill: contract.skill ?? node.type,
 			cwd: this.config.craftRoot,
 			resumeSessionId: latest?.subagent?.sessionId,
@@ -223,7 +224,7 @@ export class Engine {
 			builtFrom: await this.computeBuiltFrom(node),
 			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
 		})
-		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, plannerPrompt)
 
 		const childType = contract.childType
 		const childName = this.types.has(childType) ? (this.types.get(childType).name ?? childType) : childType
@@ -270,6 +271,7 @@ export class Engine {
 		let draft: string
 		let artifactPath: string
 		let producerResult: SubagentResult | undefined
+		let producerPrompt = ""
 		const t0 = Date.now()
 		if (contract.rendered) {
 			// A rendered leaf is produced by a WORKER running the render skill (skills + tools, spec 09),
@@ -280,8 +282,9 @@ export class Engine {
 			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
 			mkdirSync(workDir, { recursive: true })
 			stageRenderInputs(workDir, upstream)
+			producerPrompt = buildRenderPrompt(contract, { brief: root.description ?? "", workDir, feedback })
 			producerResult = await this.runSubagent({
-				prompt: buildRenderPrompt(contract, { brief: root.description ?? "", workDir, feedback }),
+				prompt: producerPrompt,
 				skill: contract.skill ?? "render-film",
 				cwd: this.config.craftRoot,
 				resumeSessionId: latest?.subagent?.sessionId,
@@ -292,9 +295,9 @@ export class Engine {
 			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
 			draft = `[rendered ${node.type}] file: ${mp4}`
 		} else {
-			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback })
+			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback })
 			producerResult = await this.runSubagent({
-				prompt: producePrompt,
+				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,
 				cwd: this.config.craftRoot,
 				resumeSessionId: latest?.subagent?.sessionId,
@@ -316,19 +319,20 @@ export class Engine {
 				...(producerResult ? { sessionId: producerResult.sessionId, engine: this.runner.engine, model: producerResult.model } : {}),
 			},
 		})
-		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs)
+		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs, producerPrompt)
 		log.info("node.produce", { versionId: version.id, n, rendered: Boolean(contract.rendered), ms: producerMs })
 
 		// internal quality gate — independent specialist reviewers
 		const verdicts: ("pass" | "revise")[] = []
 		for (const rv of contract.reviews ?? []) {
 			const rt0 = Date.now()
+			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream })
 			const rres = await this.runSubagent({
-				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream }),
+				prompt: reviewPrompt,
 				skill: rv.skill ?? `review:${rv.kind}`, // a reviewer skill (per-step rubric) if declared, else the kind label (generic lens, no directive)
 				cwd: this.config.craftRoot,
 			})
-			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0)
+			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0, reviewPrompt)
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
 			verdicts.push(verdict)
@@ -372,8 +376,9 @@ export class Engine {
 		const upstream = await this.collectUpstream(node)
 
 		const t0 = Date.now()
+		const holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream })
 		const result = await this.runSubagent({
-			prompt: buildHolisticPrompt(contract, { brief: root.description ?? "", upstream }),
+			prompt: holisticPrompt,
 			skill: contract.skill ?? "final-review",
 			cwd: this.config.craftRoot,
 			resumeSessionId: latest?.subagent?.sessionId,
@@ -389,7 +394,7 @@ export class Engine {
 			builtFrom: await this.computeBuiltFrom(node),
 			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
 		})
-		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, holisticPrompt)
 
 		if (parseVerdict(draft) === "pass") {
 			log.info("review.holistic", { versionId: version.id, verdict: "pass" })
@@ -529,12 +534,13 @@ export class Engine {
 
 	// Log one subagent interaction (a producer draft or one reviewer pass): engine/model/session +
 	// token usage + timing. Per-call row; whole-session usage is SUM(...) GROUP BY session_id.
-	private async logInteraction(node: Node, versionId: string, role: InteractionRole, result: SubagentResult, durationMs: number): Promise<void> {
+	private async logInteraction(node: Node, versionId: string, role: InteractionRole, result: SubagentResult, durationMs: number, prompt: string): Promise<void> {
 		await this.store.recordInteraction({
 			productionId: node.productionId,
 			nodeId: node.id,
 			versionId,
 			role,
+			prompt,
 			engine: this.runner.engine,
 			model: result.model,
 			sessionId: result.sessionId,
@@ -633,12 +639,13 @@ export class Engine {
 		const revise: string[] = []
 		for (const rv of sensitive) {
 			const rt0 = Date.now()
+			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, revalidation: true })
 			const rres = await this.runSubagent({
-				prompt: buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, revalidation: true }),
+				prompt: reviewPrompt,
 				skill: rv.skill ?? `review:${rv.kind}`,
 				cwd: this.config.craftRoot,
 			})
-			await this.logInteraction(node, latest.id, `review:${rv.kind}`, rres, Date.now() - rt0)
+			await this.logInteraction(node, latest.id, `review:${rv.kind}`, rres, Date.now() - rt0, reviewPrompt)
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: latest.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
 			if (verdict === "revise") revise.push(rres.output)
@@ -666,8 +673,9 @@ export class Engine {
 		const root = await this.store.getProduction(node.productionId)
 		const upstream = await this.collectUpstream(node)
 		const t0 = Date.now()
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream })
 		const result = await this.runSubagent({
-			prompt: buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream }),
+			prompt: plannerPrompt,
 			skill: contract.skill ?? node.type,
 			cwd: this.config.craftRoot,
 			resumeSessionId: latest.subagent?.sessionId,
@@ -704,7 +712,7 @@ export class Engine {
 			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
 		})
 		await this.store.updateVersion(latest.id, { status: "superseded" })
-		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, plannerPrompt)
 		await this.store.updateNodeStatus(node.id, "in-progress") // re-rolls-up once the reconciled children settle
 		log.info("node.replan", { versionId: version.id, kept: children.length - toCreate.length, added: toCreate.length, skipped: children.filter((c) => !wantSet.has(c.name)).length })
 		return true

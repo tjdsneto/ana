@@ -380,6 +380,7 @@ export class PgStore implements Store {
 				nodeId: input.nodeId,
 				versionId: input.versionId ?? null,
 				role: input.role,
+				prompt: input.prompt ?? null,
 				engine: input.engine,
 				model: input.model ?? null,
 				sessionId: input.sessionId ?? null,
