@@ -1,9 +1,10 @@
 // The engine loop — what the worker runs. It produces, reviews internally, and marks the data; it
 // never presents and never approves (the client does, via chat_input). Derived from spec 02.
 //
-// One tick: start any queued productions (expand the root), roll up finished ones, then claim one
-// ready node and run a single dispatch step. v0-flat: productions expand into leaf children only
-// (no sub-projects / fan-out), so dispatch is always a leaf.
+// One tick: start any queued productions (expand the root), roll up any node whose children are all
+// approved, then claim one ready node and run a single dispatch step. A node dispatches by type:
+// expand (static checklist children), plan (dynamic fan-out), holistic review, or leaf (produce an
+// artifact). Completion rolls up by approval from leaves to the root, at any depth.
 
 import { randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
@@ -12,7 +13,7 @@ import { join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
 import type { EngineConfig } from "./config.js"
-import { buildHolisticPrompt, buildProducerPrompt, buildReviewerPrompt, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
+import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
 const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work well below this
@@ -57,7 +58,7 @@ export class Engine {
 			return false
 		}
 		const started = await this.startQueuedProductions()
-		const rolled = await this.rollupProductions()
+		const rolled = await this.rollupNodes()
 		const node = await this.store.claimReadyNode()
 		if (node) {
 			await this.dispatch(node)
@@ -91,43 +92,66 @@ export class Engine {
 
 	private async startQueuedProductions(): Promise<boolean> {
 		const queued = (await this.store.listProductions()).filter((r) => r.status === "queued")
-		for (const root of queued) await this.expandProduction(root)
+		for (const root of queued) await this.expandNode(root)
 		return queued.length > 0
 	}
 
-	private async expandProduction(root: Node): Promise<void> {
-		const contract = this.types.get(root.type)
+	// Expand a node's static checklist into child nodes (the root at startup, or any claimed node whose
+	// type declares a checklist — e.g. a scene fanning into shots). Children's deps are resolved within
+	// the checklist. The node goes in-progress and rolls up when its children are approved.
+	private async expandNode(node: Node): Promise<void> {
+		const contract = this.types.get(node.type)
 		if (!contract.checklist || contract.checklist.length === 0) {
-			throw new Error(`expandProduction: type "${root.type}" has no checklist to expand`)
+			throw new Error(`expandNode: type "${node.type}" has no checklist to expand`)
 		}
 		const idByKey = new Map<string, string>() // checklist-local key → created node id
 		let position = 0
 		for (const entry of contract.checklist) {
 			const deps = (entry.deps ?? []).map((k) => {
 				const id = idByKey.get(k)
-				if (!id) throw new Error(`expandProduction: dep "${k}" referenced before it was declared`)
+				if (!id) throw new Error(`expandNode: dep "${k}" referenced before it was declared`)
 				return id
 			})
 			const name = this.types.has(entry.type) ? (this.types.get(entry.type).name ?? entry.type) : entry.type
-			const [child] = await this.store.createChildNodes(root.id, [{ type: entry.type, name, deps, position }])
-			if (!child) throw new Error("expandProduction: createChildNodes returned no row")
+			const [child] = await this.store.createChildNodes(node.id, [{ type: entry.type, name, deps, position }])
+			if (!child) throw new Error("expandNode: createChildNodes returned no row")
 			idByKey.set(entry.id, child.id)
 			position++
 		}
-		await this.store.updateNodeStatus(root.id, "in-progress")
-		this.log.info("production.start", { productionId: root.id, children: contract.checklist.length })
+		await this.store.updateNodeStatus(node.id, "in-progress")
+		this.log.info(node.parentId === null ? "production.start" : "node.expand", {
+			productionId: node.productionId,
+			nodeId: node.id,
+			children: contract.checklist.length,
+		})
 	}
 
-	// ── all children approved → root approved (production done) ────────────────────────────────────
+	// ── children all approved → parent approved, at any depth (root rolling up = production done) ────
 
-	private async rollupProductions(): Promise<boolean> {
+	private async rollupNodes(): Promise<boolean> {
 		let rolled = false
 		for (const root of (await this.store.listProductions()).filter((r) => r.status === "in-progress")) {
-			const children = (await this.store.nodesFor(root.productionId)).filter((n) => n.parentId === root.id)
-			if (children.length > 0 && children.every((c) => c.status === "approved")) {
-				await this.store.updateNodeStatus(root.id, "approved")
-				this.log.info("production.done", { productionId: root.productionId })
-				rolled = true
+			const tree = await this.store.nodesFor(root.productionId)
+			const childrenOf = new Map<string, Node[]>()
+			for (const n of tree) {
+				if (!n.parentId) continue
+				const arr = childrenOf.get(n.parentId) ?? []
+				arr.push(n)
+				childrenOf.set(n.parentId, arr)
+			}
+			// Approve any in-progress node whose children are all approved. Leaves (no children) are
+			// approved by the leaf/gate path, not here. A node and its parent can both become approvable
+			// against this one snapshot; the parent then approves on a later tick — the loop keeps ticking
+			// while anything rolled, so the tree converges bottom-up.
+			for (const n of tree) {
+				if (n.status !== "in-progress") continue
+				const kids = childrenOf.get(n.id)
+				if (!kids || kids.length === 0) continue
+				if (kids.every((c) => c.status === "approved")) {
+					await this.store.updateNodeStatus(n.id, "approved")
+					this.log.info(n.parentId === null ? "production.done" : "node.rollup", { productionId: root.productionId, nodeId: n.id, type: n.type })
+					rolled = true
+				}
 			}
 		}
 		return rolled
@@ -137,13 +161,71 @@ export class Engine {
 
 	private async dispatch(node: Node): Promise<void> {
 		const contract = this.types.get(node.type)
-		if (contract.checklist) throw new Error(`dispatch: nested sub-project "${node.type}" not supported in v0-flat`)
-		if (contract.planner || contract.router) throw new Error(`dispatch: planner/router "${node.type}" not supported in v0-flat`)
+		if (contract.checklist) {
+			await this.expandNode(node)
+			return
+		}
+		if (contract.planner) {
+			await this.dispatchPlan(node, contract)
+			return
+		}
+		if (contract.router) throw new Error(`dispatch: router "${node.type}" not supported yet`)
 		if (contract.holisticReview) {
 			await this.dispatchHolisticReview(node, contract)
 			return
 		}
 		await this.dispatchLeaf(node, contract)
+	}
+
+	// Plan dispatch (dynamic fan-out): a planner node runs a planner subagent over its approved upstream,
+	// which returns the independent units to produce as a generic {name, brief} list. The engine creates
+	// one child of childType per unit — children inherit this node's deps (so they see the same upstream
+	// and are immediately ready) and carry their unit spec in `description`. The node stays in-progress
+	// and rolls up when every child is approved. The engine never parses the upstream's own schema; the
+	// planner skill does. (Reopen later re-runs this node, re-planning against the revised upstream.)
+	private async dispatchPlan(node: Node, contract: TypeContract): Promise<void> {
+		const root = await this.store.getProduction(node.productionId)
+		if (!root) throw new Error(`dispatchPlan: production ${node.productionId} missing`)
+		if (!contract.childType) throw new Error(`dispatchPlan: planner "${node.type}" declares no childType to fan out`)
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		log.info("node.dispatch")
+
+		const upstream = await this.collectUpstream(node)
+		const priorVersions = await this.store.versionsFor(node.id)
+		const latest = priorVersions.at(-1)
+		const n = (latest?.n ?? 0) + 1
+
+		const t0 = Date.now()
+		const result = await this.runSubagent({
+			prompt: buildPlannerPrompt(contract, { brief: root.description ?? "", upstream }),
+			skill: contract.skill ?? node.type,
+			cwd: this.config.craftRoot,
+			resumeSessionId: latest?.subagent?.sessionId,
+		})
+		const planned = parsePlan(result.output)
+		if (planned.length === 0) throw new Error(`dispatchPlan: planner "${node.type}" returned no children — ${result.output.slice(0, 200)}`)
+
+		// Record the plan as a version (the fan-out decision is auditable); its children carry the gate,
+		// so the plan version is accepted on fan-out rather than reviewed.
+		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest?.id,
+			status: "approved",
+			artifactPath,
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+		})
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+
+		const childType = contract.childType
+		const childName = this.types.has(childType) ? (this.types.get(childType).name ?? childType) : childType
+		await this.store.createChildNodes(
+			node.id,
+			planned.map((c, i) => ({ type: childType, name: c.name || `${childName} ${i + 1}`, description: c.brief, deps: node.deps, position: i })),
+		)
+		await this.store.updateNodeStatus(node.id, "in-progress")
+		log.info("node.plan", { versionId: version.id, children: planned.length })
 	}
 
 	// The leaf path: produce → specialist reviewer set → gate. A failing review redoes (fed the
@@ -203,7 +285,7 @@ export class Engine {
 			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
 			draft = `[rendered ${node.type}] file: ${mp4}`
 		} else {
-			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, priorContent, feedback })
+			const producePrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback })
 			producerResult = await this.runSubagent({
 				prompt: producePrompt,
 				skill: contract.skill ?? node.type,

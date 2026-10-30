@@ -11,6 +11,7 @@ export interface UpstreamArtifact {
 export interface ProduceContext {
 	brief: string
 	upstream: UpstreamArtifact[]
+	nodeBrief?: string // this node's own spec — set when a planner fanned the node out of a larger plan (e.g. one scene's spec)
 	priorContent?: string // the version being revised
 	feedback?: string // reviewer union or user feedback that drove this redo
 }
@@ -19,6 +20,9 @@ export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext)
 	const parts: string[] = []
 	parts.push(contract.produce ?? `Produce the ${contract.type} deliverable.`)
 	parts.push(`\n## Brief\n${ctx.brief}`)
+	if (ctx.nodeBrief) {
+		parts.push(`\n## This unit's spec (produce exactly this part)\n${ctx.nodeBrief}`)
+	}
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## Approved upstream work")
 		for (const u of ctx.upstream) parts.push(`\n### ${u.type}\n${u.content}`)
@@ -30,6 +34,59 @@ export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext)
 		parts.push(`\n## Feedback to address\n${ctx.feedback}`)
 	}
 	return parts.join("\n")
+}
+
+export interface PlanChild {
+	name: string
+	brief: string
+}
+
+// A planner node fans out into dynamic children. The planner subagent reads the approved upstream
+// work and returns the independent units to produce, as a fenced ```json array of {name, brief} in
+// playback order. The engine stays domain-agnostic: it parses only this generic shape, never the
+// upstream's own schema (e.g. a storyboard's film.json). Each entry becomes one child of childType,
+// and its "brief" rides into the child's producer prompt as that unit's spec.
+export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+	const parts: string[] = []
+	parts.push(
+		contract.produce ??
+			`Plan the ${contract.type} step: read the approved upstream work and break it into the independent ${contract.childType ?? "child"} units to produce.`,
+	)
+	parts.push(
+		'Output ONLY a fenced ```json block: an array of objects {"name": string, "brief": string}, one per unit, in playback order. "brief" is the self-contained spec that unit\'s producer needs.',
+	)
+	parts.push(`\n## Brief\n${ctx.brief}`)
+	if (ctx.upstream.length > 0) {
+		parts.push("\n## Approved upstream work")
+		for (const u of ctx.upstream) parts.push(`\n### ${u.type}\n${u.content}`)
+	}
+	return parts.join("\n")
+}
+
+// Planner output → child specs. Reads the first fenced ```json array (or a bare top-level array) and
+// keeps entries that carry a name. Fail-closed: a malformed plan yields [], and the engine refuses to
+// fan out zero children (a planner that produced nothing is an error, not an empty success).
+export function parsePlan(output: string): PlanChild[] {
+	const fenced = output.match(/```(?:json)?\s*([\s\S]*?)```/)
+	const raw = fenced?.[1] ?? output
+	const start = raw.indexOf("[")
+	const end = raw.lastIndexOf("]")
+	if (start === -1 || end === -1 || end < start) return []
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(raw.slice(start, end + 1))
+	} catch {
+		return []
+	}
+	if (!Array.isArray(parsed)) return []
+	const out: PlanChild[] = []
+	for (const item of parsed) {
+		if (item && typeof item === "object" && typeof (item as { name?: unknown }).name === "string") {
+			const rec = item as { name: string; brief?: unknown }
+			out.push({ name: rec.name, brief: typeof rec.brief === "string" ? rec.brief : "" })
+		}
+	}
+	return out
 }
 
 export interface ReviewContext {

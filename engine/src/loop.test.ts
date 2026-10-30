@@ -344,3 +344,58 @@ describe("holistic final review — reopen + cascade (produce-until-approved, gl
 		expect(await versionsOf("script")).toBe(1) // NOT downstream of moodboard → untouched
 	})
 })
+
+// A video-project whose `build` step is a PLANNER that fans out one `scene` leaf per unit, then an
+// `assemble` leaf depends on the whole build. Exercises the three recursion primitives at once:
+// non-root dispatch of a plan node, dynamic fan-out, and rollup from scene → build → root.
+const RECURSIVE_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "storyboard", type: "storyboard", deps: [] },
+			{ id: "build", type: "build", deps: ["storyboard"] },
+			{ id: "assemble", type: "assemble", deps: ["build"] },
+		],
+	},
+	{ type: "storyboard", name: "Storyboard", produce: "board" },
+	{ type: "build", name: "Build", planner: true, childType: "scene", skill: "plan-scenes", produce: "plan scenes" },
+	{ type: "scene", name: "Scene", produce: "scene", reviews: [{ name: "craft", kind: "craft" }, { name: "consistency", kind: "consistency" }] },
+	{ type: "assemble", name: "Assemble", produce: "assemble" },
+]
+const recursiveTypes = TypeRegistry.fromContracts(RECURSIVE_CONTRACTS)
+
+describe("recursive fan-out — plan node, dynamic children, rollup at depth", () => {
+	it("fans a planner into scene children, each reviewed, rolling up build → root", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				return { output: '```json\n[{"name":"Hook","brief":"the hook scene"},{"name":"CTA","brief":"the cta scene"}]\n```' }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `[stub ${input.skill}] draft` }
+		})
+		const engine = new Engine({ store, runner, types: recursiveTypes, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const all = await store.nodesFor(root.id)
+		const build = all.find((n) => n.type === "build")!
+		const scenes = all.filter((n) => n.type === "scene")
+		expect(scenes).toHaveLength(2) // the planner fanned out one child per plan entry
+		expect(scenes.every((s) => s.parentId === build.id)).toBe(true) // children of the build node
+		expect(scenes.every((s) => s.status === "approved")).toBe(true)
+		expect(build.status).toBe("approved") // rolled up from its scene children, not a leaf
+		// each scene inherited the build node's upstream deps (the storyboard), so it saw the same approved work
+		const storyboard = all.find((n) => n.type === "storyboard")!
+		expect(scenes.every((s) => s.deps.includes(storyboard.id))).toBe(true)
+		// the per-unit brief from the plan rode into the scene node's description
+		expect(scenes.map((s) => s.description).sort()).toEqual(["the cta scene", "the hook scene"])
+	})
+})
