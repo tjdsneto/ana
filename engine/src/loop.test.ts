@@ -286,10 +286,13 @@ describe("type registry", () => {
 		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
 		expect(disk.has("video-project-generative")).toBe(true)
 		const genChecklist = disk.get("video-project-generative").checklist?.map((e) => e.type) ?? []
-		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard", "build", "render"]))
+		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
 		// build is the planner that fans out one scene child per storyboard scene
 		expect(disk.get("build").planner).toBe(true)
 		expect(disk.get("build").childType).toBe("scene")
+		// generative assembly is its own rendered step (concatenates scene clips), not render-film
+		expect(disk.get("assemble").rendered).toBe(true)
+		expect(disk.get("assemble").skill).toBe("assemble-scenes")
 		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
 		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-scene-quality", "review-scene-conformance", "review-scene-consistency"]),

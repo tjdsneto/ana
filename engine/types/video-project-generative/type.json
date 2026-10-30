@@ -7,8 +7,8 @@
 		{ "id": "moodboard", "type": "moodboard", "deps": ["briefing"] },
 		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
 		{ "id": "build", "type": "build", "deps": ["storyboard"] },
-		{ "id": "render", "type": "render", "deps": ["build"] },
-		{ "id": "polish", "type": "polish", "deps": ["render"] },
+		{ "id": "assemble", "type": "assemble", "deps": ["build"] },
+		{ "id": "polish", "type": "polish", "deps": ["assemble"] },
 		{ "id": "final-review", "type": "final-review", "deps": ["polish"] }
 	]
 }

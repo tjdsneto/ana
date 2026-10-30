@@ -1,0 +1,7 @@
+{
+	"type": "assemble",
+	"name": "Assemble",
+	"rendered": true,
+	"skill": "assemble-scenes",
+	"reviews": [{ "name": "consistency", "kind": "consistency" }]
+}
