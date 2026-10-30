@@ -1080,12 +1080,18 @@ code {
 
 .telem-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+	grid-template-columns: repeat(4, 1fr);
 	gap: 1px;
 	margin: 0;
 	padding: 0;
 	background: var(--line);
 	border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 560px) {
+	.telem-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
 }
 
 .telem-grid > div {
