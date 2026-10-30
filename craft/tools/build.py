@@ -141,7 +141,7 @@ for c in film.get("clicks", []):
 RINGS = []
 for i, r in enumerate(film.get("rings", [])):
     t0, t1 = T(r["at"]), T(r["until"])
-    RINGS.append([f"r{i}", t0, t1, rect(r["target"], r.get("plate", plate_at(t0)))])
+    RINGS.append([f"r{i}", t0, t1, rect(r["target"], r.get("plate", plate_at(t0))), r.get("color", "")])
 CHIPS = [[f"c{i}", T(c["at"]), T(c["until"]), c["text"]] for i, c in enumerate(film.get("chips", []))]
 
 
@@ -150,7 +150,10 @@ def md(s):
 
 
 def words(text, cls):
-    return " ".join(f'<span class="{cls}">{w}</span>' for w in text.split())
+    ws = text.split()
+    if ws and ws[-1].endswith("."):
+        ws[-1] = ws[-1].rstrip(".")  # the .big accent dot is added by CSS; avoid a doubled period
+    return " ".join(f'<span class="{cls}">{w}</span>' for w in ws)
 
 
 CURSOR = '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M4 2l15 11.5-6.6 1.1 3.9 7-2.6 1.4-3.9-7.1L4 20z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>'
@@ -192,8 +195,8 @@ def html():
     tc = film.get("title_card", {})
     oc = film.get("outro", {})
     shots = "".join(f'<img class="shot" id="s_{p.replace("-", "_")}" src="assets/shots/{p}.jpg" alt="" style="width:{VW}px;height:{round(SHOTS[p]["_h"] * K, 1)}px">' for p in PLATES)
-    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px"></div>'
-                    for rid, _, _, (x, y, w, h) in RINGS)
+    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{f';--ac:{col}' if col else ''}"></div>'
+                    for rid, _, _, (x, y, w, h), col in RINGS)
     chips = "".join(f'<div class="chip" id="{cid}">{md(txt)}</div>' for cid, _, _, txt in CHIPS)
     font_css = f'<link rel="stylesheet" href="{TH["fontCss"]}">' if TH.get("fontCss") else ""
     title = f"""
