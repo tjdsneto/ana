@@ -15,6 +15,10 @@ The video as a **gestalt** — things you can only see once the parts are assemb
 - Do the parts **play well together** — consistent style, tone, audio levels, transitions? A scene or clip that clashes with its neighbours is a reopen even if each was fine alone.
 - Overall craft against the good-video bar (reuse the `critique-video` rubric).
 
+## Explainer / case-study mode
+
+If the brief marks the video an explainer / case-study / walkthrough, judge it against **that** brief, not a 15s spot: a 40-90s sectioned walkthrough is the intended length (don't reopen for "too long" / "drags" if pacing is sensible), an establishing opener is fine, and a video that **ends by playing an appended produced clip** (`tail_clip`) is intended — the shift from the dashboard walkthrough to that final clip is the payoff, not a style clash. Still judge clarity, flow, legibility, audio, and that it delivers the explainer end to end.
+
 ## Output contract
 
 One verdict line, then — only on revise — one `REOPEN` line per step to redo:

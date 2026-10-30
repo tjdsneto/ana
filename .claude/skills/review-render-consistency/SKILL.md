@@ -20,6 +20,10 @@ The deliverable under review is a descriptor line with the `.mp4` path (the engi
 - **Audio in sync.** The voiceover matches the script and lines up with the anchored visuals; no desync, no missing/duplicated lines, no truncated tail.
 - **Cards rendered.** `title_card` and `outro` appear with the board's text, not empty or overflowing.
 
+## Explainer / case-study mode
+
+If the board declares a `tail_clip`, the rendered video **legitimately continues past the `outro`** by playing that appended clip (e.g. an explainer that ends by playing the very video it described). That tail is **expected** — do not flag it as "extra footage not in the board," "a truncated tail," or an over-long hold. Judge board fidelity on the **explainer portion** (beats, anchors, framing, captured screens, audio sync); for the tail, just confirm it plays and is not blank/broken.
+
 ## Output
 
 Exactly one line — `VERDICT: pass` or `VERDICT: revise` — then, if revise, the specific fidelity break with a timecode (what the board specified, what the render shows). Judge only fidelity; a board that was weak but rendered faithfully passes here — the weakness was the board's gate to catch, not this one's.

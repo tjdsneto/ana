@@ -15,6 +15,10 @@ You review a **script** on the **quality** axis — is it well-written craft? Yo
 - **Length fit.** The line count / word count fits the target duration (roughly 2–3 spoken words per second). Too long to speak in the target = revise.
 - **Payoff + close.** Builds to a point and ends on a clear, concrete closing line (not a trailing fade).
 
+## Explainer / case-study mode
+
+If the brief marks the video an explainer, case-study, or walkthrough, relax two rules: (1) **Length** — judge against the brief's target (often 40-90s), not a short-spot duration; a longer script that stays tight is a pass, not a "too long" revise. (2) **Opener** — an establishing line that names the subject ("Here's how…", "In this example…") is allowed and often correct, since the process *is* the subject; do not flag it as throat-clearing. Still enforce speakable, tight, no filler, and a concrete close.
+
 ## Output
 
 Exactly one line — `VERDICT: pass` or `VERDICT: revise` — then, if revise, the specific, actionable fixes (quote the weak line, say what to change). Judge only quality; a script that is well-written but off-brief still passes here.

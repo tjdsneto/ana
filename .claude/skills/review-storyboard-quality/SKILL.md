@@ -28,6 +28,10 @@ The costliest failure is subtler than raw empty margins: the beat shows its subj
 - **Pacing.** Beats are spread sensibly across the script (no two cuts stacked on one word, no 6-second hold on a static frame). Short wins.
 - **One clear close.** `outro` carries the brand + one CTA; it is not where the hook lives.
 
+## Explainer / case-study mode
+
+If the brief marks the video an explainer / case-study / walkthrough, relax the structure rules: a **sequential walkthrough** (one beat per section/step — hero, stats, each pipeline stage) is the intended shape, not a single payoff idea; **more than 5 beats is fine** and expected; the plate may be our own app dashboard. Do **not** revise for "serves a second idea" or "too many beats." Keep enforcing the load-bearing checks: framing/scale (the section a beat narrates must dominate the frame, not sit tiny in a tall page), focal hierarchy, edge-to-edge fill, no empty band on entry, and readable text. A `tail_clip` field (an appended produced clip) is allowed.
+
 ## Output
 
 Exactly one line — `VERDICT: pass` or `VERDICT: revise` — then, if revise, the specific fixes: name the offending `camera` beat / `chip` / card, quote its current params (e.g. `zoom: 1.06, focus: [720, 400]`), and give the concrete change (e.g. "raise to `zoom: 1.3`, move `focus` to the form at `[720, 900]` so it fills the frame"). Judge only craft; an on-brief board that frames badly still fails here.

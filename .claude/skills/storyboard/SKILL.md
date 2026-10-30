@@ -52,6 +52,24 @@ Read `/tmp/sb-probe/assets/shots/site.jpg` and note `_h` (page height) from `/tm
 - 3-5 camera beats, `y` within `[0, _h]`, `x: 720`. Short overall (~12-18s of script). One idea. Hook in `title_card.text` (a payoff, not the logo); brand only in the `outro`.
 - `chips` (1-2) label what's on screen; `outro` has one CTA (the site domain).
 
+## 3b. Explainer / case-study mode (app-dashboard walkthrough)
+
+If the brief marks the video an **explainer / case-study / walkthrough**, the Family-A shape still applies but these rules change:
+
+- **The "site" can be our own app dashboard.** `plates.*.url` may be a local app URL (e.g. `http://localhost:5199/`). It is a single-page app, so there is no deep link — drive it with the plate's `steps`. Each step may carry a `js` string that runs **in the page** and can be async (click a list item, expand cards, wait). Example to open a specific production and expand its stage cards:
+  ```json
+  "plates": { "dash": { "url": "http://localhost:5199/", "steps": [
+    { "wait": 1200 },
+    { "js": "const b=[...document.querySelectorAll('button.prod')].find(x=>/<NAME SUBSTR>/i.test(x.textContent)&&/approved/i.test(x.textContent)); if(b)b.click();" },
+    { "wait": 1500 },
+    { "js": "document.querySelectorAll('button.stage-head').forEach(h=>{if(!h.closest('.stage').classList.contains('open'))h.click()});" },
+    { "wait": 1500 }
+  ] } }
+  ```
+- **Length & beats.** The ~12-18s / one-idea limit does **not** apply. Target the brief's length (often 40-90s) and use **one camera beat per section/step** you narrate (hero, the stats strip, each pipeline stage, …) — more than 5 beats is fine. The page is tall; set each beat's `focus` `y` on the section that beat narrates (read the real page height from a probe capture first, as in step 1).
+- **`tail_clip`.** Set `"tail_clip": "<absolute path to an .mp4>"` to append a produced clip after the explainer ("…and here's what it produced:"). The render skill concatenates it onto the end. `outro.at` (if used) goes on the last narrated line **before** the tail; the tail plays after.
+- The hook/payoff is the *idea of the process*, not a product; on-screen chips label the current step, and the dashboard UI itself carries the detail.
+
 ## 4. Before you output
 
 Re-check: valid JSON · `outro.at` = `line:<LAST>` (the last line) · every camera/chip `at`/`until` word is in `script` · no camera beat on the final line · all `y` ≤ `_h`. Output the JSON only.

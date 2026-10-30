@@ -23,11 +23,17 @@ The task prompt gives a **work dir** that already contains `film.json` (the appr
    ```
    - The **voice** step inside the chain is owned by the `voice-production` skill — pick the TTS engine per that skill and pass `--voice-engine <kokoro|piper>` (default `kokoro`). If `voice-production` already produced `<workDir>/media/vo.wav` + `media/words.json`, pass `--skip-voice` so the chain reuses them instead of re-synthesizing.
    - If the plates are already captured in `<workDir>/assets/shots/` (upstream provided them), add `--skip-capture`.
-3. Confirm `<workDir>/film.mp4` exists and is non-empty (`ls -la <workDir>/film.mp4`).
+   - Plates may drive an app UI: a plate `step` can carry a `js` string (async OK) that runs in the page to click/expand before the shot (used for dashboard walkthroughs). `make-film` runs them as-is.
+3. **Tail clip (explainer mode).** If `film.json` has a `tail_clip` (an absolute `.mp4` path to append — e.g. the very video this explainer describes), concatenate it after the render so the deliverable ends by playing it:
+   ```
+   craft/tools/append-clip.sh <workDir>/film.mp4 <tail_clip> <workDir>/film-final.mp4
+   ```
+   `film-final.mp4` is then THE deliverable (it is the newest .mp4 in the work dir, so the engine records it). If there is no `tail_clip`, skip this step — `film.mp4` is the deliverable.
+4. Confirm the deliverable exists and is non-empty (`ls -la <workDir>/film-final.mp4` if you appended a tail, else `<workDir>/film.mp4`).
 
 ## Output
 
-Reply with just the path `<workDir>/film.mp4`. Nothing else. Do not read the .mp4 into your reply (it is binary).
+Reply with just the deliverable path — `<workDir>/film-final.mp4` if you appended a `tail_clip`, otherwise `<workDir>/film.mp4`. Nothing else. Do not read the .mp4 into your reply (it is binary).
 
 ## If a step fails
 
