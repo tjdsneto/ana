@@ -1,8 +1,10 @@
-// The dashboard UI. Left: productions. Right: the selected production's live node tree + the gate
-// (inbox). It refetches on every WebSocket nudge, so the view tracks the worker in real time. Low
-// ceremony on purpose (spec 06) — a window into the DB while we build, not a product surface.
+// The dashboard UI. Left: productions. Right: the selected production rendered as a column of big
+// stage cards (briefing, script, moodboard, storyboard, render, …). Each card expands to a revision
+// timeline: every version with the artifact rendered in its proper form, the feedback that version
+// received, and the producer/reviewer run behind it (model, session, tokens, cost, duration). It
+// refetches on every WebSocket nudge, so the view tracks the worker in real time.
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
 	approveBudget,
 	approveOutput,
@@ -18,10 +20,13 @@ import {
 	type Node,
 	type NodeView,
 	type ProductionDetail,
+	type Review,
 	sendFeedback,
 	type UsageSummary,
+	type Version,
 	type VideoFile,
 } from "./api.js"
+import { Markdown } from "./markdown.js"
 import { useLive } from "./useLive.js"
 
 type Tab = "productions" | "videos"
@@ -36,39 +41,41 @@ export function App() {
 	const selectedRef = useRef<string | null>(null)
 	selectedRef.current = selectedId
 
-	const refreshList = useCallback(async () => {
+	const refreshList = async () => {
 		try {
 			setProductions(await getProductions())
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		}
-	}, [])
+	}
 
-	const refreshDetail = useCallback(async (id: string) => {
+	const refreshDetail = async (id: string) => {
 		try {
 			setDetail(await getProduction(id))
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		}
-	}, [])
+	}
 
-	const refreshVideos = useCallback(async () => {
+	const refreshVideos = async () => {
 		try {
 			setVideos(await getVideos())
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e))
 		}
-	}, [])
+	}
 
 	useEffect(() => {
 		void refreshList()
 		void refreshVideos()
-	}, [refreshList, refreshVideos])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	useEffect(() => {
 		if (selectedId) void refreshDetail(selectedId)
 		else setDetail(null)
-	}, [selectedId, refreshDetail])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedId])
 
 	const { connected } = useLive(() => {
 		void refreshList()
@@ -79,47 +86,402 @@ export function App() {
 
 	return (
 		<div className="app">
-			<header>
-				<h1>Engine dashboard</h1>
+			<header className="topline">
+				<div className="brand">
+					<span className={`dot ${connected ? "on" : "off"}`} title={connected ? "live" : "disconnected"} />
+					<h1>Engine</h1>
+					<span className="sub">production dashboard</span>
+				</div>
 				<nav className="tabs">
 					<button className={tab === "productions" ? "on" : ""} onClick={() => setTab("productions")}>Productions</button>
-					<button className={tab === "videos" ? "on" : ""} onClick={() => setTab("videos")}>Videos {videos.length > 0 && <span className="badge">{videos.length}</span>}</button>
+					<button className={tab === "videos" ? "on" : ""} onClick={() => setTab("videos")}>
+						Videos {videos.length > 0 && <span className="badge">{videos.length}</span>}
+					</button>
 				</nav>
-				<span className={`dot ${connected ? "on" : "off"}`} title={connected ? "live" : "disconnected"} />
 			</header>
 			{error && <div className="error" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
 			{tab === "videos" ? (
 				<Gallery videos={videos} />
 			) : (
-				<div className="cols">
-					<aside>
-						<h2>Productions</h2>
-						{productions.length === 0 && <p className="muted">No productions yet.</p>}
-						<ul className="plist">
-							{productions.map((p) => (
-								<li key={p.id} className={p.id === selectedId ? "sel" : ""} onClick={() => setSelectedId(p.id)}>
-									<div className="pname">{p.name}</div>
-									<div className="pmeta">
-										<Pill status={p.status} /> <span className="muted">{p.autonomyLever ?? "—"} · {p.actorKind ?? "—"}</span>
-									</div>
-								</li>
-							))}
-						</ul>
+				<div className="shell">
+					<aside className="rail">
+						<div className="rail-head"><span>Productions</span><span>{productions.length}</span></div>
+						{productions.length === 0 && <p className="muted pad">No productions yet.</p>}
+						{productions.map((p) => (
+							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""}`} onClick={() => setSelectedId(p.id)}>
+								<div className="ptitle">{p.name}</div>
+								<div className="pmeta">
+									<StatusChip status={p.status} />
+									<span className="muted">{fmtTime(p.createdAt)}</span>
+								</div>
+							</button>
+						))}
 					</aside>
-					<section>
-						{!detail && <p className="muted">Select a production.</p>}
+					<main className="detail">
+						{!detail && <p className="muted pad">Select a production.</p>}
 						{detail && <Detail detail={detail} onAction={() => selectedId && refreshDetail(selectedId)} />}
-					</section>
+					</main>
 				</div>
 			)}
 		</div>
 	)
 }
 
-// The Videos tab: every produced .mp4 on disk, newest first, grouped by folder, each with an inline
-// player. This is where the short/motion renders (on disk but not attached to a DB version) live.
+function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () => void }) {
+	const stages = childrenOf(detail, detail.root.id)
+	return (
+		<>
+			<div className="phead">
+				<h2>{detail.root.name} <StatusChip status={detail.root.status} /></h2>
+				<div className="hmeta muted">
+					<span>started {fmtTime(detail.root.createdAt)}</span>
+					<span>· {detail.root.autonomyLever ?? "—"}</span>
+					<span>· {detail.root.actorKind ?? "—"}</span>
+					<span className="idtag" title={detail.root.id}>{shortId(detail.root.id)}</span>
+				</div>
+				<UsageStrip usage={detail.usage} />
+			</div>
+			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} />
+			<div className="stages">
+				{stages.length === 0 && <p className="muted pad">No stages yet — the worker hasn't expanded this production.</p>}
+				{stages.map((nv) => (
+					<StageCard key={nv.node.id} nv={nv} detail={detail} />
+				))}
+			</div>
+			{detail.assets.length > 0 && (
+				<div className="stage">
+					<div className="stage-body open-static">
+						<div className="sub-h">Assets</div>
+						<ul className="assets">
+							{detail.assets.map((a) => (
+								<li key={a.id}><code>{a.assetType}/{a.fileType}</code> {a.name} <span className="muted">{a.storagePath}</span></li>
+							))}
+						</ul>
+					</div>
+				</div>
+			)}
+		</>
+	)
+}
+
+// One major pipeline step as a big card. Collapsed = name + status + latest version + a preview.
+// Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
+function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: ProductionDetail; depth?: number }) {
+	const [open, setOpen] = useState(() => needsAttention(nv.node.status))
+	const kids = childrenOf(detail, nv.node.id)
+	const versions = [...nv.versions].sort((a, b) => a.version.n - b.version.n)
+	const latest = versions[versions.length - 1]
+	const nRevise = versions.reduce((s, v) => s + v.reviews.filter((r) => r.verdict === "revise").length, 0)
+
+	return (
+		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""}`}>
+			<button className="stage-head" onClick={() => setOpen((o) => !o)}>
+				<span className="stage-ico" aria-hidden="true"><StageIcon type={nv.node.type} /></span>
+				<span className="stage-main">
+					<span className="stage-name">
+						{titleCase(nv.node.type)}
+						<StatusChip status={nv.node.status} />
+						{nRevise > 0 && <span className="chip danger">{nRevise} revise</span>}
+						{versions.length > 1 && <span className="chip muted">{versions.length} revisions</span>}
+					</span>
+					<span className="stage-prev">{previewOf(nv, latest)}</span>
+				</span>
+				<span className="stage-right">
+					<span className="ver">{latest ? `v${latest.version.n}` : "—"}</span>
+					<Chevron />
+				</span>
+			</button>
+			<div className="stage-body">
+				{versions.length === 0 && <p className="muted">Nothing produced yet.</p>}
+				{versions.length > 0 && (
+					<div className="revs">
+						{versions.map((vw, i) => (
+							<VersionBlock
+								key={vw.version.id}
+								vw={vw}
+								interactions={nv.interactions}
+								nodeType={nv.node.type}
+								isLast={i === versions.length - 1}
+								nextN={versions[i + 1]?.version.n ?? null}
+							/>
+						))}
+					</div>
+				)}
+				{kids.length > 0 && (
+					<>
+						<div className="sub-h">Sub-steps</div>
+						<div className="stages nested-stages">
+							{kids.map((k) => (
+								<StageCard key={k.node.id} nv={k} detail={detail} depth={depth + 1} />
+							))}
+						</div>
+					</>
+				)}
+			</div>
+		</section>
+	)
+}
+
+// One attempt in the timeline: the producer run, the artifact it produced, and the feedback it got.
+function VersionBlock({
+	vw,
+	interactions,
+	nodeType,
+	isLast,
+	nextN,
+}: {
+	vw: { version: Version; reviews: Review[] }
+	interactions: Interaction[]
+	nodeType: string
+	isLast: boolean
+	nextN: number | null
+}) {
+	const { version, reviews } = vw
+	const producer = interactions.find((i) => i.versionId === version.id && i.role === "producer")
+	const revStatus = version.status === "needs-work" || version.status === "revise" || version.status === "denied"
+	return (
+		<div className={`rev ${isLast ? "cur" : ""} ${revStatus && !isLast ? "fail" : ""}`}>
+			<div className="rev-mark"><span className="rev-dot">v{version.n}</span><span className="rev-line" /></div>
+			<div className="rev-content">
+				<div className="rev-top">
+					<StatusChip status={version.status} />
+					<span className="rev-time">{fmtTime(version.createdAt)}</span>
+					{producer && <TelemStrip it={producer} lead="producer" />}
+				</div>
+				<div className="rev-art">
+					<ArtifactView versionId={version.id} artifactPath={version.artifactPath} nodeType={nodeType} n={version.n} isLast={isLast} />
+				</div>
+				{version.feedback && <div className="feeds note-feedback"><b>Human feedback:</b> {version.feedback}</div>}
+				{reviews.length > 0 && (
+					<>
+						<div className="sub-h">Feedback this version received</div>
+						{reviews.map((r) => (
+							<ReviewCard key={r.id} review={r} interaction={interactions.find((i) => i.versionId === version.id && i.role === `review:${r.kind}`)} defaultOpen={isLast} />
+						))}
+					</>
+				)}
+				{nextN != null && (
+					<div className="feeds">
+						<ArrowDown />
+						<span>Handed to the producer to write <b>v{nextN}</b>.</span>
+					</div>
+				)}
+				{isLast && reviews.some((r) => r.verdict === "revise") && (
+					<div className="feeds">
+						<Loop />
+						<span>Open feedback — a <b>v{version.n + 1}</b> run will address it next.</span>
+					</div>
+				)}
+			</div>
+		</div>
+	)
+}
+
+// Renders the artifact in its proper form, by kind, with a Rendered / Raw toggle. Video streams
+// inline (the same player the Videos tab uses); text is fetched lazily and parsed per kind.
+function ArtifactView({
+	versionId,
+	artifactPath,
+	nodeType,
+	n,
+	isLast,
+}: {
+	versionId: string
+	artifactPath: string | null
+	nodeType: string
+	n: number
+	isLast: boolean
+}) {
+	const video = isVideoPath(artifactPath)
+	const [raw, setRaw] = useState(false)
+	const [content, setContent] = useState<string | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [missing, setMissing] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (video) return
+		let alive = true
+		setLoading(true)
+		void getDeliverable(versionId)
+			.then((d) => {
+				if (!alive) return
+				if (d.content != null) setContent(d.content)
+				else setMissing(d.artifact_path ?? "(no artifact written yet)")
+			})
+			.catch((e) => alive && setMissing(e instanceof Error ? e.message : String(e)))
+			.finally(() => alive && setLoading(false))
+		return () => {
+			alive = false
+		}
+	}, [versionId, video])
+
+	const kind = artifactKind(nodeType, artifactPath)
+	const label = `${nodeType}${artifactPath ? ` · ${baseName(artifactPath)}` : ""} · v${n}${isLast ? " (current)" : ""}`
+
+	return (
+		<>
+			<div className="arthead">
+				<span className="lab">{label}</span>
+				{!video && content != null && kind !== "text" && (
+					<span className="seg" role="group" aria-label="View mode">
+						<button className={raw ? "" : "on"} onClick={() => setRaw(false)}>{kind === "storyboard" ? "Board" : "Rendered"}</button>
+						<button className={raw ? "on" : ""} onClick={() => setRaw(true)}>{kind === "storyboard" ? "JSON" : "Raw"}</button>
+					</span>
+				)}
+			</div>
+			{video ? (
+				<>
+					<video className="vinline" controls preload="metadata" src={videoUrlByVersion(versionId)} />
+					{artifactPath && <p className="note">{baseName(artifactPath)}</p>}
+				</>
+			) : loading ? (
+				<p className="muted">Loading artifact…</p>
+			) : missing ? (
+				<p className="note">No inline content — <code>{missing}</code></p>
+			) : content == null ? (
+				<p className="muted">—</p>
+			) : raw || kind === "text" ? (
+				<pre className="raw">{content}</pre>
+			) : kind === "markdown" ? (
+				<div className="md"><Markdown source={content} /></div>
+			) : kind === "script" ? (
+				<ScriptView content={content} />
+			) : kind === "storyboard" ? (
+				<StoryboardBoard content={content} />
+			) : (
+				<pre className="raw">{content}</pre>
+			)}
+		</>
+	)
+}
+
+// Script: the spoken VO, one line per beat, numbered, with a rough word count.
+function ScriptView({ content }: { content: string }) {
+	const lines = content.split("\n").map((l) => l.trim()).filter(Boolean)
+	const words = lines.join(" ").split(/\s+/).filter(Boolean).length
+	return (
+		<>
+			<div className="vo-list">
+				{lines.map((l, i) => (
+					<div key={i} className="vo-line"><span className="n">{i + 1}</span><span>{l}</span></div>
+				))}
+			</div>
+			<div className="meter"><span>Words <b>{words}</b></span><span>Lines <b>{lines.length}</b></span></div>
+		</>
+	)
+}
+
+// Storyboard: the word-anchored film.json shown as a visual beat board — theme swatches, voice, and
+// one card per beat. Falls back to raw JSON if the shape is unexpected.
+function StoryboardBoard({ content }: { content: string }) {
+	let data: Record<string, unknown>
+	try {
+		data = JSON.parse(content) as Record<string, unknown>
+	} catch {
+		return <pre className="raw">{content}</pre>
+	}
+	const theme = (data.theme ?? {}) as Record<string, string>
+	const voice = (data.voice ?? {}) as Record<string, unknown>
+	const size = data.size as [number, number] | undefined
+	const beatsRaw = (Array.isArray(data.beats) ? data.beats : Array.isArray(data.scenes) ? data.scenes : Array.isArray(data.script) ? data.script : []) as unknown[]
+	const beats = beatsRaw.map((b) => (typeof b === "string" ? { vo: b } : (b as Record<string, unknown>)))
+	return (
+		<>
+			<div className="sb-theme">
+				{size && <span>{size[0]}×{size[1]}</span>}
+				{voice.id != null && <span>voice <span className="tag">{String(voice.id)}</span>{voice.speed != null ? ` speed ${String(voice.speed)}` : ""}</span>}
+				{Object.keys(theme).length > 0 && (
+					<span className="swatches">
+						{Object.entries(theme).map(([k, v]) => (
+							<span key={k} className="sw" style={{ background: v }} title={`${k} ${v}`} />
+						))}
+					</span>
+				)}
+			</div>
+			<div className="beats">
+				{beats.length === 0 && <pre className="raw">{content}</pre>}
+				{beats.map((b, i) => (
+					<div key={i} className="beat">
+						<span className="t">beat {i + 1}</span>
+						<div>
+							{(b.beat != null || b.label != null || b.time != null) && (
+								<div className="bn">{String(b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
+							)}
+							{(b.vo ?? b.line ?? b.text) != null && <div className="vo">{String(b.vo ?? b.line ?? b.text)}</div>}
+							{(b.capture ?? b.onscreen) != null && <div className="cap">{String(b.capture ?? b.onscreen)}</div>}
+						</div>
+					</div>
+				))}
+			</div>
+		</>
+	)
+}
+
+// One reviewer verdict: badge + one-line summary, expands to the full body, with the reviewer run's
+// telemetry beneath it.
+function ReviewCard({ review, interaction, defaultOpen }: { review: Review; interaction?: Interaction; defaultOpen?: boolean }) {
+	const [open, setOpen] = useState(!!defaultOpen && review.verdict === "revise")
+	const summary = firstLine(review.body) ?? review.verdict
+	return (
+		<div className={`verdict ${open ? "open" : ""}`}>
+			<button className="vd-head" onClick={() => setOpen((o) => !o)}>
+				<VerdictChip verdict={review.verdict} />
+				<span className="who">{review.name}</span>
+				<span className="sum">{summary}</span>
+				<Chevron small />
+			</button>
+			<div className="vd-body">
+				{review.body ? <p className="vd-text">{review.body}</p> : <p className="muted">No detail.</p>}
+				{interaction && <TelemStrip it={interaction} lead="reviewer" />}
+			</div>
+		</div>
+	)
+}
+
+// One subagent run as aligned columns: lead (producer/reviewer), model, session, tokens, cache,
+// cost, duration.
+function TelemStrip({ it, lead }: { it: Interaction; lead: "producer" | "reviewer" }) {
+	return (
+		<div className="telem compact">
+			<span className={`telem-lead ${lead === "reviewer" ? "rev" : ""}`}>{lead}</span>
+			<span className="ti"><b>{it.model ?? it.engine}</b>model</span>
+			{it.sessionId && <span className="ti"><b>{shortId(it.sessionId)}</b>session</span>}
+			<span className="ti"><b>{fmtNum(it.inputTokens)}→{fmtNum(it.outputTokens)}</b>tokens</span>
+			{(it.cacheReadTokens || it.cacheCreationTokens) ? (
+				<span className="ti"><b>{fmtNum(it.cacheReadTokens)}/{fmtNum(it.cacheCreationTokens)}</b>cache</span>
+			) : null}
+			{it.costUsd != null && it.costUsd > 0 && <span className="ti"><b>${it.costUsd.toFixed(4)}</b>cost</span>}
+			{it.durationMs != null && <span className="ti"><b>{fmtDur(it.durationMs)}</b>dur</span>}
+		</div>
+	)
+}
+
+function UsageStrip({ usage }: { usage: UsageSummary }) {
+	return (
+		<div className="usage">
+			<Stat label="interactions" value={String(usage.interactions)} />
+			<Stat label="sessions" value={String(usage.sessions.length)} />
+			<Stat label="tokens in" value={fmtNum(usage.inputTokens)} />
+			<Stat label="tokens out" value={fmtNum(usage.outputTokens)} />
+			<Stat label="cache read" value={fmtNum(usage.cacheReadTokens)} />
+			<Stat label="cost" value={`$${usage.costUsd.toFixed(2)}`} />
+			<Stat label="duration" value={fmtDur(usage.durationMs)} />
+		</div>
+	)
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="stat">
+			<div className="sv">{value}</div>
+			<div className="sl">{label}</div>
+		</div>
+	)
+}
+
+// The Videos tab: every produced .mp4 on disk, grouped by folder, each with an inline player.
 function Gallery({ videos }: { videos: VideoFile[] }) {
-	if (videos.length === 0) return <p className="muted">No videos produced yet.</p>
+	if (videos.length === 0) return <p className="muted pad">No videos produced yet.</p>
 	const groups = new Map<string, VideoFile[]>()
 	for (const v of videos) {
 		const key = v.dir || "(root)"
@@ -149,133 +511,140 @@ function Gallery({ videos }: { videos: VideoFile[] }) {
 	)
 }
 
-function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () => void }) {
-	const children = detail.nodes.filter((n) => n.node.parentId === detail.root.id)
+function Gate({ inbox, productionId, budget, onAction }: { inbox: ChatOutput[]; productionId: string; budget: ProductionDetail["budget"]; onAction: () => void }) {
+	const act = async (fn: () => Promise<void>) => {
+		await fn()
+		onAction()
+	}
+	if (inbox.length === 0 && !(budget && !budget.approved)) return null
 	return (
-		<>
-			<h2>
-				{detail.root.name} <Pill status={detail.root.status} />
-			</h2>
-			<div className="rootmeta muted">
-				started {fmtTime(detail.root.createdAt)} · {detail.root.autonomyLever ?? "—"} · {detail.root.actorKind ?? "—"}
-			</div>
-			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} />
-			<UsagePanel usage={detail.usage} />
-			<h3>Node tree</h3>
-			<NodeRow nv={nodeViewOf(detail, detail.root.id)} root />
-			<ul className="tree">
-				{children.map((nv) => (
-					<li key={nv.node.id}>
-						<NodeRow nv={nv} />
-					</li>
-				))}
-			</ul>
-			{detail.assets.length > 0 && (
-				<>
-					<h3>Assets</h3>
-					<ul className="assets">
-						{detail.assets.map((a) => (
-							<li key={a.id}>
-								<code>{a.assetType}/{a.fileType}</code> {a.name} <span className="muted">{a.storagePath}</span>
-							</li>
-						))}
-					</ul>
-				</>
-			)}
-		</>
-	)
-}
-
-function NodeRow({ nv, root }: { nv: NodeView | null; root?: boolean }) {
-	if (!nv) return null
-	return (
-		<div className={`node ${root ? "rootnode" : ""}`}>
-			<div className="nhead">
-				<strong>{nv.node.type}</strong> <span className="muted">{nv.node.name}</span> <Pill status={nv.node.status} />
-				<span className="ts">{fmtTime(nv.node.createdAt)}</span>
-			</div>
-			{nv.versions.map(({ version, reviews }) => {
-				const vints = nv.interactions.filter((i) => i.versionId === version.id)
-				return (
-					<div key={version.id} className="version">
-						<div className="vhead">
-							<span className="vn">v{version.n}</span> <Pill status={version.status} />
-							<span className="ts">{fmtTime(version.createdAt)}</span>
-							{version.artifactPath && !isVideoPath(version.artifactPath) && <ViewArtifact versionId={version.id} />}
+		<div className="gate">
+			<div className="gate-head">Inbox <span className="badge">{inbox.length}</span></div>
+			{inbox.map((o) => (
+				<div key={o.id} className="out">
+					<div><code>{o.type}</code> {o.prompt && <span>{o.prompt}</span>}</div>
+					{o.type === "present" ? (
+						<div className="controls">
+							<button onClick={() => void act(() => approveOutput(o.id))}>Approve</button>
+							<button className="secondary" onClick={() => {
+								const body = window.prompt("Feedback for a redo:")
+								if (body) void act(() => sendFeedback(o.id, body))
+							}}>Feedback</button>
 						</div>
-						{isVideoPath(version.artifactPath) && (
-							<video className="vinline" controls preload="metadata" src={videoUrlByVersion(version.id)} />
-						)}
-						{version.feedback && <div className="fb">feedback: {version.feedback}</div>}
-						{reviews.length > 0 && (
-							<ul className="reviews">
-								{reviews.map((r) => (
-									<li key={r.id}>
-										<code>{r.name}</code> <span className={`verdict ${r.verdict}`}>{r.verdict}</span>
-										<span className="ts">{fmtTime(r.createdAt)}</span>
-										{r.body && <div className="muted rbody">{r.body}</div>}
-									</li>
-								))}
-							</ul>
-						)}
-						{vints.length > 0 && (
-							<ul className="ints">
-								{vints.map((it) => (
-									<InteractionRow key={it.id} it={it} />
-								))}
-							</ul>
-						)}
-					</div>
-				)
-			})}
+					) : (
+						<div className="controls"><button onClick={() => void act(() => approveOutput(o.id))}>Ack</button></div>
+					)}
+				</div>
+			))}
+			{budget && !budget.approved && (
+				<div className="out">
+					<div><code>budget</code> render spend not yet approved</div>
+					<div className="controls"><button onClick={() => void act(() => approveBudget(productionId))}>Approve budget</button></div>
+				</div>
+			)}
 		</div>
 	)
 }
 
-// One subagent run: role, engine/model, session, tokens, cost, duration, timestamp, status.
-function InteractionRow({ it }: { it: Interaction }) {
-	const review = it.role.startsWith("review:")
-	return (
-		<li className="int">
-			<span className={`irole ${review ? "r-review" : "r-producer"}`}>{it.role}</span>
-			<span className="muted">{it.engine}{it.model ? `/${it.model}` : ""}</span>
-			{it.sessionId && <span className="sid" title={it.sessionId}>sess {shortId(it.sessionId)}</span>}
-			<span className="tok" title="input → output tokens">{fmtNum(it.inputTokens)}→{fmtNum(it.outputTokens)} tok</span>
-			{(it.cacheReadTokens || it.cacheCreationTokens) ? (
-				<span className="muted" title="cache read / creation tokens">cache {fmtNum(it.cacheReadTokens)}/{fmtNum(it.cacheCreationTokens)}</span>
-			) : null}
-			{it.costUsd != null && it.costUsd > 0 && <span className="cost">${it.costUsd.toFixed(4)}</span>}
-			{it.durationMs != null && <span className="dur">{fmtDur(it.durationMs)}</span>}
-			<span className="ts">{fmtTime(it.createdAt)}</span>
-		</li>
-	)
+// ---- chips, icons, helpers ----
+
+function StatusChip({ status }: { status: string }) {
+	return <span className={`chip ${chipVariant(status)}`}><span className="g" />{status}</span>
 }
 
-// Rolled-up usage across the whole production.
-function UsagePanel({ usage }: { usage: UsageSummary }) {
-	return (
-		<div className="usage">
-			<h3>Usage</h3>
-			<div className="ustats">
-				<Stat label="interactions" value={String(usage.interactions)} />
-				<Stat label="sessions" value={String(usage.sessions.length)} />
-				<Stat label="tokens in" value={fmtNum(usage.inputTokens)} />
-				<Stat label="tokens out" value={fmtNum(usage.outputTokens)} />
-				<Stat label="cache read" value={fmtNum(usage.cacheReadTokens)} />
-				<Stat label="cost" value={`$${usage.costUsd.toFixed(4)}`} />
-				<Stat label="duration" value={fmtDur(usage.durationMs)} />
-			</div>
-		</div>
-	)
+function VerdictChip({ verdict }: { verdict: string }) {
+	const v = verdict === "pass" ? "ok" : verdict === "revise" ? "danger" : "muted"
+	return <span className={`chip ${v}`}>{verdict}</span>
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-	return (
-		<div className="stat">
-			<div className="sv">{value}</div>
-			<div className="sl muted">{label}</div>
-		</div>
-	)
+function chipVariant(status: string): string {
+	switch (status) {
+		case "approved":
+		case "done":
+		case "pass":
+			return "ok"
+		case "denied":
+		case "escalated":
+		case "revise":
+		case "failed":
+			return "danger"
+		case "in-progress":
+		case "producing":
+		case "queued-running":
+			return "info"
+		case "review":
+		case "needs-work":
+		case "presentable":
+			return "warn"
+		default:
+			return "muted"
+	}
+}
+
+function needsAttention(status: string): boolean {
+	return ["in-progress", "producing", "review", "needs-work", "presentable", "escalated", "denied"].includes(status)
+}
+
+function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "text" {
+	if (isVideoPath(path)) return "video"
+	const t = nodeType.toLowerCase()
+	const ext = path ? path.split(".").pop()?.toLowerCase() : null
+	if (t.includes("storyboard") || ext === "json") return "storyboard"
+	if (t.includes("script")) return "script"
+	if (ext === "md" || ext === "markdown" || ["briefing", "moodboard", "brief", "review", "polish", "coverage", "craft"].some((k) => t.includes(k))) return "markdown"
+	return "text"
+}
+
+function StageIcon({ type }: { type: string }) {
+	const t = type.toLowerCase()
+	const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const }
+	if (t.includes("render") || t.includes("video") || t.includes("film"))
+		return <svg {...common}><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+	if (t.includes("storyboard"))
+		return <svg {...common}><rect x="2" y="4" width="14" height="12" rx="2" /><path d="M16 8l6-3v12l-6-3" /></svg>
+	if (t.includes("mood"))
+		return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
+	if (t.includes("script"))
+		return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+	if (t.includes("polish"))
+		return <svg {...common}><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z" /></svg>
+	return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>
+}
+
+function Chevron({ small }: { small?: boolean }) {
+	const s = small ? 14 : 16
+	return <svg className="chev" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 6l6 6-6 6" /></svg>
+}
+
+function ArrowDown() {
+	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+}
+
+function Loop() {
+	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
+}
+
+function previewOf(nv: NodeView, latest?: { version: Version; reviews: Review[] }): string {
+	if (!latest) return "Nothing produced yet."
+	const n = nv.versions.length
+	const lead = n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`
+	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) return `${lead} · ${baseName(latest.version.artifactPath)}`
+	return `${lead} · ${latest.version.status}`
+}
+
+function titleCase(s: string): string {
+	return s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function baseName(p: string): string {
+	return p.split("/").slice(-2).join("/")
+}
+
+function firstLine(s: string | null): string | null {
+	if (!s) return null
+	const line = s.split("\n").map((l) => l.trim()).find(Boolean)
+	if (!line) return null
+	return line.replace(/^VERDICT:\s*(pass|revise)\s*[-–.]?\s*/i, "").slice(0, 120)
 }
 
 function fmtTime(iso: string | null | undefined): string {
@@ -286,7 +655,14 @@ function fmtTime(iso: string | null | undefined): string {
 
 function fmtDur(ms: number | null): string {
 	if (ms == null) return ""
-	return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+	if (ms < 1000) return `${ms}ms`
+	const s = ms / 1000
+	if (s < 60) return `${s.toFixed(1)}s`
+	const total = Math.round(s)
+	const h = Math.floor(total / 3600)
+	const m = Math.floor((total % 3600) / 60)
+	const sec = total % 60
+	return h > 0 ? `${h}h ${m}m` : `${m}m ${sec}s`
 }
 
 function fmtNum(n: number | null): string {
@@ -303,75 +679,6 @@ function shortId(id: string): string {
 	return id.length > 10 ? `…${id.slice(-8)}` : id
 }
 
-function ViewArtifact({ versionId }: { versionId: string }) {
-	const [content, setContent] = useState<string | null>(null)
-	const [open, setOpen] = useState(false)
-	const toggle = async () => {
-		if (!open && content === null) {
-			const d = await getDeliverable(versionId)
-			setContent(d.content ?? `(no inline content) ${d.artifact_path ?? ""}`)
-		}
-		setOpen((o) => !o)
-	}
-	return (
-		<>
-			<button className="link" onClick={() => void toggle()}>
-				{open ? "hide" : "view"} artifact
-			</button>
-			{open && <pre className="artifact">{content}</pre>}
-		</>
-	)
-}
-
-function Gate({ inbox, productionId, budget, onAction }: { inbox: ChatOutput[]; productionId: string; budget: ProductionDetail["budget"]; onAction: () => void }) {
-	const act = async (fn: () => Promise<void>) => {
-		await fn()
-		onAction()
-	}
-	return (
-		<div className="gate">
-			<h3>Inbox {inbox.length > 0 && <span className="badge">{inbox.length}</span>}</h3>
-			{inbox.length === 0 && <p className="muted">Nothing waiting.</p>}
-			{inbox.map((o) => (
-				<div key={o.id} className="out">
-					<div>
-						<code>{o.type}</code> {o.prompt && <span>{o.prompt}</span>}
-					</div>
-					{o.type === "present" ? (
-						<div className="controls">
-							<button onClick={() => void act(() => approveOutput(o.id))}>Approve</button>
-							<button
-								onClick={() => {
-									const body = window.prompt("Feedback for a redo:")
-									if (body) void act(() => sendFeedback(o.id, body))
-								}}
-							>
-								Feedback
-							</button>
-						</div>
-					) : (
-						<div className="controls">
-							<button onClick={() => void act(() => approveOutput(o.id))}>Ack</button>
-						</div>
-					)}
-				</div>
-			))}
-			{budget && !budget.approved && (
-				<div className="out">
-					<div><code>budget</code> render spend not yet approved</div>
-					<div className="controls">
-						<button onClick={() => void act(() => approveBudget(productionId))}>Approve budget</button>
-					</div>
-				</div>
-			)}
-		</div>
-	)
-}
-
-function Pill({ status }: { status: string }) {
-	return <span className={`pill s-${status}`}>{status}</span>
-}
-
-function nodeViewOf(detail: ProductionDetail, nodeId: string): NodeView | null {
-	return detail.nodes.find((n) => n.node.id === nodeId) ?? null
+function childrenOf(detail: ProductionDetail, id: string): NodeView[] {
+	return detail.nodes.filter((n) => n.node.parentId === id)
 }
