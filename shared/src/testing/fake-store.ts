@@ -184,6 +184,7 @@ export class FakeStore implements Store {
 			artifactPath: input.artifactPath ?? null,
 			subagent: input.subagent ?? null,
 			feedback: null,
+			builtFrom: input.builtFrom ?? null,
 			createdAt: now,
 			updatedAt: now,
 		}

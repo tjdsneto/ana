@@ -112,6 +112,7 @@ export interface NewVersion {
 	status: VersionStatus
 	artifactPath?: string
 	subagent?: SubagentRef
+	builtFrom?: Record<string, string> // depNodeId → effective upstream hash this version was produced from
 }
 
 export interface NewReview {

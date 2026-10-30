@@ -6,7 +6,7 @@
 // expand (static checklist children), plan (dynamic fan-out), holistic review, or leaf (produce an
 // artifact). Completion rolls up by approval from leaves to the root, at any depth.
 
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -214,6 +214,7 @@ export class Engine {
 			prevVersionId: latest?.id,
 			status: "approved",
 			artifactPath,
+			builtFrom: await this.computeBuiltFrom(node),
 			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
 		})
 		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
@@ -302,6 +303,7 @@ export class Engine {
 			prevVersionId: latest?.id,
 			status: "producing",
 			artifactPath,
+			builtFrom: await this.computeBuiltFrom(node),
 			subagent: {
 				runId: randomUUID(),
 				status: "done",
@@ -378,6 +380,7 @@ export class Engine {
 			prevVersionId: latest?.id,
 			status: "producing",
 			artifactPath,
+			builtFrom: await this.computeBuiltFrom(node),
 			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
 		})
 		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
@@ -537,6 +540,41 @@ export class Engine {
 			out.push({ type: dep.type, content: safe })
 		}
 		return out
+	}
+
+	// A version records what it was produced from: per upstream dep, that dep's EFFECTIVE content hash.
+	// "Effective" rolls a parent's children up (a fanned-out build's hash is the hash of its scene
+	// children), so changing one scene changes the build's hash while a kept upstream does not. Reopen
+	// revalidation compares these against the current upstream: unchanged hash = a no-op, changed = a
+	// real change the dependent must react to.
+	private async computeBuiltFrom(node: Node): Promise<Record<string, string>> {
+		if (node.deps.length === 0) return {}
+		const tree = await this.store.nodesFor(node.productionId)
+		const childrenOf = new Map<string, Node[]>()
+		for (const n of tree) {
+			if (!n.parentId) continue
+			const arr = childrenOf.get(n.parentId) ?? []
+			arr.push(n)
+			childrenOf.set(n.parentId, arr)
+		}
+		const out: Record<string, string> = {}
+		for (const depId of node.deps) {
+			const dep = tree.find((n) => n.id === depId)
+			if (dep) out[depId] = await this.effectiveHash(dep, childrenOf)
+		}
+		return out
+	}
+
+	private async effectiveHash(node: Node, childrenOf: Map<string, Node[]>): Promise<string> {
+		const kids = childrenOf.get(node.id) ?? []
+		if (kids.length > 0) {
+			const parts: string[] = []
+			for (const c of [...kids].sort((a, b) => a.position - b.position)) parts.push(`${c.position}:${await this.effectiveHash(c, childrenOf)}`)
+			return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16)
+		}
+		const v = await this.store.latestVersion(node.id)
+		const content = v?.artifactPath ? readArtifact(v.artifactPath) : null
+		return createHash("sha256").update(content ?? "∅").digest("hex").slice(0, 16)
 	}
 }
 

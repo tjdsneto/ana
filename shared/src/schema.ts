@@ -66,6 +66,7 @@ export const versions = pgTable(
 		artifactPath: text("artifact_path"), // file on the shared volume (not in the DB)
 		subagent: jsonb("subagent").$type<SubagentRef>(), // attached subagent + state (idempotency)
 		feedback: text("feedback"),
+		builtFrom: jsonb("built_from").$type<Record<string, string>>(), // depNodeId → effective content hash of the upstream this version was produced from (revalidation: stale when an upstream's hash no longer matches)
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},

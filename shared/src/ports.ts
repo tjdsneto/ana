@@ -32,6 +32,7 @@ export interface VersionPatch {
 	artifactPath?: string
 	feedback?: string
 	subagent?: SubagentRef
+	builtFrom?: Record<string, string>
 }
 
 // ── Store: all DB access ────────────────────────────────────────────────────────────────────
