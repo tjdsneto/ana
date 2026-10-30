@@ -220,7 +220,7 @@ class CountingRunner implements SubagentRunner {
 				writeFileSync(join(m[1], "fake-render.mp4"), "fake")
 			}
 		}
-		return { output: input.skill?.startsWith("review:") ? "VERDICT: pass" : "a draft", sessionId: `sess-${this.calls}` }
+		return { output: input.skill?.startsWith("review:") || input.skill === "review-render" ? "VERDICT: pass" : "a draft", sessionId: `sess-${this.calls}` }
 	}
 }
 
