@@ -129,16 +129,32 @@ export function App() {
 
 function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () => void }) {
 	const stages = childrenOf(detail, detail.root.id)
+	const fv = finalVideoOf(detail)
+	const head = (
+		<>
+			<h2>{detail.root.name} <StatusChip status={detail.root.status} /></h2>
+			<div className="hmeta muted">
+				<span>started {fmtTime(detail.root.createdAt)}</span>
+				<span>· {detail.root.autonomyLever ?? "—"}</span>
+				<span>· {detail.root.actorKind ?? "—"}</span>
+				<span className="idtag" title={detail.root.id}>{shortId(detail.root.id)}</span>
+			</div>
+		</>
+	)
 	return (
 		<>
+			{fv ? (
+				<section className="hero">
+					<div className="hero-media">
+						<video className="hero-video" controls preload="metadata" src={videoUrlByVersion(fv.versionId)} />
+						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status !== "approved" ? " (production still running)" : ""}</span>
+					</div>
+					<div className="hero-info">{head}</div>
+				</section>
+			) : (
+				<div className="phead">{head}</div>
+			)}
 			<div className="phead">
-				<h2>{detail.root.name} <StatusChip status={detail.root.status} /></h2>
-				<div className="hmeta muted">
-					<span>started {fmtTime(detail.root.createdAt)}</span>
-					<span>· {detail.root.autonomyLever ?? "—"}</span>
-					<span>· {detail.root.actorKind ?? "—"}</span>
-					<span className="idtag" title={detail.root.id}>{shortId(detail.root.id)}</span>
-				</div>
 				<UsageStrip usage={detail.usage} />
 			</div>
 			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} />
@@ -681,4 +697,36 @@ function shortId(id: string): string {
 
 function childrenOf(detail: ProductionDetail, id: string): NodeView[] {
 	return detail.nodes.filter((n) => n.node.parentId === id)
+}
+
+// The one video to show at the top: the finished cut. Prefer an approved render; among candidates,
+// render nodes win, then the most recent, then the highest version. Null when no video exists yet.
+function finalVideoOf(detail: ProductionDetail): { versionId: string; n: number; nodeType: string; status: string } | null {
+	type Cand = { versionId: string; n: number; nodeType: string; status: string; created: string; render: boolean }
+	const cands: Cand[] = []
+	for (const nv of detail.nodes) {
+		for (const vw of nv.versions) {
+			const v = vw.version
+			if (v.artifactPath && isVideoPath(v.artifactPath)) {
+				cands.push({
+					versionId: v.id,
+					n: v.n,
+					nodeType: nv.node.type,
+					status: v.status,
+					created: v.createdAt ?? "",
+					render: nv.node.type.toLowerCase().includes("render") || nv.node.type.toLowerCase().includes("film"),
+				})
+			}
+		}
+	}
+	if (cands.length === 0) return null
+	const approved = cands.filter((c) => c.status === "approved")
+	const pool = approved.length > 0 ? approved : cands
+	pool.sort((a, b) => {
+		if (a.render !== b.render) return a.render ? -1 : 1
+		if (a.created !== b.created) return a.created < b.created ? 1 : -1
+		return b.n - a.n
+	})
+	const top = pool[0]
+	return top ? { versionId: top.versionId, n: top.n, nodeType: top.nodeType, status: top.status } : null
 }
