@@ -898,29 +898,13 @@ code {
 	align-items: center;
 	gap: 10px;
 	padding: 10px 12px;
-	background: none;
-	border: 0;
 	text-align: left;
-}
-
-.vd-head:hover {
-	background: var(--surface-3);
 }
 
 .vd-head .vd-label {
 	font-weight: 600;
 	font-size: 12.5px;
 	white-space: nowrap;
-}
-
-.vd-head .sum {
-	color: var(--muted);
-	font-size: 12px;
-	flex: 1;
-	min-width: 0;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 .vd-head .vd-right {
@@ -930,20 +914,11 @@ code {
 	gap: 8px;
 }
 
-.verdict .chev {
-	font-size: 11px;
-}
-
-.verdict.open .vd-head .chev {
-	transform: rotate(90deg);
-}
-
-.vd-body {
-	padding: 0 12px 12px 40px;
-}
-
-.verdict:not(.open) .vd-body {
-	display: none;
+.vd-foot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0 12px 12px;
 }
 
 .vd-text {
@@ -1014,6 +989,11 @@ code {
 	border-radius: 50%;
 	background: var(--accent);
 	flex: none;
+}
+
+.claude-mark {
+	flex: none;
+	display: block;
 }
 
 .verdict .run-btn {

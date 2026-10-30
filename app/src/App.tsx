@@ -272,7 +272,7 @@ function VersionBlock({
 					<>
 						<div className="sub-h">Feedback this version received</div>
 						{reviews.map((r) => (
-							<ReviewCard key={r.id} review={r} interaction={interactions.find((i) => i.versionId === version.id && i.role === `review:${r.kind}`)} defaultOpen={isLast} />
+							<ReviewCard key={r.id} review={r} interaction={interactions.find((i) => i.versionId === version.id && i.role === `review:${r.kind}`)} />
 						))}
 					</>
 				)}
@@ -433,29 +433,34 @@ function StoryboardBoard({ content }: { content: string }) {
 	)
 }
 
-// One reviewer verdict: badge + one-line summary, expands to the full body, with the reviewer run's
-// telemetry beneath it.
-function ReviewCard({ review, interaction, defaultOpen }: { review: Review; interaction?: Interaction; defaultOpen?: boolean }) {
-	const [open, setOpen] = useState(!!defaultOpen && review.verdict === "revise")
-	const summary = firstLine(review.body)
-	// Drop a summary that just echoes the verdict ("pass"); keep real revise feedback.
-	const showSummary = summary && summary.toLowerCase() !== review.verdict.toLowerCase()
+// One reviewer verdict, flat (no accordion): label + verdict chip. For a revise, the feedback shows
+// inline (that is the actionable part); the full reviewer run — telemetry + raw output — is behind the
+// run-details modal, so there is nothing left to expand.
+function ReviewCard({ review, interaction }: { review: Review; interaction?: Interaction }) {
+	const detail = review.verdict === "revise" ? stripVerdict(review.body) : null
 	return (
-		<div className={`verdict ${open ? "open" : ""}`}>
-			<button className="vd-head" onClick={() => setOpen((o) => !o)}>
+		<div className="verdict flat">
+			<div className="vd-head">
 				<span className="vd-label">{reviewLabel(review)}</span>
-				{showSummary && <span className="sum">{summary}</span>}
 				<span className="vd-right">
 					<VerdictChip verdict={review.verdict} />
-					<Chevron small />
 				</span>
-			</button>
-			<div className="vd-body">
-				{review.body ? <p className="vd-text">{review.body}</p> : <p className="muted">No detail.</p>}
-				{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
 			</div>
+			{(detail || interaction) && (
+				<div className="vd-foot">
+					{detail && <p className="vd-text">{detail}</p>}
+					{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
+				</div>
+			)}
 		</div>
 	)
+}
+
+// Strip a leading "VERDICT: pass|revise" line so only the reviewer's actual reasoning remains.
+function stripVerdict(body: string | null): string | null {
+	if (!body) return null
+	const s = body.replace(/^\s*VERDICT:\s*(pass|revise)\s*[-–.:]?\s*/i, "").trim()
+	return s || null
 }
 
 // The review axis as a human label: "Quality review", "Conformance review". Falls back to the
@@ -473,13 +478,45 @@ function RunButton({ interaction, title, versionId, output }: { interaction: Int
 	return (
 		<>
 			<button className="run-btn" onClick={() => setOpen(true)} title="Show the subagent run">
-				<span className="run-dot" />
+				<EngineMark engine={interaction.engine} />
 				<span>{interaction.model ?? interaction.engine}</span>
 				{interaction.durationMs != null && <span className="muted">· {fmtDur(interaction.durationMs)}</span>}
 				<span className="muted">· run details</span>
 			</button>
 			{open && <RunModal interaction={interaction} title={title} versionId={versionId} output={output} onClose={() => setOpen(false)} />}
 		</>
+	)
+}
+
+// Which engine produced the run. A Claude run gets the Claude burst mark; anything else (the fake
+// runner, or a future engine) gets a neutral dot.
+function EngineMark({ engine }: { engine: string }) {
+	if (/claude/i.test(engine)) return <ClaudeMark />
+	return <span className="run-dot" />
+}
+
+// The Claude "burst" mark — rounded spokes radiating from the centre, in Anthropic's clay orange.
+// Drawn inline so it needs no asset and inherits crisp rendering at small sizes.
+function ClaudeMark({ size = 13 }: { size?: number }) {
+	const spokes = 12
+	const lines = Array.from({ length: spokes }, (_, i) => {
+		const a = (Math.PI * 2 * i) / spokes
+		const inner = 1.6
+		const outer = i % 3 === 0 ? 10 : 7.5
+		return (
+			<line
+				key={i}
+				x1={12 + Math.cos(a) * inner}
+				y1={12 + Math.sin(a) * inner}
+				x2={12 + Math.cos(a) * outer}
+				y2={12 + Math.sin(a) * outer}
+			/>
+		)
+	})
+	return (
+		<svg className="claude-mark" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#d97757" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
+			{lines}
+		</svg>
 	)
 }
 
@@ -735,13 +772,6 @@ function baseName(p: string): string {
 	const parent = parts[parts.length - 2]
 	if (parent && /^nd_[0-9a-f]+$/i.test(parent)) return parts[parts.length - 1] ?? p
 	return parts.slice(-2).join("/")
-}
-
-function firstLine(s: string | null): string | null {
-	if (!s) return null
-	const line = s.split("\n").map((l) => l.trim()).find(Boolean)
-	if (!line) return null
-	return line.replace(/^VERDICT:\s*(pass|revise)\s*[-–.]?\s*/i, "").slice(0, 120)
 }
 
 function fmtTime(iso: string | null | undefined): string {

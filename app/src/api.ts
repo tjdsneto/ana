@@ -52,6 +52,7 @@ export interface Interaction {
 	durationMs: number | null
 	status: string
 	createdAt: string
+	prompt: string | null // the full prompt sent to the subagent; null on old rows / pre-prompt failures
 }
 
 export interface UsageSummary {
