@@ -183,7 +183,7 @@ body { background:var(--bg); font-family:%(font)s; -webkit-font-smoothing:antial
 .ring { position:absolute; border:3px solid var(--ac); border-radius:8px; opacity:0; box-shadow:0 0 0 6px color-mix(in srgb, var(--ac) 22%%, transparent); }
 .cursor { position:absolute; left:0; top:0; width:34px; height:34px; z-index:20; opacity:0; }
 .ripple { position:absolute; left:-14px; top:-14px; width:34px; height:34px; border-radius:50%%; border:3px solid var(--ac); opacity:0; }
-.chip { position:absolute; left:0; right:0; margin:0 auto; width:fit-content; bottom:%(CHIPB)spx; padding:12px 22px; border-radius:8px; background:rgba(10,10,12,.92); box-shadow:inset 0 0 0 1.5px #3d3a35, 0 20px 50px rgba(0,0,0,.4); font-family:%(mono)s; font-size:28px; letter-spacing:.12em; color:#F8F5EE; white-space:nowrap; opacity:0; z-index:7; }
+.chip { position:absolute; left:0; right:0; margin:0 auto; width:fit-content; bottom:%(CHIPB)spx; padding:12px 22px; border-radius:8px; background:rgba(10,10,12,.92); box-shadow:inset 0 0 0 1.5px #3d3a35, 0 20px 50px rgba(0,0,0,.4); font-family:%(mono)s; font-size:%(CHIPSZ)spx; letter-spacing:.12em; color:#F8F5EE; white-space:nowrap; opacity:0; z-index:7; }
 .chip b { color:#fff; font-weight:600; }
 """
 
@@ -209,7 +209,7 @@ def html():
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width={W}, height={H}">
 <title>{film.get("title", "Launch film")}</title>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>{font_css}
-<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=max(8, round(H * inset / 2 - 28)))}</style></head>
+<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=max(8, round(H * inset / 2 - 28)), CHIPSZ=film.get("chip_size", 28))}</style></head>
 <body>
 <div id="root">
   <div id="bg"><div class="glow" id="glow"></div><div class="dots"></div></div>{title}
