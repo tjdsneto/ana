@@ -262,7 +262,7 @@ function VersionBlock({
 				<div className="rev-top">
 					<StatusChip status={version.status} />
 					<span className="rev-time">{fmtTime(version.createdAt)}</span>
-					{producer && <TelemStrip it={producer} lead="producer" />}
+					{producer && <RunButton interaction={producer} title={`${titleCase(nodeType)} · producer · v${version.n}`} versionId={version.id} />}
 				</div>
 				<div className="rev-art">
 					<ArtifactView versionId={version.id} artifactPath={version.artifactPath} nodeType={nodeType} n={version.n} isLast={isLast} />
@@ -452,7 +452,7 @@ function ReviewCard({ review, interaction, defaultOpen }: { review: Review; inte
 			</button>
 			<div className="vd-body">
 				{review.body ? <p className="vd-text">{review.body}</p> : <p className="muted">No detail.</p>}
-				{interaction && <TelemStrip it={interaction} lead="reviewer" />}
+				{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
 			</div>
 		</div>
 	)
@@ -465,21 +465,86 @@ function reviewLabel(review: Review): string {
 	return /review$/i.test(base) ? titleCase(base) : `${titleCase(base)} review`
 }
 
-// One subagent run as aligned columns: lead (producer/reviewer), model, session, tokens, cache,
-// cost, duration.
-function TelemStrip({ it, lead }: { it: Interaction; lead: "producer" | "reviewer" }) {
+// The run detail is noise in the timeline, so it is collapsed to a small button: model + duration.
+// Click opens a modal with the full telemetry spelled out, plus the prompt and output. `versionId`
+// (producer) lazy-loads the artifact as the output; `output` (reviewer) passes the verdict text in.
+function RunButton({ interaction, title, versionId, output }: { interaction: Interaction; title: string; versionId?: string; output?: string | null }) {
+	const [open, setOpen] = useState(false)
 	return (
-		<div className="telem compact">
-			<span className={`telem-lead ${lead === "reviewer" ? "rev" : ""}`}>{lead}</span>
-			<span className="ti"><b>{it.model ?? it.engine}</b>model</span>
-			{it.sessionId && <span className="ti"><b>{shortId(it.sessionId)}</b>session</span>}
-			<span className="ti"><b>{fmtNum(it.inputTokens)}→{fmtNum(it.outputTokens)}</b>tokens</span>
-			{(it.cacheReadTokens || it.cacheCreationTokens) ? (
-				<span className="ti"><b>{fmtNum(it.cacheReadTokens)}/{fmtNum(it.cacheCreationTokens)}</b>cache</span>
-			) : null}
-			{it.costUsd != null && it.costUsd > 0 && <span className="ti"><b>${it.costUsd.toFixed(4)}</b>cost</span>}
-			{it.durationMs != null && <span className="ti"><b>{fmtDur(it.durationMs)}</b>dur</span>}
+		<>
+			<button className="run-btn" onClick={() => setOpen(true)} title="Show the subagent run">
+				<span className="run-dot" />
+				<span>{interaction.model ?? interaction.engine}</span>
+				{interaction.durationMs != null && <span className="muted">· {fmtDur(interaction.durationMs)}</span>}
+				<span className="muted">· run details</span>
+			</button>
+			{open && <RunModal interaction={interaction} title={title} versionId={versionId} output={output} onClose={() => setOpen(false)} />}
+		</>
+	)
+}
+
+// Modal for one subagent run: telemetry at the top, then prompt + output. Prompt is not persisted by
+// the engine yet, so that section shows an empty state until it is.
+function RunModal({ interaction, title, versionId, output, onClose }: { interaction: Interaction; title: string; versionId?: string; output?: string | null; onClose: () => void }) {
+	const [body, setBody] = useState<string | null>(output ?? null)
+	const [loading, setLoading] = useState(versionId != null && output == null)
+
+	useEffect(() => {
+		if (versionId == null || output != null) return
+		let alive = true
+		void getDeliverable(versionId)
+			.then((d) => alive && setBody(d.content ?? null))
+			.catch(() => alive && setBody(null))
+			.finally(() => alive && setLoading(false))
+		return () => {
+			alive = false
+		}
+	}, [versionId, output])
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+		window.addEventListener("keydown", onKey)
+		return () => window.removeEventListener("keydown", onKey)
+	}, [onClose])
+
+	return (
+		<div className="modal-backdrop" onClick={onClose}>
+			<div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+				<div className="modal-head">
+					<h3>{title}</h3>
+					<button className="modal-x" onClick={onClose} aria-label="Close">×</button>
+				</div>
+				<TelemGrid it={interaction} />
+				<div className="modal-body">
+					<div className="sub-h">Prompt</div>
+					<p className="muted run-empty">Not recorded — the engine does not persist the subagent prompt yet.</p>
+					<div className="sub-h">Output</div>
+					{loading ? <p className="muted">Loading…</p> : body ? <pre className="raw">{body}</pre> : <p className="muted">—</p>}
+				</div>
+			</div>
 		</div>
+	)
+}
+
+// One subagent run's telemetry as a labelled grid — every field spelled out (no →, no /).
+function TelemGrid({ it }: { it: Interaction }) {
+	const rows: [string, string][] = [["model", it.model ?? it.engine]]
+	if (it.sessionId) rows.push(["session", shortId(it.sessionId)])
+	rows.push(["input tokens", fmtNum(it.inputTokens)])
+	rows.push(["output tokens", fmtNum(it.outputTokens)])
+	if (it.cacheReadTokens != null) rows.push(["cache read", fmtNum(it.cacheReadTokens)])
+	if (it.cacheCreationTokens != null) rows.push(["cache write", fmtNum(it.cacheCreationTokens)])
+	if (it.costUsd != null) rows.push(["cost", `$${it.costUsd.toFixed(4)}`])
+	if (it.durationMs != null) rows.push(["duration", fmtDur(it.durationMs)])
+	return (
+		<dl className="telem-grid">
+			{rows.map(([k, v]) => (
+				<div key={k}>
+					<dt>{k}</dt>
+					<dd>{v}</dd>
+				</div>
+			))}
+		</dl>
 	)
 }
 
