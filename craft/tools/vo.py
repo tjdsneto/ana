@@ -21,6 +21,7 @@ Writes <out>/vo/<engine>/sNN.wav (cached — delete to redo a line), <out>/vo.wa
 composition clock) and <out>/words.json = {"duration": s, "words": [{text, start, end, line}]}.
 """
 import argparse
+import difflib
 import json
 import os
 import subprocess
@@ -157,21 +158,46 @@ def line_word_times(disp: list[str], rec: list[dict], clip_s: float) -> list[tup
     if not rec:
         edge = [clip_s * sum(lens[:i]) / total for i in range(n + 1)]
         return [(edge[i], edge[i + 1]) for i in range(n)]
-    rl = [n_letters(r["word"]) for r in rec]
-    rtot = sum(rl)
-    # whisper-letter midpoint of each token; a script word owns tokens whose midpoint falls in its span
-    mids, acc = [], 0
-    for L in rl:
-        mids.append((acc + L / 2) / rtot)
-        acc += L
-    out, lo, cum = [], 0, 0
-    for i, w in enumerate(lens):
-        cum += w
-        hi_frac = cum / total
-        toks = [k for k, m in enumerate(mids) if (cum - w) / total <= m < hi_frac or (i == n - 1 and m >= (cum - w) / total)]
-        if not toks:  # no token midpoint inside the span: borrow the nearest one
-            toks = [min(range(len(mids)), key=lambda k: abs(mids[k] - (cum - w / 2) / total))]
-        out.append((rec[toks[0]]["start"], rec[toks[-1]]["end"]))
+    # Align the two letter streams (script vs whisper) with difflib, so a mis-heard or repeated word
+    # ("AIOSEO" -> "AEOCO", "forms" -> "for Forms") shifts only itself, not every word after it.
+    def letters(x: str) -> str:
+        return "".join(c.lower() for c in x if c.isalnum())
+
+    sc = "".join(letters(w) for w in disp)
+    wc = "".join(letters(r["word"]) for r in rec)
+    tok_of = [k for k, r in enumerate(rec) for _ in letters(r["word"])]
+    blocks = [m for m in difflib.SequenceMatcher(None, sc, wc, autojunk=False).get_matching_blocks() if m.size]
+    anchors = [(0, 0)] + [(m.a + d, m.b + d) for m in blocks for d in (0, m.size)] + [(len(sc), len(wc))]
+    anchors = sorted(set(anchors))
+
+    def to_whisper(pos: int) -> int:  # script letter position -> whisper letter position, interpolated
+        for (a0, b0), (a1, b1) in zip(anchors, anchors[1:]):
+            if a0 <= pos <= a1:
+                return b0 if a1 == a0 else round(b0 + (b1 - b0) * (pos - a0) / (a1 - a0))
+        return len(wc)
+
+    first, count = {}, {}
+    for pos, k in enumerate(tok_of):
+        first.setdefault(k, pos)
+        count[k] = count.get(k, 0) + 1
+
+    def time_at(pos: int) -> float:  # whisper letter boundary -> seconds, linear inside a token
+        pos = min(max(pos, 0), len(wc))
+        if pos >= len(wc):
+            return rec[tok_of[-1]]["end"]
+        k = tok_of[pos]
+        frac = (pos - first[k]) / count[k]
+        return rec[k]["start"] + frac * (rec[k]["end"] - rec[k]["start"])
+
+    def end_at(pos: int) -> float:  # end of the last whisper letter before the boundary
+        q = min(max(pos - 1, 0), len(wc) - 1)
+        k = tok_of[q]
+        return rec[k]["start"] + (q + 1 - first[k]) / count[k] * (rec[k]["end"] - rec[k]["start"])
+
+    out, cum = [], 0
+    for L in lens:
+        out.append((time_at(to_whisper(cum)), end_at(to_whisper(cum + L))))
+        cum += L
     fixed, prev = [], 0.0  # keep starts monotonic, every word at least 50 ms
     for st, en in out:
         st = max(st, prev)
