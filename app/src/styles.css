@@ -914,11 +914,32 @@ code {
 	gap: 8px;
 }
 
+.vd-head.clickable {
+	cursor: pointer;
+}
+
+.vd-head.clickable:hover {
+	background: var(--surface-3);
+}
+
+.vd-head .chev {
+	font-size: 11px;
+	transition: transform 0.18s ease;
+}
+
+.verdict.open .vd-head .chev {
+	transform: rotate(90deg);
+}
+
 .vd-foot {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	padding: 0 12px 12px;
+}
+
+.verdict.collapsible:not(.open) .vd-foot {
+	display: none;
 }
 
 .vd-text {

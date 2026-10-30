@@ -438,18 +438,29 @@ function StoryboardBoard({ content }: { content: string }) {
 // run-details modal, so there is nothing left to expand.
 function ReviewCard({ review, interaction }: { review: Review; interaction?: Interaction }) {
 	const detail = review.verdict === "revise" ? stripVerdict(review.body) : null
+	const [open, setOpen] = useState(false)
+	// Only a review with feedback to read is collapsible; a pass is just the one-line head.
+	const collapsible = detail != null
+	const toggle = () => collapsible && setOpen((o) => !o)
 	return (
-		<div className="verdict flat">
-			<div className="vd-head">
+		<div className={`verdict flat ${collapsible ? "collapsible" : ""} ${open ? "open" : ""}`}>
+			<div
+				className={`vd-head ${collapsible ? "clickable" : ""}`}
+				onClick={toggle}
+				role={collapsible ? "button" : undefined}
+				tabIndex={collapsible ? 0 : undefined}
+				onKeyDown={collapsible ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle()) : undefined}
+			>
 				<span className="vd-label">{reviewLabel(review)}</span>
 				<span className="vd-right">
+					{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
 					<VerdictChip verdict={review.verdict} />
+					{collapsible && <Chevron small />}
 				</span>
 			</div>
-			{(detail || interaction) && (
+			{detail && (
 				<div className="vd-foot">
-					{detail && <p className="vd-text">{detail}</p>}
-					{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
+					<p className="vd-text">{detail}</p>
 				</div>
 			)}
 		</div>
@@ -477,7 +488,7 @@ function RunButton({ interaction, title, versionId, output }: { interaction: Int
 	const [open, setOpen] = useState(false)
 	return (
 		<>
-			<button className="run-btn" onClick={() => setOpen(true)} title="Show the subagent run">
+			<button className="run-btn" onClick={(e) => { e.stopPropagation(); setOpen(true) }} title="Show the subagent run">
 				<EngineMark engine={interaction.engine} />
 				<span>{interaction.model ?? interaction.engine}</span>
 				{interaction.durationMs != null && <span className="muted">· {fmtDur(interaction.durationMs)}</span>}
