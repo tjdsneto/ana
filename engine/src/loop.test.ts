@@ -516,3 +516,69 @@ describe("surgical reopen — one fanned-out scene, siblings untouched", () => {
 		expect(await vcount(all.find((n) => n.type === "storyboard")!.id)).toBe(1) // upstream of build → untouched
 	})
 })
+
+// When the storyboard itself changes under a planner, the planner must RE-PLAN and reconcile its
+// children — not blindly re-fan (losing approved scenes) and not merely re-roll-up (missing a scene the
+// new plan adds/removes).
+const REPLAN_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "storyboard", type: "storyboard", deps: [] },
+			{ id: "build", type: "build", deps: ["storyboard"] },
+			{ id: "assemble", type: "assemble", deps: ["build"] },
+			{ id: "final-review", type: "final-review", deps: ["assemble"] },
+		],
+	},
+	{ type: "storyboard", name: "Storyboard", produce: "board" },
+	{ type: "build", name: "Build", planner: true, childType: "scene", skill: "plan-scenes", produce: "plan scenes" },
+	{ type: "scene", name: "Scene", produce: "scene", reviews: [{ name: "quality", kind: "craft" }, { name: "consistency", kind: "consistency" }] },
+	{ type: "assemble", name: "Assemble", produce: "assemble" },
+	{ type: "final-review", name: "Final review", holisticReview: true },
+]
+const replanTypes = TypeRegistry.fromContracts(REPLAN_CONTRACTS)
+
+describe("planner re-plan — reopen the storyboard, reconcile scenes by name", () => {
+	it("keeps matching scenes, adds the new one, skips the dropped one", async () => {
+		let plans = 0
+		let critiques = 0
+		let draftN = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				plans++
+				// first plan: A, B, C — after the storyboard reopen, the new plan drops C and adds D
+				return plans === 1
+					? { output: '```json\n[{"name":"A","brief":"a"},{"name":"B","brief":"b"},{"name":"C","brief":"c"}]\n```' }
+					: { output: '```json\n[{"name":"A","brief":"a"},{"name":"B","brief":"b"},{"name":"D","brief":"d"}]\n```' }
+			}
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: storyboard — restructure the beats" } : { output: "VERDICT: pass" }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` }
+		})
+		const engine = new Engine({ store, runner, types: replanTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(plans).toBe(2) // planned once, re-planned once after the storyboard reopen
+		const all = await store.nodesFor(root.id)
+		const scene = (name: string) => all.find((n) => n.type === "scene" && n.name === name)
+		expect(scene("A")?.status).toBe("approved") // still in the new plan → kept
+		expect(scene("B")?.status).toBe("approved") // still in the new plan → kept
+		expect(scene("C")?.status).toBe("skipped") // dropped from the new plan → skipped, not rebuilt
+		expect(scene("D")?.status).toBe("approved") // new in the plan → created + built
+		const build = all.find((n) => n.type === "build")!
+		expect(build.status).toBe("approved") // re-rolled-up over {A,B,D approved, C skipped}
+		expect((await store.versionsFor(build.id)).length).toBe(2) // re-planned once
+	})
+})

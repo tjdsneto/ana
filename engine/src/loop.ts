@@ -147,7 +147,8 @@ export class Engine {
 				if (n.status !== "in-progress") continue
 				const kids = childrenOf.get(n.id)
 				if (!kids || kids.length === 0) continue
-				if (kids.every((c) => c.status === "approved")) {
+				// a skipped child (dropped by a re-plan) counts as settled, not blocking
+				if (kids.every((c) => c.status === "approved" || c.status === "skipped")) {
 					await this.store.updateNodeStatus(n.id, "approved")
 					this.log.info(n.parentId === null ? "production.done" : "node.rollup", { productionId: root.productionId, nodeId: n.id, type: n.type })
 					rolled = true
@@ -464,22 +465,28 @@ export class Engine {
 
 		for (const node of tree) {
 			if (!invalid.has(node.id)) continue
+			const v = await this.store.latestVersion(node.id)
+			if (named.has(node.id)) {
+				// the critic named it — re-produce to address the reason
+				if (v) await this.store.updateVersion(v.id, { status: "denied", feedback: named.get(node.id) })
+				await this.store.updateNodeStatus(node.id, "pending")
+				continue
+			}
+			const c = this.types.get(node.type)
+			const depsChanged = node.deps.some((d) => invalid.has(d))
 			const hasChildren = (childrenOf.get(node.id)?.length ?? 0) > 0
-			if (!named.has(node.id) && hasChildren) {
-				// an ancestor / parent — re-rolls-up once its subtree re-approves; keep its version
+			if (c.planner && depsChanged) {
+				// the planner's OWN upstream changed — re-plan + reconcile its children (not just re-roll-up)
+				if (v) await this.store.updateVersion(v.id, { status: "stale" })
+				await this.store.updateNodeStatus(node.id, "pending")
+				continue
+			}
+			if (hasChildren) {
+				// an ancestor whose own deps are intact — only a child reopened, so just re-roll-up; keep its version
 				await this.store.updateNodeStatus(node.id, "in-progress")
 				continue
 			}
-			const v = await this.store.latestVersion(node.id)
-			if (v) {
-				if (named.has(node.id)) {
-					await this.store.updateVersion(v.id, { status: "denied", feedback: named.get(node.id) }) // the critic named it — re-produce to address the reason
-				} else if (this.types.get(node.type).holisticReview) {
-					await this.store.updateVersion(v.id, { status: "superseded" }) // the final review always re-runs once the cascade settles
-				} else {
-					await this.store.updateVersion(v.id, { status: "stale" }) // revalidate: kept if it still holds against the changed upstream, else rebuilt
-				}
-			}
+			if (v) await this.store.updateVersion(v.id, c.holisticReview ? { status: "superseded" } : { status: "stale" })
 			await this.store.updateNodeStatus(node.id, "pending")
 		}
 		return [...named.keys()].map((id) => {
@@ -581,7 +588,8 @@ export class Engine {
 	}
 
 	private async effectiveHash(node: Node, childrenOf: Map<string, Node[]>): Promise<string> {
-		const kids = childrenOf.get(node.id) ?? []
+		// a skipped child (dropped by a re-plan) is not part of the output, so it must not sway the hash
+		const kids = (childrenOf.get(node.id) ?? []).filter((c) => c.status !== "skipped")
 		if (kids.length > 0) {
 			const parts: string[] = []
 			for (const c of [...kids].sort((a, b) => a.position - b.position)) parts.push(`${c.position}:${await this.effectiveHash(c, childrenOf)}`)
@@ -603,6 +611,7 @@ export class Engine {
 	// Quality (craft) is never re-checked — it is intrinsic and an upstream change can't lower it.
 	private async revalidate(node: Node, contract: TypeContract, latest: Version): Promise<boolean> {
 		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		if (contract.planner) return this.replan(node, contract, latest)
 		const current = await this.computeBuiltFrom(node)
 		if (builtFromEqual(current, latest.builtFrom ?? {})) {
 			await this.store.updateVersion(latest.id, { status: "approved" })
@@ -644,6 +653,61 @@ export class Engine {
 		await this.store.updateVersion(latest.id, { status: "denied", feedback: revise.join("\n\n") })
 		log.info("node.revalidate_rebuild", { reason: "reviewers-revise" })
 		return false
+	}
+
+	// Re-plan a stale planner whose own upstream changed, reconciling its children by name instead of
+	// blindly re-fanning: scenes still in the new plan are KEPT (they revalidate individually against the
+	// changed upstream via their own stale mark), scenes no longer in it are SKIPPED, genuinely new ones
+	// are created. The planner stays in-progress and re-rolls-up once the reconciled set settles. Always
+	// returns true (the re-plan is the handling — never falls through to a blind re-fan).
+	private async replan(node: Node, contract: TypeContract, latest: Version): Promise<boolean> {
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		if (!contract.childType) throw new Error(`replan: planner "${node.type}" declares no childType`)
+		const root = await this.store.getProduction(node.productionId)
+		const upstream = await this.collectUpstream(node)
+		const t0 = Date.now()
+		const result = await this.runSubagent({
+			prompt: buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream }),
+			skill: contract.skill ?? node.type,
+			cwd: this.config.craftRoot,
+			resumeSessionId: latest.subagent?.sessionId,
+		})
+		const planned = parsePlan(result.output)
+		if (planned.length === 0) throw new Error(`replan: planner "${node.type}" returned no children — ${result.output.slice(0, 200)}`)
+
+		const children = (await this.store.nodesFor(node.productionId)).filter((n) => n.parentId === node.id)
+		const byName = new Map(children.map((c) => [c.name, c]))
+		const childName = this.types.has(contract.childType) ? (this.types.get(contract.childType).name ?? contract.childType) : contract.childType
+		const wantNames = planned.map((p, i) => p.name || `${childName} ${i + 1}`)
+		const wantSet = new Set(wantNames)
+
+		// skip children no longer planned (excluded from the planner's rollup)
+		for (const c of children) if (!wantSet.has(c.name)) await this.store.updateNodeStatus(c.id, "skipped")
+		// create genuinely-new scenes (kept ones stay and revalidate individually)
+		let position = children.reduce((m, c) => Math.max(m, c.position), -1) + 1
+		const toCreate = planned
+			.map((p, i) => ({ p, name: wantNames[i]! }))
+			.filter(({ name }) => !byName.has(name))
+			.map(({ p, name }) => ({ type: contract.childType!, name, description: p.brief, deps: node.deps, position: position++ }))
+		if (toCreate.length > 0) await this.store.createChildNodes(node.id, toCreate)
+
+		// record the re-plan as a new version, validated against the current upstream
+		const n = latest.n + 1
+		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest.id,
+			status: "approved",
+			artifactPath,
+			builtFrom: await this.computeBuiltFrom(node),
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+		})
+		await this.store.updateVersion(latest.id, { status: "superseded" })
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0)
+		await this.store.updateNodeStatus(node.id, "in-progress") // re-rolls-up once the reconciled children settle
+		log.info("node.replan", { versionId: version.id, kept: children.length - toCreate.length, added: toCreate.length, skipped: children.filter((c) => !wantSet.has(c.name)).length })
+		return true
 	}
 }
 
