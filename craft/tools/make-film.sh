@@ -47,6 +47,12 @@ else
   echo "  [2/5] voice (skipped — produced by voice-production)"
 fi
 echo "  [3/5] build";  python3 "$HERE/build.py" --root "$F"
+# Resolve music: an explicit --music wins; otherwise film.json's `music` field via music.py, which
+# prints a path (library pick / BYO / generated) or nothing. Guarded: no `music` field -> unchanged.
+if [ -z "$MUSIC" ] && grep -q '"music"' "$F/film.json"; then
+  MUSIC="$(python3 "$HERE/music.py" --film "$F/film.json" --words "$F/media/words.json" --out "$F/media" 2>/dev/null)" || MUSIC=""
+  [ -n "$MUSIC" ] && echo "  music -> $MUSIC"
+fi
 echo "  [4/5] mix";    "$PY" "$HERE/mix.py" --root "$F" ${MUSIC:+--music "$MUSIC"}
 echo "  [5/5] render"; ( cd "$HERE" && node render.mjs --html "$F/index.html" --audio "$F/media/mix.wav" --out "$OUT" --fps "$FPS" --no-master )
 echo "make-film: done -> $OUT"
