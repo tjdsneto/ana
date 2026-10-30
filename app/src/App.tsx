@@ -198,12 +198,10 @@ function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: Production
 						{titleCase(nv.node.type)}
 						<StatusChip status={nv.node.status} />
 						{nRevise > 0 && <span className="chip danger">{nRevise} revise</span>}
-						{versions.length > 1 && <span className="chip muted">{versions.length} revisions</span>}
 					</span>
 					<span className="stage-prev">{previewOf(nv, latest)}</span>
 				</span>
 				<span className="stage-right">
-					<span className="ver">{latest ? `v${latest.version.n}` : "—"}</span>
 					<Chevron />
 				</span>
 			</button>
@@ -769,7 +767,7 @@ function previewOf(nv: NodeView, latest?: { version: Version; reviews: Review[] 
 	const n = nv.versions.length
 	const lead = n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`
 	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) return `${lead} · ${baseName(latest.version.artifactPath)}`
-	return `${lead} · ${latest.version.status}`
+	return lead
 }
 
 function titleCase(s: string): string {
