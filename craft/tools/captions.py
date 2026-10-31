@@ -20,11 +20,17 @@ The .srt sidecar is always line-level (one cue per caption line) — that is wha
       [--style karaoke|block] [--film film.json] [--font "DejaVu Sans"] [--accent "#FFD400"] \\
       [--max-chars 28] [--font-size 54] [--margin-v 70] [--srt clip.srt]
 
+Pipeline use (make-film.sh, post-render): burn ONTO the render in place, gated by film.json —
+  python3 craft/tools/captions.py --film film.json --gated --in film.mp4 --words media/words.json --out film.mp4
+`--gated` makes it a no-op (exit 0) unless film.json's `captions` field opts in (true / "karaoke" /
+"block" / an object of overrides); `--force-on` burns even without that field. `--out` may equal `--in`.
+
 Needs ffmpeg (with libass) + ffprobe on PATH. Pure helpers (group_lines / build_ass / build_srt /
-hex_to_ass) are I/O-free and unit-tested in tests/test_captions.py.
+hex_to_ass / parse_captions_config) are I/O-free and unit-tested in tests/test_captions.py.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -35,19 +41,50 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="burn word-timed captions + write an .srt sidecar")
     p.add_argument("--in", dest="inp", required=True, help="source video")
     p.add_argument("--words", required=True, help="words.json (vo.py / align.py)")
-    p.add_argument("--out", required=True, help="captioned video to write")
-    p.add_argument("--film", default=None, help="film.json to read theme {accent, fontCss} from (flags override)")
-    p.add_argument("--style", choices=("karaoke", "block"), default="karaoke")
+    p.add_argument("--out", required=True, help="captioned video to write (may equal --in; written in place)")
+    p.add_argument("--film", default=None, help="film.json: theme {accent, fontCss} + (with --gated) the `captions` config")
+    # Pipeline gating (make-film). --gated: run only if film.json's `captions` field opts in, else no-op
+    # (exit 0, nothing burned). --force-on: burn even with no `captions` field (the make-film `--captions` flag).
+    p.add_argument("--gated", action="store_true", help="respect film.json's `captions` field; no-op when it is off/absent")
+    p.add_argument("--force-on", action="store_true", help="with --gated, burn even when `captions` is absent (karaoke default)")
+    # Style params default to None so film.json's `captions` config can fill them; an explicit flag still wins.
+    p.add_argument("--style", choices=("karaoke", "block"), default=None)
     p.add_argument("--font", default=None, help="caption font family (default: film theme or 'DejaVu Sans')")
     p.add_argument("--accent", default=None, help="#RRGGBB highlight for the spoken word (default: film theme or #FFD400)")
-    p.add_argument("--font-size", type=int, default=54, help="caption font size in px at the video's height")
-    p.add_argument("--max-chars", type=int, default=28, help="wrap a caption line at ~this many characters")
-    p.add_argument("--margin-v", type=int, default=70, help="distance from the bottom edge (px)")
+    p.add_argument("--font-size", type=int, default=None, help="caption font size in px at the video's height (default 54)")
+    p.add_argument("--max-chars", type=int, default=None, help="wrap a caption line at ~this many characters (default 28)")
+    p.add_argument("--margin-v", type=int, default=None, help="distance from the bottom edge, px (default 70)")
     p.add_argument("--srt", default=None, help="also write this .srt sidecar (default: <out> with .srt)")
     return p.parse_args()
 
 
 # ---------- pure helpers (no I/O; unit-tested) ----------
+
+def parse_captions_config(film: dict) -> "dict | None":
+    """film.json `captions` field -> a normalized override dict, or None when captions are OFF.
+
+    Accepts: missing / false / "off" / "none" / "" -> None (no captions); true -> {} (karaoke defaults);
+    "karaoke" / "block" -> {"style": ...}; an object -> its recognized keys (style, font, accent,
+    font_size, max_chars, margin_v) passed through. Anything else -> None (fail safe: no burn)."""
+    c = film.get("captions")
+    if c in (None, False, "off", "none", ""):
+        return None
+    if c is True:
+        return {}
+    if isinstance(c, str):
+        return {"style": c} if c in ("karaoke", "block") else None
+    if isinstance(c, dict):
+        keys = ("style", "font", "accent", "font_size", "max_chars", "margin_v")
+        return {k: c[k] for k in keys if k in c}
+    return None
+
+
+def _first(*vals):
+    """First non-None value (resolution order: explicit flag > film config > theme > hard default)."""
+    for v in vals:
+        if v is not None:
+            return v
+    return None
 
 def group_lines(words: list[dict], max_chars: int) -> list[dict]:
     """Group word dicts into caption lines. Break on a VO `line` change or when the next word would
@@ -164,41 +201,65 @@ def video_size(path: Path) -> tuple[int, int]:
 def main() -> None:
     a = parse_args()
     src, out = Path(a.inp), Path(a.out)
+
+    film = json.loads(Path(a.film).read_text()) if a.film else {}
+
+    # Gating (pipeline use). --gated: the film's `captions` field decides. Off/absent -> no-op (exit 0)
+    # unless --force-on. Ungated (standalone): always burn with karaoke defaults.
+    cfg: "dict | None" = {}
+    if a.gated or a.force_on:
+        cfg = parse_captions_config(film)
+        if cfg is None:
+            if not a.force_on:
+                return  # captions are off for this film — nothing to do
+            cfg = {}
+
+    theme = film.get("theme", {})
+    style = _first(a.style, cfg.get("style"), "karaoke")
+    font = _first(a.font, cfg.get("font"), theme.get("fontCss"), "DejaVu Sans")
+    accent = _first(a.accent, cfg.get("accent"), theme.get("accent"), "#FFD400")
+    font_size = _first(a.font_size, cfg.get("font_size"), 54)
+    max_chars = _first(a.max_chars, cfg.get("max_chars"), 28)
+    margin_v = _first(a.margin_v, cfg.get("margin_v"), 70)
+
     if not src.exists():
         sys.exit(f"captions: input not found: {src}")
     words = json.loads(Path(a.words).read_text())["words"]
     if not words:
         sys.exit(f"captions: {a.words} has no words")
 
-    accent, font = a.accent, a.font
-    if a.film:
-        theme = json.loads(Path(a.film).read_text()).get("theme", {})
-        accent = accent or theme.get("accent")
-        font = font or theme.get("fontCss")
-    accent = accent or "#FFD400"
-    font = font or "DejaVu Sans"
-
-    lines = group_lines(words, a.max_chars)
+    lines = group_lines(words, max_chars)
     w, h = video_size(src)
-    ass = build_ass(lines, w, h, style=a.style, font=font, font_size=a.font_size,
-                    accent_ass=hex_to_ass(accent), margin_v=a.margin_v)
+    ass = build_ass(lines, w, h, style=style, font=font, font_size=font_size,
+                    accent_ass=hex_to_ass(accent), margin_v=margin_v)
 
     srt_path = Path(a.srt) if a.srt else out.with_suffix(".srt")
     srt_path.write_text(build_srt(lines))
+
+    # ffmpeg cannot read and write the same file in one pass; when --out == --in, burn to a sibling temp
+    # then atomically replace the original.
+    in_place = src.exists() and out.resolve() == src.resolve()
+    target = out.with_name(f".{out.stem}.cc-tmp{out.suffix}") if in_place else out
 
     with tempfile.TemporaryDirectory() as td:
         (Path(td) / "subs.ass").write_text(ass)
         # Re-encode video (burn is a filter); copy audio untouched. ffmpeg's filtergraph parser mangles
         # an absolute path inside `ass=...` (the '/'s read as option syntax), so run from the temp dir
-        # and reference the subtitle by basename; src/out stay absolute, unaffected by cwd.
+        # and reference the subtitle by basename; src/target stay absolute, unaffected by cwd.
         r = subprocess.run(
             ["ffmpeg", "-v", "error", "-y", "-i", str(src.resolve()), "-vf", "ass=subs.ass",
-             "-c:a", "copy", str(out.resolve())],
+             "-c:a", "copy", str(target.resolve())],
             cwd=td, capture_output=True, text=True)
         if r.returncode != 0:
+            target_unlink = target if in_place else None
+            if target_unlink and target_unlink.exists():
+                target_unlink.unlink()
             sys.exit(f"captions: ffmpeg burn failed — {r.stderr.strip()[:300]}")
 
-    print(f"{len(lines)} caption lines ({a.style}) -> {out}; sidecar -> {srt_path}")
+    if in_place:
+        os.replace(target, out)
+
+    print(f"{len(lines)} caption lines ({style}) -> {out}; sidecar -> {srt_path}")
 
 
 if __name__ == "__main__":

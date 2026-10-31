@@ -67,6 +67,20 @@ def test_build_srt():
     assert "3\n00:00:01,840 --> 00:00:03,960\nAwesome Motive ships WPVibe\n" in srt
 
 
+def test_parse_captions_config():
+    cap = _load()
+    # OFF cases -> None (no burn)
+    assert cap.parse_captions_config({}) is None                       # no `captions` key
+    assert cap.parse_captions_config({"captions": False}) is None
+    assert cap.parse_captions_config({"captions": "off"}) is None
+    assert cap.parse_captions_config({"captions": "nope"}) is None     # unknown string -> fail safe
+    # ON cases
+    assert cap.parse_captions_config({"captions": True}) == {}          # karaoke defaults
+    assert cap.parse_captions_config({"captions": "block"}) == {"style": "block"}
+    cfg = cap.parse_captions_config({"captions": {"style": "block", "font_size": 48, "bogus": 1}})
+    assert cfg == {"style": "block", "font_size": 48}                   # only recognized keys survive
+
+
 def test_build_ass_karaoke_vs_block():
     cap = _load()
     lines = cap.group_lines(WORDS, 28)
@@ -87,8 +101,9 @@ if __name__ == "__main__":
         test_group_lines_breaks_on_cap_and_line()
         test_hex_to_ass()
         test_build_srt()
+        test_parse_captions_config()
         test_build_ass_karaoke_vs_block()
     except AssertionError as e:
         print(f"CAPTIONS FAIL: {e}")
         sys.exit(1)
-    print("CAPTIONS OK (group_lines / srt / ass / colour)")
+    print("CAPTIONS OK (group_lines / srt / ass / colour / config)")

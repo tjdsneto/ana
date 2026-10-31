@@ -22,6 +22,9 @@ The task prompt gives a **work dir** that already contains `film.json` (the appr
    craft/tools/make-film.sh <workDir> --out <workDir>/film.mp4
    ```
    - The **voice** step inside the chain is owned by the `voice-production` skill — pick the TTS engine per that skill and pass `--voice-engine <kokoro|piper>` (default `kokoro`). If `voice-production` already produced `<workDir>/media/vo.wav` + `media/words.json`, pass `--skip-voice` so the chain reuses them instead of re-synthesizing.
+   - **External narration (not TTS).** If `film.json` sets `"audio"` (a path to a real voice clip — a human take, an avatar/cinematic render), the chain word-times that clip (`align.py`) and uses its audio as the narration instead of synthesizing. `--audio-clip <file>` overrides the field. The script.txt is used for verbatim word timing when present.
+   - **Music** resolves automatically from `film.json`'s `music` field (`music.py` → library pick / BYO path / generated bed); an explicit `--music <file>` overrides it.
+   - **Captions** burn onto the render automatically when `film.json` sets `"captions"` (`true` / `"karaoke"` / `"block"` / an object of overrides), writing an `.srt` sidecar beside the `.mp4`. Force on without the field with `--captions`; suppress with `--no-captions`; pick a look with `--caption-style karaoke|block`.
    - If the plates are already captured in `<workDir>/assets/shots/` (upstream provided them), add `--skip-capture`.
    - Plates may drive an app UI: a plate `step` can carry a `js` string (async OK) that runs in the page to click/expand before the shot (used for dashboard walkthroughs). `make-film` runs them as-is.
 3. **Tail clip (explainer mode).** If `film.json` has a `tail_clip` (an absolute `.mp4` path to append — e.g. the very video this explainer describes), concatenate it after the render so the deliverable ends by playing it:

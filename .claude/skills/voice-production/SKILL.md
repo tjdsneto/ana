@@ -19,6 +19,16 @@ Each engine is a local, keyless tool the worker can run. Know what each is for:
 
 **Picking:** final or hero cut → `kokoro`. Draft/preview, or a resource/time crunch, or a language/voice Kokoro lacks → `piper`. If the chosen engine is unavailable (model/binary missing), fall back to `kokoro`; if that is also unavailable, stop and report — never fabricate audio.
 
+## When the narration is a real clip, not TTS (align.py)
+
+Sometimes the voice is **not** synthesized — a human recorded the take, or it rides an avatar / cinematic render (HeyGen / Higgsfield), a screen recording, or a selfie clip. Then you don't synthesize; you **word-time the existing clip** onto the same timeline so build / mix / render / captions read it unchanged:
+
+```
+"$KOKORO_PY" craft/tools/align.py --in <clip.mp4|audio.wav> --script <workDir>/script.txt --out <workDir>/media
+```
+
+`align.py` writes `media/words.json` (the same `{duration, words:[{text,start,end,line}]}` contract) by running whisper over the clip and — with `--script` — forcing the timing onto the verbatim script words (keeps proper nouns). It does **not** write `vo.wav`: the clip owns its audio. In the full chain, `make-film.sh` takes this path automatically when `film.json` sets `"audio": "<clip>"` (it also extracts the clip's audio to `media/vo.wav` so mix/render work unchanged); drive it by hand with `make-film.sh <workDir> --audio-clip <clip>`.
+
 ## Inputs
 
 A **work dir** that already holds `script.txt` (one VO line per line) and `film.json` (its `voice` block sets `id`, `speed`, `lead`, `gap`). Run under the Kokoro venv python (it carries `soundfile` + `numpy` + `whisper`, which the timing step needs for every engine; `piper` is a separate binary).
