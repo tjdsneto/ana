@@ -80,9 +80,11 @@ A beat's `focus` decides what the viewer sees while a line is spoken. Guessing a
 - Add a CSS selector per focal element to `marks` (e.g. `"marks": { "steplist": ".stage-list", "f2": ".stage:nth-of-type(2) .rev.fail .feeds" }`). site-capture resolves each to a real rect; `focus: "steplist"` then frames that element exactly, whatever the layout.
 - Use a raw `[x,y]` only when there is no stable element to name. If you do, you MUST verify it on the board (step 4) — the crop shows precisely what that pixel frames.
 
-## 4. Visual board (required) — see what each beat frames, before you output
+## 4. Visual board — see what each beat frames, before you output
 
-The storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, capture the real plates and render the board, then look at it:
+**Only for a CAPTURE board** (plates carry a `url` — a real site or our app dashboard). If your plates are **composed cards** (no `url`, built at render time), skip this step: `site-capture.mjs` needs a URL and cannot render a composed board, and there is no composed-board renderer yet. Do not burn attempts trying to capture a composed board — the render-stage consistency reviewer checks the composed pixels on the actual rendered frames. For a composed storyboard, make sure every card's text/`chips` are grounded in the script and short/readable, then output.
+
+For a capture board: the storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, capture the real plates and render the board, then look at it:
 
 ```
 node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>

@@ -32,20 +32,27 @@ The costliest failure is subtler than raw empty margins: the beat shows its subj
 
 If the brief marks the video an explainer / case-study / walkthrough, relax the structure rules: a **sequential walkthrough** (one beat per section/step — hero, stats, each pipeline stage) is the intended shape, not a single payoff idea; **more than 5 beats is fine** and expected; the plate may be our own app dashboard. Do **not** revise for "serves a second idea" or "too many beats." Keep enforcing the load-bearing checks: framing/scale (the section a beat narrates must dominate the frame, not sit tiny in a tall page), focal hierarchy, edge-to-edge fill, no empty band on entry, and readable text. A `tail_clip` field (an appended produced clip) is allowed.
 
-## Visual review (required) — judge the board, not just the JSON
+## Board medium — capture vs composed (decide FIRST)
 
-You must review the **rendered board**, not only read params. Produce it yourself (independent of the producer) and look at every card:
+Look at `plates` in the `film.json`. There are two media, and they are reviewed differently:
+
+- **Capture (Family A):** a plate carries a `url` (a real site or our app dashboard). The board is a Ken-Burns tour of a captured page, and you MUST render + read the pixel board (next section).
+- **Composed / generative:** the plates are composed cards built at render time (no `url` on the plate — e.g. `plates.cards` with shapes/type/gradients). `site-capture.mjs` needs a URL, so it **cannot** render a board for a composed storyboard, and `storyboard-board.py` has nothing to crop. Do **NOT** revise a composed storyboard for "no board/sheet.jpg" — that is a medium limitation, not a weak board. There is no composed-board renderer yet (tracked as a TODO). For a composed board, judge craft + grounding from the `film.json` itself (below), and rely on the **render-stage consistency reviewer**, which watches the actual rendered frames, for the pixel check.
+
+## Visual review — judge the board
+
+For a **capture** storyboard you must review the **rendered board**, not only read params. Produce it yourself (independent of the producer) and look at every card:
 
 ```
 node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>   # if assets/shots not already present
 python3 craft/tools/storyboard-board.py --root <workDir>
 ```
 
-Open `<workDir>/board/sheet.jpg` — one card per beat: the **exact region the render will frame** beside that beat's VO line, chip and ring. A verdict given without reading the board is invalid.
+Open `<workDir>/board/sheet.jpg` — one card per beat: the **exact region the render will frame** beside that beat's VO line, chip and ring. For a capture storyboard, a verdict given without reading the board is invalid. (For a composed storyboard there is no board to read — judge grounding from the `film.json` script + plate/card params instead, per the medium section above.)
 
 ### Grounding — the picture must depict what the line says (load-bearing)
 
-For **every** beat, check the card's picture against its VO line and chip:
+For **every** beat, check the card's picture (capture) or its composed card spec (composed) against its VO line and chip:
 
 - Does the framed content actually show what the VO is naming at that moment? A "seven steps" line over a crop of a briefing paragraph, a "runs on Sonnet" line over a model row reading something else, a "here's what it produced" line over a static poster — each is a **revise**. Name the beat, say what the VO claims vs. what the crop shows, and give the fix (point `focus` at the right `mark`, adjust `zoom`).
 - Any specific claim the VO makes (a number, a name, a reason) that the card does not actually show on screen is a grounding gap — revise, and say which element to frame/ring so the claim is visible.
