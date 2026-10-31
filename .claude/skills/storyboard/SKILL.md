@@ -80,9 +80,9 @@ A beat's `focus` decides what the viewer sees while a line is spoken. Guessing a
 - Add a CSS selector per focal element to `marks` (e.g. `"marks": { "steplist": ".stage-list", "f2": ".stage:nth-of-type(2) .rev.fail .feeds" }`). site-capture resolves each to a real rect; `focus: "steplist"` then frames that element exactly, whatever the layout.
 - Use a raw `[x,y]` only when there is no stable element to name. If you do, you MUST verify it on the board (step 4) — the crop shows precisely what that pixel frames.
 
-## 4. Visual board — see what each beat frames, before you output
+## 4. Visual board (REQUIRED, both media) — see what each beat frames, before you output
 
-**Only for a CAPTURE board** (plates carry a `url` — a real site or our app dashboard). If your plates are **composed cards**, skip this step: `site-capture.mjs` needs a URL, and there is no composed-board renderer yet. Do not burn attempts trying to capture a composed board — the render-stage consistency reviewer checks the composed pixels on the actual rendered frames. For a composed storyboard, make sure every card's text/`chips` are grounded in the script and short/readable, then output.
+You MUST render and look at the board before output — for composed boards too. Composed plates are inline `data:text/html` URLs (below), and `site-capture.mjs` screenshots a data-URL exactly like a site URL, so the board renders either way. Do NOT output on composed-card reasoning alone — the reviewer will render the pixel board and reject dead space, tiny focal elements, repetitive beats and sparse closes, so catch them here first.
 
 ### Composed plates MUST be inline data-URLs (critical — the render screenshots them)
 
@@ -97,7 +97,7 @@ The render builds every beat from a **screenshot** of its plate (`site-capture.m
 
 The HTML is a complete document (`<!doctype html><meta charset=utf-8><style>…</style>…`) sized to the film `size` (e.g. 1920×1080), drawing the card with inline CSS — shapes, gradients, swatches, type. One plate per distinct card/background a beat frames; a `camera` beat's `plate` names which one. **Never** use a `file` reference (`"file": "plate.html"`) or any path — that file does not exist in the render's work dir and the render will fail with "no .mp4 / plate.html exists nowhere". Inline only.
 
-For a capture board: the storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, capture the real plates and render the board, then look at it:
+The storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, render the plates (captured pages AND inline composed cards both screenshot here) and build the board, then look at it:
 
 ```
 node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>

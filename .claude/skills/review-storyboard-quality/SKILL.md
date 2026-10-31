@@ -36,19 +36,21 @@ If the brief marks the video an explainer / case-study / walkthrough, relax the 
 
 Look at `plates` in the `film.json`. There are two media, and they are reviewed differently:
 
-- **Capture (Family A):** a plate carries a `url` (a real site or our app dashboard). The board is a Ken-Burns tour of a captured page, and you MUST render + read the pixel board (next section).
-- **Composed / generative:** the plates are composed cards built at render time (no `url` on the plate — e.g. `plates.cards` with shapes/type/gradients). `site-capture.mjs` needs a URL, so it **cannot** render a board for a composed storyboard, and `storyboard-board.py` has nothing to crop. Do **NOT** revise a composed storyboard for "no board/sheet.jpg" — that is a medium limitation, not a weak board. There is no composed-board renderer yet (tracked as a TODO). For a composed board, judge craft + grounding from the `film.json` itself (below), and rely on the **render-stage consistency reviewer**, which watches the actual rendered frames, for the pixel check.
+- **Capture (Family A):** a plate carries a `url` to a real site or our app dashboard. The board is a Ken-Burns tour of a captured page.
+- **Composed / generative:** each plate's `url` is a self-contained inline `data:text/html;...` card (shapes/type/gradients). `site-capture.mjs` loads a data-URL in a browser exactly like any other URL and screenshots it, so **composed boards render too** — `storyboard-board.py` crops the shots into `board/sheet.jpg` the same way.
 
-## Visual review — judge the board
+**Either way you MUST render and READ the pixel board (next section). Do not judge a composed board from the `film.json` alone — that is how dead-space, tiny-focal, and repetitive boards passed before. Look at the cards.**
 
-For a **capture** storyboard you must review the **rendered board**, not only read params. Produce it yourself (independent of the producer) and look at every card:
+## Visual review (required, BOTH media) — judge the board, not the JSON
+
+You must review the **rendered board**, not only read params — for capture AND composed storyboards. Produce it yourself (independent of the producer) and look at every card. The storyboard artifact is the `film.json` (or a short report naming its path, often `tmp/film-*.json`); materialize that film.json into a scratch dir as `film.json`, then:
 
 ```
-node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>   # if assets/shots not already present
+node craft/tools/site-capture.mjs --spec <workDir>/film.json --out <workDir>   # screenshots every plate (incl. inline data-URL composed cards)
 python3 craft/tools/storyboard-board.py --root <workDir>
 ```
 
-Open `<workDir>/board/sheet.jpg` — one card per beat: the **exact region the render will frame** beside that beat's VO line, chip and ring. For a capture storyboard, a verdict given without reading the board is invalid. (For a composed storyboard there is no board to read — judge grounding from the `film.json` script + plate/card params instead, per the medium section above.)
+Open `<workDir>/board/sheet.jpg` — one card per beat: the **exact region the render will frame** beside that beat's VO line, chip and ring. **A verdict given without reading the rendered board is invalid**, composed or captured. Judge the actual pixels against the framing/scale/pacing checks above: dead space (a big empty ring/band with the real content tiny in a corner → revise), focal element too small, near-duplicate beats padding the runtime, text too small, a sparse frozen close. These are exactly the failures that slipped through when composed boards were judged from JSON.
 
 ### Grounding — the picture must depict what the line says (load-bearing)
 
