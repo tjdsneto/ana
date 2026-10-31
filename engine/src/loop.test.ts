@@ -1,7 +1,7 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
 // tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -493,9 +493,14 @@ describe("brainstorm phase — fan out ideas, fresh judge sees the developed ide
 	it("fans out 3 idea candidates and hands all three to the select judge's upstream", async () => {
 		const runner = new FakeSubagentRunner((input) => {
 			if (input.skill === "brainstorm") {
-				return { output: '```json\n[{"name":"Angle A","brief":"a"},{"name":"Angle B","brief":"b"},{"name":"Angle C","brief":"c"}]\n```' }
+				return { output: '```json\n[{"name":"Angle A","brief":"ALPHA"},{"name":"Angle B","brief":"BRAVO"},{"name":"Angle C","brief":"CHARLIE"}]\n```' }
 			}
-			if (input.skill === "idea") return { output: "IDEA TREATMENT (a developed concept)" }
+			if (input.skill === "idea") {
+				// Echo the one seed this fanned-out idea node was handed, so each sibling's developed
+				// treatment is genuinely distinct — a collision would make them clobber to one.
+				const seed = ["ALPHA", "BRAVO", "CHARLIE"].find((s) => input.prompt.includes(s)) ?? "?"
+				return { output: `IDEA TREATMENT for ${seed}` }
+			}
 			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
 			return { output: `draft ${input.skill}` }
 		})
@@ -520,6 +525,13 @@ describe("brainstorm phase — fan out ideas, fresh judge sees the developed ide
 		expect(selectCall).toBeDefined()
 		const ideaMentions = (selectCall.prompt.match(/### idea/g) ?? []).length
 		expect(ideaMentions).toBe(3) // all three idea artifacts handed to the judge, not just the plan
+		// …and the three are genuinely distinct — fanned siblings must not share an artifact path or
+		// clobber one another on disk (the type-keyed filename bug that collapsed them to one).
+		const ideaVersions = await Promise.all(ideas.map((i) => store.latestVersion(i.id)))
+		const ideaPaths = ideaVersions.map((v) => v!.artifactPath!)
+		expect(new Set(ideaPaths).size).toBe(3)
+		const ideaContents = ideaPaths.map((p) => readFileSync(p, "utf8"))
+		expect(new Set(ideaContents).size).toBe(3)
 	})
 })
 

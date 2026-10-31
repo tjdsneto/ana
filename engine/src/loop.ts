@@ -236,6 +236,19 @@ export class Engine {
 		log.info("node.plan", { versionId: version.id, children: planned.length })
 	}
 
+	// Artifact filename base for a node. Fanned-out children of a planner share a type, so a
+	// type-keyed filename (`idea-v1.md`) would make siblings clobber one another (and race, since they
+	// run in parallel). Give each fanned child a node-scoped name so its artifact is its own.
+	private async artifactBase(node: Node): Promise<string> {
+		if (node.parentId) {
+			const parent = (await this.store.nodesFor(node.productionId)).find((s) => s.id === node.parentId)
+			if (parent && this.types.has(parent.type) && this.types.get(parent.type).planner) {
+				return `${node.type}-${node.id.slice(-6)}`
+			}
+		}
+		return node.type
+	}
+
 	// The leaf path: produce → specialist reviewer set → gate. A failing review redoes (fed the
 	// reviewers' feedback) up to maxRedos, then escalates. Agreement leaves (briefing) never block on
 	// review; they present and loop on human feedback, capped by actor_kind (spec 02).
@@ -303,7 +316,7 @@ export class Engine {
 				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			draft = producerResult.output
-			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
+			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
 		}
 		const producerMs = Date.now() - t0
 		const version = await this.store.createVersion({
@@ -744,10 +757,10 @@ function builtFromEqual(a: Record<string, string>, b: Record<string, string>): b
 
 // ── artifact files (on the shared volume; the DB only references the path) ─────────────────────────
 
-function writeArtifact(artifactsDir: string, productionId: string, type: string, n: number, content: string): string {
+function writeArtifact(artifactsDir: string, productionId: string, name: string, n: number, content: string): string {
 	const dir = join(artifactsDir, productionId)
 	mkdirSync(dir, { recursive: true })
-	const path = join(dir, `${type}-v${n}.md`)
+	const path = join(dir, `${name}-v${n}.md`)
 	writeFileSync(path, content, "utf8")
 	return path
 }
