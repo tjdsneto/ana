@@ -53,6 +53,7 @@ async function main(): Promise<void> {
 	}
 
 	const fedback = new Set<string>() // node ids already given a feedback round
+	const escalated = new Set<string>() // present outputs that escalated (capped, known-bad) — never auto-approved
 	let feedbackLeft = MAX_FEEDBACK
 	const deadline = Date.now() + MAX_SECONDS * 1000
 
@@ -76,6 +77,15 @@ async function main(): Promise<void> {
 					feedbackLeft--
 					await submitFeedback(store, { outputId: out.id, body: "Tighten the hook in the opening line and make the closing call to action more specific and concrete." })
 					log("feedback", { node: node.type, outputId: out.id })
+				} else if (out.type === "present" && /Presenting anyway/.test(out.prompt ?? "")) {
+					// Escalation present: the holistic/agreement cap gave up with an unresolved problem and
+					// is presenting a KNOWN-BAD cut for a human to judge. A real human reads the reason and
+					// rejects; the harness must NOT rubber-stamp it approved (that is how garbage shipped as
+					// "approved"). Leave it unapproved so the production stays visibly not-clean.
+					if (!escalated.has(out.id)) {
+						escalated.add(out.id)
+						log("escalation_not_approved", { node: node?.type ?? "?", outputId: out.id, prompt: out.prompt })
+					}
 				} else {
 					await approve(store, { outputId: out.id })
 					log("approve", { node: node?.type ?? "?", type: out.type, outputId: out.id })

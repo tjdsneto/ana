@@ -101,6 +101,7 @@ export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, 
 		craft: "Judge the deliverable on its own craft merits against the rubric.",
 		coverage: "Check that every point from the brief and approved upstream work made it in.",
 		consistency: "Check that it matches the design language and the sibling artifacts.",
+		audio: "Run the deterministic verifier and relay its verdict: the voiceover matches the script exactly (no duplicated or dropped lines, in order), the mp4/vo durations are in sync, no dead air, no blank open.",
 	}
 	const parts: string[] = []
 	// A reviewer skill (if declared) owns the per-step rubric for this axis — the runner injects it as a

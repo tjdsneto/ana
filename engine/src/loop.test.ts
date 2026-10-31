@@ -289,6 +289,13 @@ describe("type registry", () => {
 		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
 		// render's consistency gate is an owned pixel-watch (faithful execution of the board)
 		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
+		// render also carries a deterministic audio/sync gate (VO matches script, no dup/dropped lines, in sync)
+		expect(disk.get("render").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
+		// the video-project pipeline ends render → final-review (no polish re-render step between them)
+		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
+		expect(vp).not.toContain("polish")
+		expect(vp.slice(-2)).toEqual(["render", "final-review"])
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "final-review")?.deps).toEqual(["render"])
 	})
 
 	it("wires research + brainstorm as real chain steps before the script", async () => {
