@@ -7,6 +7,8 @@ description: Turn the approved script + brief into a film.json — the word-anch
 
 Produce the **film.json** for this video: a word-anchored storyboard over the brand's **provided** site. The render consumes it verbatim, so it must be valid JSON, complete, and timed so the **product stays on screen for the bulk of the clip**. Output **only** the JSON (no prose, no code fence).
 
+**Aim at the bar.** Read `craft/CRAFT-BAR.md` §2 (the frame) and §3 (no AI slop) and build to them: one dominant subject per beat filling ≥ ~50% of the frame (no big empty ring/band with the content tiny — the failure that gets boards rejected); every beat visually distinct (no near-duplicate held cards padding runtime, no sparse frozen close); motion that means something; one signature move. For composed cards, keep the §3 tell cluster to 0–1 (not gradients-everywhere + card-for-everything + one-accent + a default font like Inter/Outfit — that cluster reads as AI slop and is a revise). The quality reviewer renders your board and judges it against this bar at the ship test, with a high redo budget — so clear the bar here.
+
 ## 1. Discovery first (ground it — don't author blind)
 
 Before writing the JSON, look at the real page so your camera stays on content:

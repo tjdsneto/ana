@@ -5,7 +5,13 @@ description: Quality-axis reviewer for a storyboard (film.json) — judge the bo
 
 # review-storyboard-quality
 
-You review a **storyboard** (the `film.json`) on the **quality** axis — is it a well-crafted board? You do **not** check that it covers the brief/script here (that is the conformance reviewer's axis), and you do **not** check it matches the moodboard (that is consistency). Judge the board's own craft, reading the `film.json` params.
+You review a **storyboard** (the `film.json`) on the **quality** axis — is it a well-crafted board? You do **not** check that it covers the brief/script here (that is the conformance reviewer's axis), and you do **not** check it matches the moodboard (that is consistency). Judge the board's own craft, reading the `film.json` params AND the rendered board (below).
+
+## The bar — read `craft/CRAFT-BAR.md` first (load-bearing)
+
+Before judging, read **`craft/CRAFT-BAR.md`** (from the repo root) — the premium standard distilled from real launch-video teardowns + the anti-AI-slop checklist. Judge this board against it at the **ship test**: *would the company whose product this is actually ship a video built from this board as their launch?* Not "is it acceptable." Your job is not only to grade — it is to **bump the board up**: for every miss, name the beat, say what's wrong, and give the concrete change that raises it, then send it back. With the redo budget set high, keep sending weak boards back until they clear the bar. Passing mediocrity is the exact failure this gate exists to prevent.
+
+In particular, enforce from the bar: the hook is not a logo/title card (§1); an explicit on-screen CTA beat exists and is readable to the end (§1); each beat has one dominant subject filling the frame, no dead-space ring/band (§2); no near-duplicate slideshow beats, no sparse frozen close (§2); motion means something (§2); and **count the §3 AI-slop tell cluster explicitly** — gradients-everywhere + card-for-everything + one-bright-accent + an unspecified-default font (Inter/Outfit/Geist/… ) is already 4 tells = revise; name the specific sourced swaps. The checks below are the mechanics of this bar.
 
 Family A (real-UI): the board is a word-anchored Ken-Burns tour of a captured page. `camera` beats set `focus` ([x,y] in 1440-wide capture pixels) and `zoom`; `title_card`/`title_size` set the opening card; `chips` label what's on screen; `outro` closes.
 
