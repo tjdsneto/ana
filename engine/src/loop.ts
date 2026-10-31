@@ -278,9 +278,11 @@ export class Engine {
 		const upstream = await this.collectUpstream(node)
 
 		// produce — always via a subagent: a rendered leaf runs the render-film skill (which owns its
-		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. The
-		// producer resumes its prior session (the latest version's subagent.sessionId) so a redo
-		// round continues the same provider session rather than starting cold.
+		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. A redo
+		// does NOT resume the prior provider session: the producer prompt already carries the prior
+		// draft + the reviewers' feedback, and resuming a stale session meant an edited skill never
+		// reached a redo and the producer re-emitted its old output instead of acting on the feedback
+		// (the "resume trap"). Each produce runs fresh so it re-reads the current skill and the feedback.
 		let draft: string
 		let artifactPath: string
 		let producerResult: SubagentResult | undefined
@@ -300,7 +302,6 @@ export class Engine {
 				prompt: producerPrompt,
 				skill: contract.skill ?? "render-film",
 				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			const mp4 = newestMp4(workDir)
 			if (!mp4) throw new Error(`render: the skill produced no .mp4 in ${workDir} — ${producerResult.output.slice(0, 200)}`)
@@ -313,7 +314,6 @@ export class Engine {
 				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,
 				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			draft = producerResult.output
 			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)

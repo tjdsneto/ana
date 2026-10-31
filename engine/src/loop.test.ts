@@ -178,8 +178,10 @@ describe("interaction log + session capture", () => {
 		expect(ints.every((i) => typeof i.prompt === "string" && i.prompt.length > 0)).toBe(true) // the prompt sent to each subagent is persisted
 	})
 
-	it("resumes the producer's session across redo rounds (one session per leaf producer)", async () => {
-		// every reviewer says revise → the script producer redoes up to the cap, resuming its session.
+	it("runs each producer attempt FRESH across redo rounds (no resumed session — avoids the resume trap)", async () => {
+		// every reviewer says revise → the script producer redoes up to the cap. Each redo must start a
+		// fresh provider session (no resumeSessionId) so it re-reads the current skill and acts on the
+		// reviewers' feedback, rather than resuming a stale session and re-emitting its old output.
 		const runner = new FakeSubagentRunner((input) =>
 			input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "a draft" },
 		)
@@ -198,12 +200,10 @@ describe("interaction log + session capture", () => {
 		const script = (await store.nodesFor(root.id)).find((n) => n.type === "script")!
 		const versions = await store.versionsFor(script.id)
 		expect(versions).toHaveLength(3) // producer ran 3 times
-		const sessionIds = new Set(versions.map((v) => v.subagent?.sessionId))
-		expect(sessionIds.size).toBe(1) // all three redo rounds share ONE session
-		expect([...sessionIds][0]).toBeDefined()
-		// the 2nd and 3rd producer attempts carried a resumeSessionId (the 1st started cold)
-		const scriptResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
-		expect(scriptResumes.length).toBeGreaterThanOrEqual(2)
+		// no producer attempt resumes a prior session — every redo is cold, so an edited skill and the
+		// reviewer feedback reach each attempt.
+		const producerResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
+		expect(producerResumes.length).toBe(0)
 	})
 })
 
