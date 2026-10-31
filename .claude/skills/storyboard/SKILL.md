@@ -82,7 +82,20 @@ A beat's `focus` decides what the viewer sees while a line is spoken. Guessing a
 
 ## 4. Visual board — see what each beat frames, before you output
 
-**Only for a CAPTURE board** (plates carry a `url` — a real site or our app dashboard). If your plates are **composed cards** (no `url`, built at render time), skip this step: `site-capture.mjs` needs a URL and cannot render a composed board, and there is no composed-board renderer yet. Do not burn attempts trying to capture a composed board — the render-stage consistency reviewer checks the composed pixels on the actual rendered frames. For a composed storyboard, make sure every card's text/`chips` are grounded in the script and short/readable, then output.
+**Only for a CAPTURE board** (plates carry a `url` — a real site or our app dashboard). If your plates are **composed cards**, skip this step: `site-capture.mjs` needs a URL, and there is no composed-board renderer yet. Do not burn attempts trying to capture a composed board — the render-stage consistency reviewer checks the composed pixels on the actual rendered frames. For a composed storyboard, make sure every card's text/`chips` are grounded in the script and short/readable, then output.
+
+### Composed plates MUST be inline data-URLs (critical — the render screenshots them)
+
+The render builds every beat from a **screenshot** of its plate (`site-capture.mjs` loads the plate's `url` in a browser → `assets/shots/<id>.jpg` → `build.py` composes it). So a composed card has to be a thing a browser can open **with no external file**. Emit each composed plate as a self-contained inline **data-URL**, exactly this shape:
+
+```
+"plates": {
+  "f1": { "url": "data:text/html;charset=utf-8,<URL-ENCODED self-contained HTML doc>", "steps": [{ "wait": 300 }] },
+  "f2": { "url": "data:text/html;charset=utf-8,...", "steps": [{ "wait": 300 }] }
+}
+```
+
+The HTML is a complete document (`<!doctype html><meta charset=utf-8><style>…</style>…`) sized to the film `size` (e.g. 1920×1080), drawing the card with inline CSS — shapes, gradients, swatches, type. One plate per distinct card/background a beat frames; a `camera` beat's `plate` names which one. **Never** use a `file` reference (`"file": "plate.html"`) or any path — that file does not exist in the render's work dir and the render will fail with "no .mp4 / plate.html exists nowhere". Inline only.
 
 For a capture board: the storyboard is reviewed as **pixels**, not JSON. After writing `film.json` into the work dir, capture the real plates and render the board, then look at it:
 
