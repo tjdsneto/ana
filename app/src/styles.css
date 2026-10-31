@@ -276,6 +276,49 @@ code {
 	color: var(--muted);
 }
 
+/* full production id, copy on click */
+.prodid {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin-top: 8px;
+	padding: 3px 8px;
+	background: var(--surface-3);
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	cursor: pointer;
+	max-width: 100%;
+}
+
+.prodid:hover {
+	border-color: var(--line-strong);
+}
+
+.prodid-k {
+	font-size: 9.5px;
+	letter-spacing: 0.1em;
+	font-weight: 700;
+	color: var(--faint);
+	flex: none;
+}
+
+.prodid-v {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--fg);
+	user-select: all;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.prodid-copy {
+	font-size: 10px;
+	color: var(--accent);
+	flex: none;
+}
+
 .usage {
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);

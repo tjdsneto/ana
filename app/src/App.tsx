@@ -34,7 +34,8 @@ type Tab = "productions" | "videos"
 export function App() {
 	const [tab, setTab] = useState<Tab>("productions")
 	const [productions, setProductions] = useState<Node[]>([])
-	const [selectedId, setSelectedId] = useState<string | null>(null)
+	// The selected production lives in the URL (?p=<id>) so a view is shareable and survives reload.
+	const [selectedId, setSelectedId] = useState<string | null>(() => productionIdFromUrl())
 	const [detail, setDetail] = useState<ProductionDetail | null>(null)
 	const [videos, setVideos] = useState<VideoFile[]>([])
 	const [error, setError] = useState<string | null>(null)
@@ -84,6 +85,21 @@ export function App() {
 		if (id) void refreshDetail(id)
 	})
 
+	// Set the selection and reflect it in the URL (and vice versa on back/forward).
+	const selectProduction = (id: string | null) => {
+		setSelectedId(id)
+		const url = new URL(location.href)
+		if (id) url.searchParams.set("p", id)
+		else url.searchParams.delete("p")
+		history.pushState({ p: id }, "", url)
+	}
+
+	useEffect(() => {
+		const onPop = () => setSelectedId(productionIdFromUrl())
+		window.addEventListener("popstate", onPop)
+		return () => window.removeEventListener("popstate", onPop)
+	}, [])
+
 	return (
 		<div className="app">
 			<header className="topline">
@@ -108,7 +124,7 @@ export function App() {
 						<div className="rail-head"><span>Productions</span><span>{productions.length}</span></div>
 						{productions.length === 0 && <p className="muted pad">No productions yet.</p>}
 						{productions.map((p) => (
-							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""} ${isActive(p.status) ? "active" : ""} ${isPending(p.status) ? "pending" : ""}`} onClick={() => setSelectedId(p.id)}>
+							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""} ${isActive(p.status) ? "active" : ""} ${isPending(p.status) ? "pending" : ""}`} onClick={() => selectProduction(p.id)}>
 								<div className="ptitle">{p.name}</div>
 								<div className="pmeta">
 									<StatusChip status={p.status} />
@@ -128,6 +144,35 @@ export function App() {
 	)
 }
 
+// The production's full id, shown plainly and copied on click (with brief confirmation).
+function ProdId({ id }: { id: string }) {
+	const [copied, setCopied] = useState(false)
+	const copy = () => {
+		void navigator.clipboard?.writeText(id).then(
+			() => {
+				setCopied(true)
+				setTimeout(() => setCopied(false), 1200)
+			},
+			() => {},
+		)
+	}
+	return (
+		<button className="prodid" onClick={copy} title="Copy id">
+			<span className="prodid-k">ID</span>
+			<span className="prodid-v">{id}</span>
+			<span className="prodid-copy">{copied ? "copied" : "copy"}</span>
+		</button>
+	)
+}
+
+function productionIdFromUrl(): string | null {
+	try {
+		return new URLSearchParams(location.search).get("p")
+	} catch {
+		return null
+	}
+}
+
 function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos: VideoFile[]; onAction: () => void }) {
 	const stages = childrenOf(detail, detail.root.id)
 	const fv = finalVideoOf(detail)
@@ -138,8 +183,8 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 				<span>started {fmtTime(detail.root.createdAt)}</span>
 				<span>· {detail.root.autonomyLever ?? "—"}</span>
 				<span>· {detail.root.actorKind ?? "—"}</span>
-				<span className="idtag" title={detail.root.id}>{shortId(detail.root.id)}</span>
 			</div>
+			<ProdId id={detail.root.id} />
 		</>
 	)
 	return (
