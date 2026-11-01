@@ -1,6 +1,6 @@
 ---
 name: assemble-scenes
-description: Assemble a generative (Family B) video by concatenating the approved per-scene clips into one film, in storyboard order, with the shared audio bed. The counterpart to render-film (which assembles a real-UI film.json) — this one stitches generated scene clips. Produces the final .mp4.
+description: Assemble the master video from the approved per-scene clips — concatenate them in storyboard order onto one master timeline and mux the master audio (the multi-track mix). The final render of the unified pipeline; scenes may be produced by any realization method. Produces the final .mp4 via craft/tools/assemble.mjs.
 ---
 
 # assemble-scenes
@@ -14,12 +14,20 @@ The scenes may use **different realization methods** (authored-composite / autho
 - The approved **scene clips** (one `scene.mp4` per scene, in playback order) from the build fan-out — any realization method.
 - The approved **storyboard** — the running order, the voiceover/audio plan, transitions.
 
-## Steps (when scene generation is live)
+## Steps
 
-1. Collect the scene clips in storyboard order.
-2. Concatenate them into one timeline (ffmpeg concat), applying the storyboard's transitions between scenes.
-3. Lay the shared audio bed (voiceover from `voice-production`, music, SFX) over the concatenated video and mix to the mastering target, the same way `render-film` mixes.
-4. Render the final `<workDir>/film.mp4` and confirm it is non-empty.
+1. **Collect** the approved scene clips into `<workDir>/scenes/` as `NN-<id>.mp4` numbered in playback order (so they sort correctly).
+2. **Write the master-timeline document** `<workDir>/timeline.json` — the NLE artifact a later visual editor renders:
+   ```json
+   { "scenes": ["scenes/01-hook.mp4", "scenes/02-feature.mp4", "scenes/03-cta.mp4"],
+     "audio": "media/mix.wav", "fps": 30, "size": [1920, 1080] }
+   ```
+3. **Produce the master audio.** Run `mix.py` — it reads `src/audio-plan.json` (the separate voice / music / sfx tracks, summed and ducked) when the storyboard declared `audio`, else its single-bed path — writing `<workDir>/media/mix.wav`.
+4. **Render the master.** Run the assemble tool — it scales each scene to the master size/fps, concatenates them (hard cuts for now; transitions are a later refinement), and muxes the master audio:
+   ```
+   node craft/tools/assemble.mjs --root <workDir> --out <workDir>/film.mp4
+   ```
+5. Confirm `<workDir>/film.mp4` exists and is non-empty.
 
 ## Output
 
