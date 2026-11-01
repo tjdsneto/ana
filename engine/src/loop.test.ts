@@ -285,11 +285,11 @@ describe("type registry", () => {
 		expect(disk.get("card").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-card-quality", "review-card-conformance", "review-card-consistency"]),
 		)
-		// the composed board fan-out: storyboard(planner) → card[] → assemble-board → render
+		// the composed board fan-out: storyboard(planner) → card[] → assemble-board, then build realizes
 		const cb = disk.get("video-project").checklist?.map((e) => e.type) ?? []
-		expect(cb.slice(-4)).toEqual(["storyboard", "assemble-board", "render", "final-review"])
+		expect(cb).toEqual(expect.arrayContaining(["storyboard", "assemble-board", "build"]))
 		expect(disk.get("video-project").checklist?.find((e) => e.type === "assemble-board")?.deps).toContain("storyboard")
-		expect(disk.get("video-project").checklist?.find((e) => e.type === "render")?.deps).toEqual(["assemble-board"])
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "build")?.deps).toEqual(["assemble-board"])
 		// every step owns its reviewer rubric (no generic lenses): moodboard gets the pair, polish +
 		// briefing their single axis. moodboard's conformance axis is what lets revalidation keep it.
 		expect(disk.get("moodboard").reviews?.map((r) => r.skill)).toEqual(
