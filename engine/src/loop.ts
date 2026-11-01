@@ -8,8 +8,8 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
@@ -810,10 +810,30 @@ function readArtifact(path: string | null | undefined): string | undefined {
 // Stage a rendered leaf's upstream artifacts as files the render skill reads: the storyboard artifact
 // becomes film.json (the worker's make-film input); any other text upstream is written beside it.
 function stageRenderInputs(workDir: string, upstream: UpstreamArtifact[]): void {
+	// A boardDir producer (assemble-board) writes the REAL structured film.json + plates/ + fonts/ into
+	// <production>/board (sibling of this work dir); its own text artifact is only the assembler's chat
+	// reply. Prefer that board film.json — its plate/font refs are absolute, so render reads them in
+	// place — over the prose. The monolith generative branch has no board dir and still stages its
+	// film.json-as-text artifact below.
+	const boardFilm = join(dirname(workDir), "board", "film.json")
+	const haveBoard = existsSync(boardFilm)
+	if (haveBoard) {
+		const filmText = readFileSync(boardFilm, "utf8")
+		writeFileSync(join(workDir, "film.json"), filmText, "utf8")
+		// make-film.sh needs script.txt (one VO line per line) beside film.json — the board dir holds only
+		// film.json, so derive it from the film's `script` array.
+		try {
+			const film = JSON.parse(filmText) as { script?: unknown }
+			if (Array.isArray(film.script)) writeFileSync(join(workDir, "script.txt"), `${film.script.join("\n")}\n`, "utf8")
+		} catch {
+			// not parseable here — let the render skill surface the bad film.json
+		}
+	}
 	for (const u of upstream) {
 		if (u.content.includes("\0")) continue // never stage binary
-		// assemble-board's artifact IS the final film.json (its content); stage it as such for render.
-		const name = /storyboard|film|assemble-board/i.test(u.type) ? "film.json" : `${u.type}.txt`
+		const isFilm = /storyboard|film|assemble-board/i.test(u.type)
+		if (isFilm && haveBoard) continue // board film.json already staged; don't clobber it with the prose artifact
+		const name = isFilm ? "film.json" : `${u.type}.txt`
 		writeFileSync(join(workDir, name), u.content, "utf8")
 	}
 }
