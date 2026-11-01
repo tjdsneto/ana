@@ -6,11 +6,8 @@
 // continues a prior session (the producer's, across redo rounds). The exact flags/field names are
 // the seam to verify against the installed CLI when first exercised — parsing is defensive.
 
-import { execFile } from "node:child_process"
-import { promisify } from "node:util"
+import { spawn } from "node:child_process"
 import type { SubagentInput, SubagentResult, SubagentRunner, SubagentUsage } from "@core/shared"
-
-const run = promisify(execFile)
 
 // Shape of `claude -p --output-format json`. Every field optional: ones the installed CLI omits are
 // simply left undefined, and non-JSON stdout falls back to the raw text as the output.
@@ -70,8 +67,10 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		// Strip null bytes: execFile rejects argv with embedded \0 (e.g. if a prompt ever carries binary
 		// artifact content). Belt — the loop also avoids feeding binary into prompts.
 		if (sys.length > 0) args.push("--append-system-prompt", stripNull(sys.join("\n\n")))
-		args.push(stripNull(input.prompt)) // positional query
-		const { stdout } = await run(this.bin, args, { cwd: input.cwd, maxBuffer: 10 * 1024 * 1024 })
+		// The prompt goes on STDIN, never argv: a large upstream (e.g. a storyboard whose film.json
+		// embeds a font, or data-URL plates) makes the prompt megabytes, and a positional argv arg of
+		// that size throws spawn E2BIG (OS arg-list limit). `claude -p` reads the query from stdin.
+		const stdout = await spawnCollect(this.bin, args, input.cwd, stripNull(input.prompt))
 		const json = parse(stdout)
 		return {
 			output: (json.result ?? stdout).trim(),
@@ -81,6 +80,37 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 			raw: json,
 		}
 	}
+}
+
+// Spawn `claude -p` with the query piped to stdin (not argv — see the call site). Collects stdout,
+// rejects on a non-zero exit or a stdout that blows the buffer cap.
+function spawnCollect(bin: string, args: string[], cwd: string | undefined, stdinData: string): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const MAX = 32 * 1024 * 1024
+		const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"] })
+		let out = ""
+		let err = ""
+		let killed = false
+		child.stdout.on("data", (d) => {
+			out += d
+			if (out.length > MAX && !killed) {
+				killed = true
+				child.kill()
+				reject(new Error("claude stdout exceeded 32MB buffer"))
+			}
+		})
+		child.stderr.on("data", (d) => {
+			err += d
+		})
+		child.on("error", reject)
+		child.on("close", (code) => {
+			if (killed) return
+			if (code === 0) resolve(out)
+			else reject(new Error(`claude exited ${code}: ${err.slice(0, 500)}`))
+		})
+		child.stdin.on("error", () => {}) // ignore EPIPE if the CLI closes stdin early
+		child.stdin.end(stdinData)
+	})
 }
 
 function parse(stdout: string): ClaudeJson {
