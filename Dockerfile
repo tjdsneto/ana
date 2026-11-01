@@ -72,6 +72,15 @@ RUN set -eux; \
 	mkdir -p /opt/piper-voices; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+# faster-whisper (speech → word-timed transcript for the edit-footage leaf). In a venv (off the system
+# python), with the base model baked so nothing downloads at runtime. transcribe.py decodes with ffmpeg
+# and passes a numpy array, bypassing faster-whisper's PyAV decode.
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends python3 python3-venv \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& python3 -m venv /opt/fw-venv \
+	&& /opt/fw-venv/bin/pip install --no-cache-dir faster-whisper numpy \
+	&& /opt/fw-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
 # PUPPETEER_*/CHROME_PATH point the HTML→video renderers at the baked chromium so nothing downloads a
 # browser at runtime (Puppeteer / HyperFrames / the Family-A html render).
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
@@ -80,7 +89,8 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx \
 	PUPPETEER_SKIP_DOWNLOAD=1 \
 	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-	CHROME_PATH=/usr/bin/chromium
+	CHROME_PATH=/usr/bin/chromium \
+	FW_PY=/opt/fw-venv/bin/python
 
 # ── engine stage ──────────────────────────────────────────────────────────────────────────────────
 # The built app (from base) laid over the tools. Only this COPY re-runs when source changes — the

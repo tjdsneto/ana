@@ -6,9 +6,9 @@ style "cut the fillers / find the line" editing). Extracts audio with ffmpeg, ru
 emits {duration, language, segments:[{start,end,text}], words:[{text,start,end}]} — the timecodes Claude
 turns into EDL in/out ranges.
 
-Run under the faster-whisper venv (~/.local/share/faster-whisper/venv). faster-whisper is CTranslate2,
-far lighter than torch/WhisperX. Container deploy is Phase 2 (bake python3 + the package + a model into
-the engine image's engine-tools stage); the clip/crop core works time-based without it.
+Run under the faster-whisper venv: ~/.local/share/faster-whisper/venv on a dev box, or $FW_PY
+(/opt/fw-venv/bin/python) in the engine image, where the package + the base model are baked.
+faster-whisper is CTranslate2, far lighter than torch/WhisperX.
 
   <venv>/bin/python craft/tools/transcribe.py --in take.mp4 [--out take.words.json] [--model base] [--lang en]
 
