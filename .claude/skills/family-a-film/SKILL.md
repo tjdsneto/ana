@@ -27,11 +27,15 @@ All tools live at `craft/tools/`. Run Python tools under the Kokoro venv python 
 
 Steps 2 and 3 are independent — run them in parallel. 4 needs both.
 
+Three optional craft tools the chain also drives from `film.json` (no extra steps to run by hand — `make-film.sh` invokes them): **`music.py`** resolves the `music` field to a bed for `mix.py`; **`align.py`** replaces the TTS voice step when `audio` names a real voice clip (word-times it to `media/words.json`); **`captions.py`** burns word-timed captions onto the render (+ `.srt`) when `captions` is set. See the optional-fields note under Authoring.
+
 ## Authoring film.json (the craft)
 
 The storyboard is word-anchored: every `at`/`until` is a second, or a voiceover word — `"Save"` (first spoken), `"Save#2"` (2nd), `"Save+0.3"`/`"Save-0.2"` (offset), `"line:4"` (start of script line 4), `"end"`. Change the script, re-run `vo`, and every cut/ring/chip/click re-flows.
 
 Keys: `title · size [1920,1080] · url (address-bar text) · theme {bg,text,accent,highlight} · voice {id,speed,lead,gap} · tail · capture {width,base,redact,remove,hide} · plates {name:{url|file, js?}} · marks {key:"#selector"} · title_card {kicker,text} · camera [{at,plate,focus(mark or [x,y]),zoom,glide}] · clicks [{at,target}] · rings [{at,until,target}] · chips [{at,until,text}] · outro {at,kicker,text,sub,cta}`.
+
+Optional fields the chain acts on automatically (see the tools below): `music` (`"library:<mood>"` / a bed path / `"stock:<mood>"` [licence-clean fetch, e.g. Freesound CC0] / `"generate:<prompt>"` → `music.py`) · `audio` (a real voice clip path → narration via `align.py` instead of TTS) · `captions` (`true` / `"karaoke"` / `"block"` / an overrides object → word-timed caption burn + `.srt` via `captions.py`).
 
 The rules that make it good, not just working (from the good-video bar, `.claude/skills/critique-video/references/good-video-criteria.md`):
 
