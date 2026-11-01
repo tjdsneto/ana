@@ -46,6 +46,29 @@ Read `/tmp/sb-probe/assets/shots/site.jpg` and note `_h` (page height) from `/tm
 }
 ```
 
+## 2b. Layers — composite elements on the stage (optional)
+
+Beyond the single-plate camera path, the film can carry **layers**: extra elements composited over the stage — a mascot/character, an overlay image, a text callout, or a **video PiP** (a presenter, an avatar, a screen recording). Use layers when one scene must show more than one thing at once: a real-UI plate **with** a character beside it, or a presenter that shrinks into a corner over the product while it runs (the UGC/VCE signature move). A plain real-UI tour needs no layers — do not add them for their own sake.
+
+Add an optional top-level `"layers"` array:
+
+```json
+"layers": [
+  { "kind": "image", "src": "assets/overlays/mascot.png", "at": "<word>", "until": "<word>", "x": 1360, "y": 72, "w": 460, "z": 15 },
+  { "kind": "text",  "text": "**Set up in 5 steps**", "at": "<word>", "until": "<word>", "x": 120, "y": 900, "z": 18 },
+  { "kind": "video", "src": "assets/overlays/presenter.mp4", "at": "<word>", "until": "<word>", "x": 1360, "y": 72, "w": 460, "z": 16,
+    "move": { "to": { "scale": 0.34 }, "at": "<word>", "dur": 0.6, "ease": "expo.out" } }
+]
+```
+
+- **`kind`** — `image` (a PNG/JPG placed as a layer) · `text` (themed; `**bold**` supported) · `video` (a clip — presenter/avatar/screen recording — played in sync with the timeline).
+- **`at` / `until`** — word anchors (same grammar as `camera`/`chips`). The layer fades in at `at`, out at `until`.
+- **`x` / `y` / `w` / `h` / `z`** — position + size in **film pixels** (the `size` space, e.g. 1920×1080), and stacking order (plate/camera ≈ 0–5, chip = 7, cursor = 20; layers default 15).
+- **`move`** (optional) — an authored transform from the layer's base to `to`, over `dur`, starting at `move.at`. The canonical use is a presenter that starts full-frame then **shrinks to a corner** (PiP). `to` takes GSAP props: `scale`, `x`, `y`, `opacity`.
+- **Asset source is per layer.** A presenter layer can be a real recording or a generated avatar — swap `src`, nothing else changes.
+
+Layers composite over the plate camera, which still runs underneath. Hold the bar: the frame must still read as **one idea** — a layer must not clutter the beat.
+
 ## 3. Timing rules (this is what prevents blank frames)
 
 - **`script`** = the spoken lines verbatim from the upstream script. The last entry is the outro line.
