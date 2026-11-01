@@ -1,11 +1,9 @@
 {
 	"type": "storyboard",
 	"name": "Storyboard",
-	"emitsBoard": true,
-	"produce": "Lay out the shots scene by scene, aligning the script's beats to the moodboard's visual direction. Note timing per shot.",
-	"reviews": [
-		{ "name": "quality", "kind": "craft", "skill": "review-storyboard-quality" },
-		{ "name": "conformance", "kind": "coverage", "skill": "review-storyboard-conformance" },
-		{ "name": "consistency", "kind": "consistency" }
-	]
+	"planner": true,
+	"childType": "card",
+	"exposeChildrenToDependents": true,
+	"skill": "storyboard",
+	"produce": "Plan the board: read the approved script + moodboard and lay out the beats — one card per beat, in playback order. Own the whole-board coherence here (the arc, the signature move, colour-per-beat, the look) and give each card a self-contained spec (its id, VO line, role in the arc, camera intent, and how the signature shows in it). Output the generic card list the engine fans out into card nodes; the cards produce the actual plates, assemble stitches them."
 }

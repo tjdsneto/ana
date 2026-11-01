@@ -277,10 +277,19 @@ describe("type registry", () => {
 		expect(disk.get("render").rendered).toBe(true)
 		expect(disk.get("briefing").agreement).toBe(true)
 		expect(disk.get("final-review").holisticReview).toBe(true)
-		// storyboard carries the quality + conformance reviewer pair (composition lives in quality)
-		expect(disk.get("storyboard").reviews?.map((r) => r.skill)).toEqual(
-			expect.arrayContaining(["review-storyboard-quality", "review-storyboard-conformance"]),
+		// storyboard is now a PLANNER that fans out one `card` per beat and exposes the cards to its
+		// dependents (assemble-board); the per-card craft reviewers live on the `card` type.
+		expect(disk.get("storyboard").planner).toBe(true)
+		expect(disk.get("storyboard").childType).toBe("card")
+		expect(disk.get("storyboard").exposeChildrenToDependents).toBe(true)
+		expect(disk.get("card").reviews?.map((r) => r.skill)).toEqual(
+			expect.arrayContaining(["review-card-quality", "review-card-conformance", "review-card-consistency"]),
 		)
+		// the composed board fan-out: storyboard(planner) → card[] → assemble-board → render
+		const cb = disk.get("video-project").checklist?.map((e) => e.type) ?? []
+		expect(cb.slice(-4)).toEqual(["storyboard", "assemble-board", "render", "final-review"])
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "assemble-board")?.deps).toContain("storyboard")
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "render")?.deps).toEqual(["assemble-board"])
 		// every step owns its reviewer rubric (no generic lenses): moodboard gets the pair, polish +
 		// briefing their single axis. moodboard's conformance axis is what lets revalidation keep it.
 		expect(disk.get("moodboard").reviews?.map((r) => r.skill)).toEqual(
@@ -322,7 +331,10 @@ describe("type registry", () => {
 		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
 		expect(disk.has("video-project-generative")).toBe(true)
 		const genChecklist = disk.get("video-project-generative").checklist?.map((e) => e.type) ?? []
-		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
+		// its storyboard is the monolith film.json producer (storyboard-film); the composed `storyboard`
+		// type is now a card-planner used by the flat video-project, so the generative branch points at
+		// storyboard-film to keep producing a film.json for build→scene.
+		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard-film", "build", "assemble"]))
 		// build is the planner that fans out one scene child per storyboard scene
 		expect(disk.get("build").planner).toBe(true)
 		expect(disk.get("build").childType).toBe("scene")

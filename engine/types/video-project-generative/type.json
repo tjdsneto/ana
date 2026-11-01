@@ -5,7 +5,7 @@
 		{ "id": "briefing", "type": "briefing", "deps": [] },
 		{ "id": "script", "type": "script", "deps": ["briefing"] },
 		{ "id": "moodboard", "type": "moodboard", "deps": ["briefing"] },
-		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
+		{ "id": "storyboard", "type": "storyboard-film", "deps": ["script", "moodboard"] },
 		{ "id": "build", "type": "build", "deps": ["storyboard"] },
 		{ "id": "assemble", "type": "assemble", "deps": ["build"] },
 		{ "id": "polish", "type": "polish", "deps": ["assemble"] },

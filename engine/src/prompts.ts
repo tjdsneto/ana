@@ -15,6 +15,7 @@ export interface ProduceContext {
 	priorContent?: string // the version being revised
 	feedback?: string // reviewer union or user feedback that drove this redo
 	boardOut?: string // if set, save the rendered self-check board sheet here (absolute path) so the dashboard can show it
+	boardDir?: string // if set, the stable per-production board dir (write plates/<id>.html + fonts/ here; reference by absolute path from film.json)
 }
 
 export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext): string {
@@ -36,6 +37,9 @@ export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext)
 	}
 	if (ctx.boardOut) {
 		parts.push(`\n## Save your board for the dashboard\nAfter you render your self-check board, copy the board sheet image to EXACTLY this path (the dashboard reads it per version): \`${ctx.boardOut}\`\nUse \`cp <yourWorkDir>/board/sheet.jpg "${ctx.boardOut}"\` (create the parent dir if needed). Do this before you output.`)
+	}
+	if (ctx.boardDir) {
+		parts.push(`\n## Board files directory\nWrite the shared board files under this exact directory (it persists for the render): \`${ctx.boardDir}\`\n- plate files → \`${ctx.boardDir}/plates/<id>.html\`\n- the shared font → \`${ctx.boardDir}/fonts/\`\nReference these from film.json by their ABSOLUTE path (so the render resolves them from any work dir). Create the subdirs if needed.`)
 	}
 	return parts.join("\n")
 }
