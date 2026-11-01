@@ -17,7 +17,7 @@ Each engine is a local, keyless tool the worker can run. Know what each is for:
 | `piper` | Drafts and previews, tight time/resource budgets, or a language/voice Kokoro does not cover. | Fast, lightweight, huge voice + language catalogue. Needs the `piper` binary + a `.onnx` voice (`$VOICE_MODEL`). |
 | `elevenlabs` | (future, not wired) premium / branded voices. | Keyed/paid — add as a tool here when it lands; until then do not promise it. |
 
-**Picking:** final or hero cut → `kokoro`. Draft/preview, or a resource/time crunch, or a language/voice Kokoro lacks → `piper`. If the chosen engine is unavailable (model/binary missing), fall back to `kokoro`; if that is also unavailable, stop and report — never fabricate audio.
+**Picking:** final or hero cut → `kokoro` **only if its model is present** at `$KOKORO_HOME`; otherwise `piper`. Draft/preview, a resource/time crunch, or a language/voice Kokoro lacks → `piper`. **Fall back to whichever engine is actually available** — if the Kokoro model is missing, use `piper` (NOT the other way round); only if neither a Kokoro model nor the `piper` binary + its `$VOICE_MODEL` voice exists do you stop and report — never fabricate audio. (A worker provisioned with only `piper` — e.g. the engine container — uses `piper`.)
 
 ## Inputs
 

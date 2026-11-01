@@ -51,7 +51,7 @@ const ctx = await browser.newContext({ viewport: { width: cap.width, height: Mat
 
 // Page-side cleanup shared by both modes: redact [from,to] pairs in text/inputs/attrs, remove/hide
 // selectors, then run the plate's optional mutation JS (to show a different UI state).
-const cleanup = ({ cap, js }) => {
+const cleanup = async ({ cap, js }) => {
 	const walk = (fn) => {
 		const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
 		let n
@@ -67,7 +67,7 @@ const cleanup = ({ cap, js }) => {
 	}
 	cap.remove.forEach((s) => document.querySelectorAll(s).forEach((e) => e.remove()))
 	cap.hide.forEach((s) => document.querySelectorAll(s).forEach((e) => (e.style.visibility = "hidden")))
-	if (js) new Function(js)()
+	if (js) await new Function("return (async()=>{" + js + "\n})()")()
 }
 
 const measure = ({ marks, maxH, vh }) => {
@@ -112,6 +112,7 @@ for (const [name, p] of Object.entries(film.plates)) {
 			if (step.click) await page.click(step.click, { timeout: step.timeout || 15000 }).catch(() => {})
 			if (step.waitFor) await page.waitForSelector(step.waitFor, { state: "visible", timeout: step.timeout || 20000 }).catch(() => {})
 			if (step.fill) await page.fill(step.fill[0], step.fill[1]).catch(() => {})
+			if (step.js) await page.evaluate((src) => new Function("return (async()=>{" + src + "\n})()")(), step.js)
 			if (step.wait) await page.waitForTimeout(step.wait)
 			if (step.remove) await page.evaluate((sels) => sels.forEach((s) => document.querySelectorAll(s).forEach((e) => e.remove())), step.remove)
 		} catch (e) {

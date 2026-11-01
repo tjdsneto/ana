@@ -72,19 +72,30 @@ RUN set -eux; \
 	mkdir -p /opt/piper-voices; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
-# faster-whisper (speech → word-timed transcript for the edit-footage leaf). In a venv (off the system
-# python), with the base model baked so nothing downloads at runtime. transcribe.py decodes with ffmpeg
-# and passes a numpy array, bypassing faster-whisper's PyAV decode.
+# python3 + the voice/compose toolchain the render shells out to (craft/tools/vo.py, mix.py, build.py).
+# build.py is stdlib python3; vo.py/mix.py need numpy + soundfile, and vo.py's word timing uses the
+# `whisper` CLI (openai-whisper). A venv at /opt/voenv holds those; make-film.sh runs vo.py/mix.py under
+# $KOKORO_PY (pointed at the venv), build.py under system python3. The whisper base model is baked so
+# there is no runtime download. libsndfile1 is soundfile's native dep.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3 python3-venv \
+	&& apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& python3 -m venv /opt/fw-venv \
+	&& python3 -m venv /opt/voenv \
+	&& /opt/voenv/bin/pip install --no-cache-dir numpy soundfile openai-whisper \
+	&& ln -s /opt/voenv/bin/whisper /usr/local/bin/whisper \
+	&& /opt/voenv/bin/python -c "import whisper; whisper.load_model('base')"
+# faster-whisper (speech → word-timed transcript for the edit-footage leaf) — a SEPARATE venv at
+# /opt/fw-venv (CTranslate2 ASR, distinct from the render voenv above), base model baked so nothing
+# downloads at runtime. transcribe.py decodes with ffmpeg + passes a numpy array (bypasses PyAV).
+# python3 / python3-venv are already installed above, so this only creates the venv.
+RUN python3 -m venv /opt/fw-venv \
 	&& /opt/fw-venv/bin/pip install --no-cache-dir faster-whisper numpy \
 	&& /opt/fw-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
 # PUPPETEER_*/CHROME_PATH point the HTML→video renderers at the baked chromium so nothing downloads a
 # browser at runtime (Puppeteer / HyperFrames / the Family-A html render).
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 	DISABLE_AUTOUPDATER=1 \
+	KOKORO_PY=/opt/voenv/bin/python \
 	RENDER_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
 	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx \
 	PUPPETEER_SKIP_DOWNLOAD=1 \
@@ -98,6 +109,11 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 FROM engine-tools AS engine
 WORKDIR /repo
 COPY --from=base /repo /repo
+# Playwright + chromium for the composed render (craft/tools/site-capture.mjs screenshots each plate).
+# Installed in the IMAGE only — not the shared repo package.json, which would shadow the host's own
+# playwright. npm 12 blocks the browser-download postinstall, so fetch chromium + its apt deps explicitly.
+RUN npm i --no-save playwright@1.48.2 \
+	&& npx playwright install --with-deps chromium
 CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────
