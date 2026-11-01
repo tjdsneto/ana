@@ -1,0 +1,8 @@
+{
+	"type": "build-scenes",
+	"name": "Build scenes",
+	"planner": true,
+	"childType": "scene",
+	"skill": "plan-scenes",
+	"produce": "Read the approved storyboard (film.json) and break it into one independent scene per storyboard scene, in playback order, each with its realization method. Output the generic scene list the engine fans out."
+}

@@ -324,9 +324,12 @@ describe("type registry", () => {
 		expect(disk.has("video-project-generative")).toBe(false)
 		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
 		expect(vp).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
-		// build is the planner that fans out one scene child per storyboard scene
-		expect(disk.get("build").planner).toBe(true)
-		expect(disk.get("build").childType).toBe("scene")
+		// build is a sub-project: it expands into asset/voice/soundtrack leaves + the scene planner
+		const buildSub = disk.get("build").checklist?.map((e) => e.type) ?? []
+		expect(buildSub).toEqual(expect.arrayContaining(["build-assets", "build-voice", "build-soundtrack", "build-scenes"]))
+		// build-scenes is the planner that fans out one scene child per storyboard scene
+		expect(disk.get("build-scenes").planner).toBe(true)
+		expect(disk.get("build-scenes").childType).toBe("scene")
 		// assembly is its own rendered step (concatenates scene clips), not a monolithic render
 		expect(disk.get("assemble").rendered).toBe(true)
 		expect(disk.get("assemble").skill).toBe("assemble-scenes")
@@ -740,5 +743,67 @@ describe("convergence — accept an oscillating near-pass instead of grinding to
 		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
 		const versions = await store.versionsFor(leaf.id)
 		expect(versions.length).toBe(4) // ground to the cap (never converged), then escalated
+	})
+})
+
+// build as a nested sub-project: an EXPAND node whose checklist mixes leaves (assets, voice) with a
+// PLANNER child (build-scenes) that itself fans out scenes. Verifies the recursive typed-project model
+// runs a planner nested inside a non-root expand node, with deps across the sub-checklist.
+const NESTED_BUILD_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "storyboard", type: "storyboard", deps: [] },
+			{ id: "build", type: "build", deps: ["storyboard"] },
+			{ id: "assemble", type: "assemble", deps: ["build"] },
+		],
+	},
+	{ type: "storyboard", name: "Storyboard", produce: "board" },
+	{
+		type: "build",
+		name: "Build",
+		checklist: [
+			{ id: "assets", type: "build-assets", deps: [] },
+			{ id: "voice", type: "build-voice", deps: [] },
+			{ id: "scenes", type: "build-scenes", deps: ["assets", "voice"] },
+		],
+	},
+	{ type: "build-assets", name: "Build assets", produce: "assets" },
+	{ type: "build-voice", name: "Build voice", produce: "voice" },
+	{ type: "build-scenes", name: "Build scenes", planner: true, childType: "scene", skill: "plan-scenes", produce: "plan scenes" },
+	{ type: "scene", name: "Scene", produce: "scene", reviews: [{ name: "craft", kind: "craft" }] },
+	{ type: "assemble", name: "Assemble", produce: "assemble" },
+]
+
+describe("recursive build — a planner nested inside a non-root expand node", () => {
+	it("expands build into asset/voice leaves + a scene planner, fans out scenes, rolls up build → root", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				return { output: '```json\n[{"name":"Hook","brief":"hook","method":"authored-continuous"},{"name":"CTA","brief":"cta","method":"authored-composite"}]\n```' }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `[stub ${input.skill}] draft` }
+		})
+		const engine = new Engine({ store, runner, types: TypeRegistry.fromContracts(NESTED_BUILD_CONTRACTS), config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 300; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const all = await store.nodesFor(root.id)
+		const build = all.find((n) => n.type === "build")!
+		const sub = all.filter((n) => n.parentId === build.id).map((n) => n.type).sort()
+		expect(sub).toEqual(["build-assets", "build-scenes", "build-voice"]) // build expanded into its checklist
+		const buildScenes = all.find((n) => n.type === "build-scenes")!
+		const scenes = all.filter((n) => n.type === "scene")
+		expect(scenes).toHaveLength(2) // the nested planner fanned out
+		expect(scenes.every((s) => s.parentId === buildScenes.id)).toBe(true)
+		expect(build.status).toBe("approved") // rolled up through the nested planner
 	})
 })

@@ -1,8 +1,10 @@
 {
 	"type": "build",
-	"name": "Build scenes",
-	"planner": true,
-	"childType": "scene",
-	"skill": "plan-scenes",
-	"produce": "Read the approved storyboard (film.json) and break it into one independent scene per storyboard scene, in playback order. Output the generic scene list the engine fans out."
+	"name": "Build",
+	"checklist": [
+		{ "id": "assets", "type": "build-assets", "deps": [] },
+		{ "id": "voice", "type": "build-voice", "deps": [] },
+		{ "id": "soundtrack", "type": "build-soundtrack", "deps": [] },
+		{ "id": "scenes", "type": "build-scenes", "deps": ["assets", "voice"] }
+	]
 }
