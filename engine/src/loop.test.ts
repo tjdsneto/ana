@@ -317,6 +317,21 @@ describe("type registry", () => {
 		expect(byId.get("script")?.deps).toEqual(["brainstorm-select", "research"])
 	})
 
+	it("wires the edit leaf (clip) + the edit project", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		// clip is a rendered leaf driven by the edit-footage skill, reviewed on edit quality
+		expect(disk.has("clip")).toBe(true)
+		expect(disk.get("clip").rendered).toBe(true)
+		expect(disk.get("clip").skill).toBe("edit-footage")
+		expect(disk.get("clip").reviews?.[0]?.skill).toBe("review-edit-quality")
+		// the edit project composes a caller-provided asset: briefing → clip → final-review
+		expect(disk.has("video-project-edit")).toBe(true)
+		const edit = disk.get("video-project-edit").checklist ?? []
+		expect(edit.map((e) => e.type)).toEqual(["briefing", "clip", "final-review"])
+		expect(edit.find((e) => e.id === "clip")?.deps).toEqual(["briefing"])
+		expect(edit.find((e) => e.id === "final-review")?.deps).toEqual(["clip"])
+	})
+
 	it("loads the generative (Family B) scene pipeline", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
