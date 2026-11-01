@@ -32,7 +32,7 @@ Composition length = the latest clip end. Keep the look on-brand (reuse the mood
 node craft/tools/motion-graphics/index.mjs --html <comp>.html --out <clip>.mp4
 ```
 
-- Default backend is `hyperframes`; set `MOTION_GFX_BACKEND=remotion` to switch (reserved — not implemented yet).
+- Default backend is `hyperframes`; set `MOTION_GFX_BACKEND=remotion` to switch — both render the same HTML composition (Remotion embeds it in an iframe and seeks the GSAP timeline per frame; it installs its bundled template on first use).
 - Needs **Node ≥22 + ffmpeg**; the backend fetches/uses **headless Chromium** (baked into the engine image's `engine-tools` stage — the container bake is the one deploy step still pending).
 
 ## Output & bar

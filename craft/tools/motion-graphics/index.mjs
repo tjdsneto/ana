@@ -6,8 +6,9 @@
 //
 // Backends (both LOCAL — HyperFrames is OSS Apache-2.0, not a hosted API; Remotion is source-available):
 //   - hyperframes (default): heygen-com/hyperframes, `npx hyperframes render`. HTML-native + GSAP,
-//     matches our existing HTML/GSAP craft. Needs Node >=22 + ffmpeg (Puppeteer fetches Chromium).
-//   - remotion: reserved — React composition renderer; adapter not implemented yet (see remotion.mjs).
+//     matches our existing HTML/GSAP craft. Needs Node >=22 + ffmpeg (Puppeteer drives Chromium).
+//   - remotion: renders the SAME HTML composition inside a Remotion project (iframe + per-frame GSAP
+//     seek); installs the bundled template on first use. Needs Node >=18 + ffmpeg + Chromium.
 //
 //   MOTION_GFX_BACKEND=hyperframes node craft/tools/motion-graphics/index.mjs --html comp.html --out clip.mp4 [--fps 30]
 //
