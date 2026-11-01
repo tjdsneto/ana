@@ -6,11 +6,13 @@ voice seam: `vo.py --engine openai-tts` shells this per script line; the engine 
 exactly one thing — text in, an audio file out — so vo.py keeps owning the word timing + laydown, the
 same as for the local kokoro/piper engines.
 
-BYO-key: the key is read from $OPENAI_API_KEY at call time, never baked or written to disk. No key ->
-a clear error (never a silent fallback to a paid default).
+BYO-key: the key is resolved at call time, never baked. Precedence `--api-key-file` > `--api-key` >
+$OPENAI_API_KEY. A future BYOK store (DB / password manager) injects it by param; env stays the local
+default. Prefer `--api-key-file` or the env var over a raw `--api-key` (a value on the command line is
+visible in the process list). No key -> a clear error (never a silent fallback to a paid default).
 
   echo "Your line here." | python3 craft/tools/tts/openai-tts.py --out line.wav [--voice alloy] \\
-      [--model tts-1] [--speed 0.95] [--format wav]
+      [--model tts-1] [--speed 0.95] [--format wav] [--api-key-file KEYFILE]
   python3 craft/tools/tts/openai-tts.py --text "Your line." --out line.wav
 
 Stdlib only (urllib) so it runs under any python3 — including the Kokoro venv python vo.py uses.
@@ -42,6 +44,16 @@ def pick_voice(requested: "str | None", known=KNOWN_VOICES, default=DEFAULT_VOIC
     return default, None
 
 
+def resolve_key(value: "str | None", key_file: "str | None", env_name: str) -> "str | None":
+    """Resolve an API key by precedence: --api-key-file > --api-key > $ENV. None if none set.
+    A key file lets a caller (or a future BYOK store) hand the key over without it showing in `ps`."""
+    if key_file:
+        return Path(key_file).read_text().strip()
+    if value:
+        return value
+    return os.environ.get(env_name)
+
+
 def build_payload(text: str, voice: str, model: str, speed: float, fmt: str) -> dict:
     """The JSON body for POST /v1/audio/speech. `speed` is only sent for tts-1* (gpt-4o-mini-tts rejects
     it — it takes `instructions` instead), so an unsupported-param 400 never happens."""
@@ -60,14 +72,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"TTS model (default {DEFAULT_MODEL})")
     p.add_argument("--speed", type=float, default=1.0, help="0.25-4.0 (tts-1* only)")
     p.add_argument("--format", dest="fmt", default="wav", help="response_format: wav|mp3|opus|aac|flac|pcm")
+    p.add_argument("--api-key", default=None, help="key by value (visible in `ps`; prefer --api-key-file or $OPENAI_API_KEY)")
+    p.add_argument("--api-key-file", default=None, help="read the key from this file (not visible in `ps`)")
     return p.parse_args()
 
 
 def main() -> None:
     a = parse_args()
-    key = os.environ.get("OPENAI_API_KEY")
+    key = resolve_key(a.api_key, a.api_key_file, "OPENAI_API_KEY")
     if not key:
-        sys.exit("openai-tts: $OPENAI_API_KEY is not set (bring your own key; it is never baked)")
+        sys.exit("openai-tts: no key (set $OPENAI_API_KEY, or pass --api-key-file / --api-key; it is never baked)")
 
     if a.text_file:
         text = Path(a.text_file).read_text()

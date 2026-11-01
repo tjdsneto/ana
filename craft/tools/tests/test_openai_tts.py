@@ -8,7 +8,9 @@ Stdlib only, so this runs under any python3.
   python3 craft/tools/tests/test_openai_tts.py   (exit 0 pass / 1 fail), or under pytest.
 """
 import importlib.util
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -38,11 +40,27 @@ def test_build_payload():
     assert "speed" not in p2 and p2["model"] == "gpt-4o-mini-tts" and p2["response_format"] == "mp3"
 
 
+def test_resolve_key():
+    m = _load()
+    assert m.resolve_key("v", None, "OAI_UNSET_X") == "v"            # value when no file
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "k"
+        f.write_text("fromfile\n")                                   # trailing newline stripped
+        assert m.resolve_key("v", str(f), "OAI_UNSET_X") == "fromfile"  # file wins over value
+    os.environ["OAI_TEST_KEY"] = "envk"
+    try:
+        assert m.resolve_key(None, None, "OAI_TEST_KEY") == "envk"   # env fallback
+    finally:
+        del os.environ["OAI_TEST_KEY"]
+    assert m.resolve_key(None, None, "OAI_DEFINITELY_UNSET") is None
+
+
 if __name__ == "__main__":
     try:
         test_pick_voice()
         test_build_payload()
+        test_resolve_key()
     except AssertionError as e:
         print(f"OPENAI-TTS FAIL: {e}")
         sys.exit(1)
-    print("OPENAI-TTS OK (pick_voice / build_payload)")
+    print("OPENAI-TTS OK (pick_voice / build_payload / resolve_key)")

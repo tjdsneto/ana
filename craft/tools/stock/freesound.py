@@ -9,11 +9,13 @@ and this tool records it. Default filter is CC0 (public domain, commercial-safe,
 returned licence is written into the manifest so the choice stays auditable, exactly like a seeded
 library track. Arbitrary web downloads remain forbidden.
 
-BYO-key: $FREESOUND_API_KEY is read at call time, never baked. Downloads the high-quality MP3 PREVIEW
-(token auth is enough for previews; the full original needs OAuth2) — fine for a bed; mix.py masters it.
+BYO-key: the key is resolved at call time, never baked. Precedence `--api-key-file` > `--api-key` >
+$FREESOUND_API_KEY (a future BYOK store injects it by param; env stays the local default; prefer the
+file/env over a raw `--api-key`, which shows in `ps`). Downloads the high-quality MP3 PREVIEW (token
+auth is enough for previews; the full original needs OAuth2) — fine for a bed; mix.py masters it.
 
   python3 craft/tools/stock/freesound.py --query "calm ambient" --out-dir craft/assets/music \\
-      [--duration 30] [--license "Creative Commons 0"] [--manifest craft/assets/music/manifest.json]
+      [--duration 30] [--license "Creative Commons 0"] [--manifest craft/assets/music/manifest.json] [--api-key-file KEYFILE]
 
 Stdlib only (urllib) so it runs under any python3. Pure helpers (build_search_params / pick_result /
 manifest_entry) are I/O-free and unit-tested in tests/test_freesound.py.
@@ -31,6 +33,16 @@ from pathlib import Path
 SEARCH_URL = "https://freesound.org/apiv2/search/text/"
 DEFAULT_LICENSE = "Creative Commons 0"  # CC0: public domain, no attribution, commercial-safe
 PREVIEW_KEY = "preview-hq-mp3"
+
+
+def resolve_key(value: "str | None", key_file: "str | None", env_name: str) -> "str | None":
+    """Resolve an API key by precedence: --api-key-file > --api-key > $ENV. None if none set.
+    A key file lets a caller (or a future BYOK store) hand the key over without it showing in `ps`."""
+    if key_file:
+        return Path(key_file).read_text().strip()
+    if value:
+        return value
+    return os.environ.get(env_name)
 
 
 def build_search_params(query: str, license: str, duration: float) -> dict:
@@ -90,6 +102,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--duration", type=float, default=0.0, help="minimum track length (s); 0 = any")
     p.add_argument("--license", default=DEFAULT_LICENSE, help=f'licence filter (default "{DEFAULT_LICENSE}" = CC0)')
     p.add_argument("--manifest", default=None, help="manifest.json to append the fetched track's row to (for reuse + audit)")
+    p.add_argument("--api-key", default=None, help="key by value (visible in `ps`; prefer --api-key-file or $FREESOUND_API_KEY)")
+    p.add_argument("--api-key-file", default=None, help="read the key from this file (not visible in `ps`)")
     return p.parse_args()
 
 
@@ -106,9 +120,9 @@ def _get_json(url: str) -> dict:
 
 def main() -> None:
     a = parse_args()
-    key = os.environ.get("FREESOUND_API_KEY")
+    key = resolve_key(a.api_key, a.api_key_file, "FREESOUND_API_KEY")
     if not key:
-        sys.exit("freesound: $FREESOUND_API_KEY is not set (bring your own key; it is never baked)")
+        sys.exit("freesound: no key (set $FREESOUND_API_KEY, or pass --api-key-file / --api-key; it is never baked)")
 
     params = build_search_params(a.query, a.license, a.duration)
     url = f"{SEARCH_URL}?{urllib.parse.urlencode(params)}&token={urllib.parse.quote(key)}"

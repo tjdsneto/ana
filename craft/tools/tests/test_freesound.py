@@ -9,7 +9,9 @@ Stdlib only, so this runs under any python3.
   python3 craft/tools/tests/test_freesound.py   (exit 0 pass / 1 fail), or under pytest.
 """
 import importlib.util
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -58,12 +60,28 @@ def test_manifest_entry():
     assert "fetched_at" in e  # provenance stamp present (value is the call time)
 
 
+def test_resolve_key():
+    m = _load()
+    assert m.resolve_key("v", None, "FS_UNSET_X") == "v"
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "k"
+        f.write_text("fromfile\n")
+        assert m.resolve_key("v", str(f), "FS_UNSET_X") == "fromfile"  # file wins over value
+    os.environ["FS_TEST_KEY"] = "envk"
+    try:
+        assert m.resolve_key(None, None, "FS_TEST_KEY") == "envk"
+    finally:
+        del os.environ["FS_TEST_KEY"]
+    assert m.resolve_key(None, None, "FS_DEFINITELY_UNSET") is None
+
+
 if __name__ == "__main__":
     try:
         test_build_search_params()
         test_pick_result()
         test_manifest_entry()
+        test_resolve_key()
     except AssertionError as e:
         print(f"FREESOUND FAIL: {e}")
         sys.exit(1)
-    print("FREESOUND OK (build_search_params / pick_result / manifest_entry)")
+    print("FREESOUND OK (build_search_params / pick_result / manifest_entry / resolve_key)")

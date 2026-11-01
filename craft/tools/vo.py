@@ -53,6 +53,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--whisper-model", default="base")
     p.add_argument("--engine", choices=("kokoro", "piper", *TTS_TOOLS.keys()), default="kokoro",
                    help="voice engine: local kokoro/piper, or a provider tool (e.g. openai-tts)")
+    p.add_argument("--api-key-file", default=None,
+                   help="for a provider engine: a file holding its API key, forwarded to the tool (BYO-key; "
+                        "a file, not a value, so the key never shows in `ps`). Omit to use the provider's env var.")
     p.add_argument("--piper-bin", default=None, help="piper binary (default: $PIPER_BIN or 'piper')")
     p.add_argument("--piper-model", default=None, help="piper .onnx voice (default: $PIPER_MODEL or $VOICE_MODEL)")
     a = p.parse_args()
@@ -119,13 +122,16 @@ def make_synth(a: argparse.Namespace):
         if not tool.exists():
             sys.exit(f"vo: provider tool missing: {tool}")
 
+        key_args = ["--api-key-file", str(a.api_key_file)] if a.api_key_file else []
+
         def synth(text: str, out_wav: Path) -> None:
             if out_wav.exists():
                 return
-            # The provider tool resolves its own key ($OPENAI_API_KEY etc.) at call time; vo.py never sees it.
+            # The provider tool resolves its own key at call time (a forwarded --api-key-file, else its
+            # env var); vo.py passes a path, never the key value.
             r = subprocess.run(
                 [sys.executable, str(tool), "--out", str(out_wav), "--voice", str(a.voice),
-                 "--speed", str(a.speed), "--format", "wav"],
+                 "--speed", str(a.speed), "--format", "wav", *key_args],
                 input=text.encode("utf-8"), capture_output=True)
             if r.returncode != 0:
                 sys.exit(f"vo: {a.engine} failed — {r.stderr.decode('utf-8', 'replace').strip()[:300]}")

@@ -84,6 +84,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--library", default=None, help="music library dir (default: craft/assets/music next to this tool)")
     p.add_argument("--out", default=None, help="dir to write a generated track into (default: alongside --words)")
     p.add_argument("--stock-provider", default=None, help="stock lane provider (default: $STOCK_PROVIDER or freesound)")
+    p.add_argument("--api-key-file", default=None,
+                   help="for a stock provider: a file holding its API key, forwarded to the tool (BYO-key; "
+                        "a file, not a value, so the key never shows in `ps`). Omit to use the provider's env var.")
     return p.parse_args()
 
 
@@ -140,6 +143,8 @@ def main() -> None:
         dur = film_duration(a)
         if dur > 0:
             cmd += ["--duration", str(dur)]
+        if a.api_key_file:  # forward a BYO-key path; the tool reads it (never the value on the command line)
+            cmd += ["--api-key-file", str(a.api_key_file)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0 or not r.stdout.strip():
             sys.exit(f"music: stock fetch ({provider}) failed — {r.stderr.strip()[:300]}")
