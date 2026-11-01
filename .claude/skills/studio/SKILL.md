@@ -15,8 +15,8 @@ This is standalone/ad-hoc use of the same tools the film pipeline uses — not a
 |-----|---------|-------|
 | Synthesize a UI sound | `./studio sfx <name> [--out F]` | names: `click tick pop hit whoosh swish` (`./studio sfx-list`). Local, instant, free. |
 | Voiceover from text | `./studio voice "<text>" [--engine kokoro\|openai-tts\|elevenlabs\|piper] [--voice V] [--out F]` | default `kokoro` (local, free). `openai-tts`/`elevenlabs` need their key in `repo/.engine_env`; set `--voice` to a voice that engine knows. |
-| Generate original music | `./studio music-gen "<prompt>" [--duration D] [--out F]` | local MusicGen (musicgen-small). ~tens of sec to ~2 min/clip; quality is modest. Keep clips ≤ ~30s. |
-| Music by request | `./studio music "<request>" [--duration D]` | request = `stock:<mood>` (Freesound CC0 fetch) · `library:<mood>` (local seeded) · `generate:<prompt>` (MusicGen) · a file path (BYO). Prints the resolved path. |
+| Generate original music | `./studio music-gen "<prompt>" [--duration D] [--provider musicgen\|stable-audio] [--out F]` | default `musicgen` (local, free, modest quality, ~tens of sec–2 min/clip, keep ≤ ~30s). `stable-audio` = Stability AI API, higher quality, needs `$STABILITY_API_KEY`. |
+| Music by request | `./studio music "<request>" [--duration D] [--provider musicgen\|stable-audio]` | request = `stock:<mood>` (Freesound CC0 fetch) · `library:<mood>` (local seeded) · `generate:<prompt>` (the chosen provider) · a file path (BYO). Prints the resolved path. |
 | Put audio under a video | `./studio under <video> <audio> [--out F] [--mode replace\|mix]` | `replace` swaps the video's audio; `mix` blends. Trimmed to the shorter (`--pad` to hold the video to the audio length). |
 | Image/asset → clip | `./studio still <image> <audio> [--out F]` | loops the still for the audio's length into an H.264/AAC mp4. |
 | Play a file | `./studio play <file>` | opens in the default player (macOS). |
@@ -42,5 +42,5 @@ Chain them: generate/fetch the audio, then `still`/`under` to see+hear it on the
 
 - **Keys** load from `repo/.engine_env` automatically (`FREESOUND_API_KEY`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`). A missing key → the provider errors clearly; local tools (sfx, kokoro voice, MusicGen) need no key.
 - **Venvs:** `sfx`/`voice` use the Kokoro venv; `music-gen` uses the MusicGen venv (`~/.local/share/musicgen/venv`); `music`/`under`/`still` use system `python3` + ffmpeg. The launcher picks these; override with `KOKORO_PY` / `MUSICGEN_PY`.
-- **MusicGen** quality is small-model; fine for a bed, not a hero track. Suno/Stable Audio (keyed) are the higher-quality generate paths once wired.
-- Underlying tools: `craft/tools/{sfx.py, vo.py, music.py, music/musicgen.py, stock/freesound.py, compose.py}` and the `tts/` provider adapters — each runnable directly if needed.
+- **Generate providers:** `musicgen` (local, free, small-model — fine for a bed) is the default; `stable-audio` (`--provider stable-audio`, needs `$STABILITY_API_KEY`) is the higher-quality keyed path. Suno is partner-gated (not wired).
+- Underlying tools: `craft/tools/{sfx.py, vo.py, music.py, music/musicgen.py, music/stable-audio.py, stock/freesound.py, compose.py}` and the `tts/` provider adapters — each runnable directly if needed.

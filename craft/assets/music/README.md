@@ -36,4 +36,6 @@ export MUSIC_GEN_CMD="$HOME/.local/share/musicgen/venv/bin/python <repo>/craft/t
 
 Then `music.py --request "generate:<prompt>"` (or a film's `music: "generate:<prompt>"`) produces the bed. Run `musicgen.py` directly for a one-off clip; `--device mps` tries Apple-GPU (falls back to cpu if unsupported).
 
+**Keyed alternative — Stable Audio.** `craft/tools/music/stable-audio.py` generates via the Stability AI API (higher quality than musicgen-small). Needs `$STABILITY_API_KEY` (the platform.stability.ai developer key). Point the seam at it the same way, or via the launcher: `./studio music-gen "<prompt>" --provider stable-audio` / `./studio music "generate:<prompt>" --provider stable-audio`. Default provider stays local MusicGen.
+
 `mix.py` then fades the chosen track to the film length, ducks it under the voice, and masters to −14 LUFS. Free sources to seed from: Mixkit, Pixabay Music, the YouTube Audio Library.
