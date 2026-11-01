@@ -143,6 +143,19 @@ for i, r in enumerate(film.get("rings", [])):
     t0, t1 = T(r["at"]), T(r["until"])
     RINGS.append([f"r{i}", t0, t1, rect(r["target"], r.get("plate", plate_at(t0))), r.get("color", "")])
 CHIPS = [[f"c{i}", T(c["at"]), T(c["until"]), c["text"]] for i, c in enumerate(film.get("chips", []))]
+LAYERS = []
+for i, L in enumerate(film.get("layers", [])):
+    el = {"id": L.get("id", f"l{i}"),
+          "in": round(T(L["at"]) if "at" in L else 0.0, 3),
+          "out": round(T(L["until"]) if "until" in L else OUT, 3),
+          "kind": L.get("kind", "image"), "src": L.get("src", ""), "text": L.get("text", ""),
+          "x": L.get("x", 0), "y": L.get("y", 0), "w": L.get("w"), "h": L.get("h"), "z": L.get("z", 15)}
+    mv = L.get("move")
+    if mv:
+        el["move"] = {"at": round(T(mv["at"]) if "at" in mv else el["in"], 3),
+                      "dur": float(mv.get("dur", 0.6)), "ease": mv.get("ease", "expo.out"),
+                      "from": mv.get("from", {}), "to": mv.get("to", {})}
+    LAYERS.append(el)
 
 
 def md(s):
@@ -188,6 +201,10 @@ body { background:var(--bg); font-family:%(font)s; -webkit-font-smoothing:antial
 .ripple { position:absolute; left:-14px; top:-14px; width:34px; height:34px; border-radius:50%%; border:3px solid var(--ac); opacity:0; }
 .chip { position:absolute; left:0; right:0; margin:0 auto; width:fit-content; bottom:%(CHIPB)spx; padding:12px 22px; border-radius:8px; background:rgba(10,10,12,.92); box-shadow:inset 0 0 0 1.5px #3d3a35, 0 20px 50px rgba(0,0,0,.4); font-family:%(mono)s; font-size:%(CHIPSZ)spx; letter-spacing:.12em; color:#F8F5EE; white-space:nowrap; opacity:0; z-index:7; }
 .chip b { color:#fff; font-weight:600; }
+#layers { position:absolute; inset:0; pointer-events:none; }
+.layer { position:absolute; opacity:0; transform-origin:0 0; }
+.ltext { font-family:%(font)s; color:var(--tx); font-weight:700; font-size:40px; line-height:1.08; }
+.ltext b { color:var(--ac); }
 """
 
 
@@ -198,6 +215,17 @@ def html():
     rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{f';--ac:{col}' if col else ''}"></div>'
                     for rid, _, _, (x, y, w, h), col in RINGS)
     chips = "".join(f'<div class="chip" id="{cid}">{md(txt)}</div>' for cid, _, _, txt in CHIPS)
+
+    def _layer(L):
+        style = f'left:{L["x"]}px;top:{L["y"]}px;z-index:{L["z"]}'
+        if L["w"] is not None:
+            style += f';width:{L["w"]}px'
+        if L["h"] is not None:
+            style += f';height:{L["h"]}px'
+        if L["kind"] == "text":
+            return f'<div class="layer ltext" id="L_{L["id"]}" style="{style}">{md(L["text"])}</div>'
+        return f'<img class="layer" id="L_{L["id"]}" src="{L["src"]}" alt="" style="{style}">'
+    layers_div = f'<div id="layers">{"".join(_layer(L) for L in LAYERS)}</div>' if LAYERS else ""
     font_css = f'<link rel="stylesheet" href="{TH["fontCss"]}">' if TH.get("fontCss") else ""
     title = f"""
   <section id="title" class="clip">
@@ -222,7 +250,7 @@ def html():
       <div class="vp"><div id="cam">{shots}{rings}<div class="cursor" id="cur">{CURSOR}<i class="ripple" id="rip"></i></div></div></div>
     </div>
     {chips}
-  </section>{outro}
+  </section>{layers_div}{outro}
 </div>
 <script>{JS.replace("__P__", json.dumps(PAYLOAD))}</script>
 </body></html>
@@ -298,6 +326,15 @@ P.CHIPS.forEach(function (c) {
   tl.to(el, { opacity: 0, duration: 0.15 }, c[2] - 0.15);
 });
 
+// composited layers (image / text), word-anchored, with optional authored transform
+(P.LAYERS || []).forEach(function (L) {
+  const el = "#L_" + L.id;
+  gsap.set(el, { opacity: 0 }); tl.set(el, { opacity: 0 }, 0);
+  tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "expo.out", immediateRender: false }, L["in"]);
+  tl.to(el, { opacity: 0, duration: 0.3 }, L.out - 0.3);
+  if (L.move) tl.fromTo(el, L.move.from, Object.assign({ duration: L.move.dur, ease: L.move.ease, immediateRender: false }, L.move.to), L.move.at);
+});
+
 // outro card
 if (document.querySelector("#ocard")) {
   hide(["#ok", "#ob .w", "#os", "#oc"]);
@@ -310,7 +347,8 @@ window.__duration = P.DUR;
 """
 
 PAYLOAD = {"DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
-           "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS]}
+           "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS],
+           "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move")} for L in LAYERS]}
 
 if __name__ == "__main__":
     cues = ([["whoosh", T_WIN], ["swish", EXP], ["hit", 0.35]] + [["click", c[0]] for c in CLICKS]
