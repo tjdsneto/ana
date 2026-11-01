@@ -13,11 +13,12 @@ Each engine is a local, keyless tool the worker can run. Know what each is for:
 
 | Engine | Use it for | Notes |
 |--------|-----------|-------|
-| `kokoro` (default) | The final / hero render — highest naturalness and prosody. | Heavier; narrower voice + language set today. Needs the Kokoro model under `$KOKORO_HOME`. |
-| `piper` | Drafts and previews, tight time/resource budgets, or a language/voice Kokoro does not cover. | Fast, lightweight, huge voice + language catalogue. Needs the `piper` binary + a `.onnx` voice (`$VOICE_MODEL`). |
-| `elevenlabs` | (future, not wired) premium / branded voices. | Keyed/paid — add as a tool here when it lands; until then do not promise it. |
+| `kokoro` (default) | The final / hero render — highest naturalness and prosody. | Local, keyless. Heavier; narrower voice + language set today. Needs the Kokoro model under `$KOKORO_HOME`. |
+| `piper` | Drafts and previews, tight time/resource budgets, or a language/voice Kokoro does not cover. | Local, keyless. Fast, lightweight, huge voice + language catalogue. Needs the `piper` binary + a `.onnx` voice (`$VOICE_MODEL`). |
+| `openai-tts` | A brand that prefers / already pays for OpenAI voices (BYO-key). | API provider tool (`craft/tools/tts/openai-tts.py`). Needs `$OPENAI_API_KEY` at runtime (never baked). The film's `voice.id` must be an **OpenAI** voice (alloy, nova, …); a Kokoro id falls back to `alloy`. |
+| `elevenlabs` | (future, not wired) premium / branded voices. | Keyed/paid — add as a provider tool here when it lands; until then do not promise it. |
 
-**Picking:** final or hero cut → `kokoro`. Draft/preview, or a resource/time crunch, or a language/voice Kokoro lacks → `piper`. If the chosen engine is unavailable (model/binary missing), fall back to `kokoro`; if that is also unavailable, stop and report — never fabricate audio.
+**Picking:** final or hero cut → `kokoro`. Draft/preview, or a resource/time crunch, or a language/voice Kokoro lacks → `piper`. A brand that wants a specific keyed service (and supplies the key) → that provider tool (e.g. `openai-tts`). If the chosen engine is unavailable (model/binary missing, or a required key unset), fall back to `kokoro`; if that is also unavailable, stop and report — never fabricate audio. Provider tools are the voice seam (`tmp/audio-provider-seam-design.md`): adding one is a tool + a registry entry in `vo.py`, never engine code.
 
 ## When the narration is a real clip, not TTS (align.py)
 
