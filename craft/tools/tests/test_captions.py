@@ -96,6 +96,26 @@ def test_build_ass_karaoke_vs_block():
     assert acc in kar and acc not in blk      # highlight colour only in karaoke's PrimaryColour
 
 
+def test_build_ass_dialogue_field_alignment():
+    # The [Events] Format and the Dialogue lines must declare the same fields, or libass shifts them
+    # and the trailing separator leaks into Text as a leading comma (caught only by an actual burn).
+    cap = _load()
+    lines = cap.group_lines(WORDS, 28)
+    for style in ("karaoke", "block"):
+        ass = cap.build_ass(lines, 720, 1280, style=style, font="DejaVu Sans", font_size=54,
+                            accent_ass=cap.hex_to_ass("#FFD400"), margin_v=70)
+        fmt = next(l for l in ass.splitlines() if l.startswith("Format:") and "Text" in l and "Start" in l)
+        assert "MarginV" in fmt, "Events Format must include MarginV"
+        n = len(fmt.split("Format:", 1)[1].split(","))                  # declared field count
+        first_words = {w["text"] for w in WORDS}
+        for dl in (l for l in ass.splitlines() if l.startswith("Dialogue:")):
+            text = dl.split("Dialogue:", 1)[1].split(",", n - 1)[-1]    # everything after the last field sep
+            assert not text.startswith(","), f"{style}: Text has a leaked leading comma: {text!r}"
+            # Text must begin with real caption content: a karaoke tag or one of the caption words.
+            head = text.lstrip("{").split("}")[-1].split()[0] if text else ""
+            assert text.lstrip().startswith("{\\k") or head in first_words, f"{style}: unexpected Text head {text[:20]!r}"
+
+
 if __name__ == "__main__":
     try:
         test_group_lines_breaks_on_cap_and_line()
@@ -103,7 +123,8 @@ if __name__ == "__main__":
         test_build_srt()
         test_parse_captions_config()
         test_build_ass_karaoke_vs_block()
+        test_build_ass_dialogue_field_alignment()
     except AssertionError as e:
         print(f"CAPTIONS FAIL: {e}")
         sys.exit(1)
-    print("CAPTIONS OK (group_lines / srt / ass / colour / config)")
+    print("CAPTIONS OK (group_lines / srt / ass / colour / config / field-alignment)")

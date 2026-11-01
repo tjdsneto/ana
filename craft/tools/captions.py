@@ -167,7 +167,10 @@ def build_ass(lines: list[dict], width: int, height: int, *, style: str, font: s
         f"1,0,0,0,100,100,0,0,1,3,0,2,60,60,{margin_v},1",
         "",
         "[Events]",
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, Effect, Text",
+        # MarginV must be present: the Dialogue lines below use the full 10-field V4+ layout
+        # (…,MarginL,MarginR,MarginV,Effect,Text). Omitting it here shifts every field right, so the
+        # trailing field separator leaks into Text as a leading comma.
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ])
     events = []
     for ln in lines:
