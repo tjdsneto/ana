@@ -5,11 +5,13 @@ description: Assemble a generative (Family B) video by concatenating the approve
 
 # assemble-scenes
 
-You assemble the finished generative video from the **approved scene clips** the upstream `build` step produced — one clip per scene, already reviewed for quality, conformance, and cross-scene consistency. You do **not** generate or re-cut scenes; you stitch what exists, in order.
+You assemble the finished video from the **approved scene clips** the upstream `build` step produced — one clip per scene, already reviewed for quality, conformance, and cross-scene consistency. You do **not** generate or re-cut scenes; you stitch what exists, in order.
+
+The scenes may use **different realization methods** (authored-composite / authored-continuous rendered by the Family-A chain, or whole-clip-generative). You treat them uniformly — each scene is one `scene.mp4` and you concatenate them regardless of how each was produced. Mixed-method videos are normal.
 
 ## Inputs
 
-- The approved **scene clips** (one per scene, in playback order) from the build fan-out.
+- The approved **scene clips** (one `scene.mp4` per scene, in playback order) from the build fan-out — any realization method.
 - The approved **storyboard** — the running order, the voiceover/audio plan, transitions.
 
 ## Steps (when scene generation is live)
@@ -23,4 +25,4 @@ You assemble the finished generative video from the **approved scene clips** the
 
 The path to the assembled `<workDir>/film.mp4`. Do not read the binary into your reply.
 
-> **Status — keyless.** Scene generation (HeyGen/Higgsfield) is not provisioned, so there are no real scene clips to concatenate yet; the scenes upstream are shot specs. Until the generators land and `scene` becomes a rendered leaf, this step cannot produce a real film — report that the scene clips are not yet generated rather than fabricating one. This skill exists so the generative graph is complete and correct: when clips are real, the concat/mix/render here runs unchanged.
+> **Status — partial.** Authored scenes (`authored-composite` / `authored-continuous`) render to a real `scene.mp4` today via the Family-A chain, so a video whose scenes are all authored assembles fully now. `whole-clip-generative` scenes are still keyless (HeyGen/Higgsfield not provisioned) — those arrive as shot specs, not clips. For a video that contains a generative scene, report that those clips are not yet generated rather than fabricating one; the concat/mix/render here runs unchanged once they are real.

@@ -2,7 +2,7 @@
 	"type": "scene",
 	"name": "Scene",
 	"skill": "build-scene",
-	"produce": "Produce this one scene from its spec, consistent with the storyboard's visual direction. Generate (or specify) the clip for exactly this scene — not the whole video.",
+	"produce": "Produce this one scene from its spec, consistent with the storyboard's visual direction. Realize it by the spec's method (authored-composite / authored-continuous / whole-clip-generative) — render or generate the clip for exactly this scene, not the whole video.",
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-scene-quality" },
 		{ "name": "conformance", "kind": "coverage", "skill": "review-scene-conformance" },

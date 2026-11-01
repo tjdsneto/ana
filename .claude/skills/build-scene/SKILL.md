@@ -13,9 +13,19 @@ You produce **one scene** of a generative video — the clip for exactly the sce
 - The shared **storyboard** + **moodboard** (approved upstream) — the visual language every scene must share (palette, type, motion feel, pacing).
 - Any reviewer **feedback** from a prior pass — address it; do not start over.
 
-## The scene-generation tool (swappable, like voice-production owns TTS)
+## Route by the scene's `method`
 
-This skill owns which generator builds the clip, the same way `voice-production` owns the TTS engine:
+The scene spec carries a **`method`** (assigned by `plan-scenes`). It decides how you realize this one scene. All methods produce one `scene.mp4` (or its spec, while keyless) in the scene work dir; `assemble-scenes` concatenates them.
+
+- **`authored-composite`** — build this scene as a small **Family-A film** of its own: write a per-scene `film.json` (same shape the storyboard uses) into the scene work dir, with a `layers` array for the overlay elements the brief calls for (a character, a callout, or a **presenter/avatar PiP** that `move`-shrinks to a corner), over a real-UI (or composed) plate. Render it with the Family-A chain (`render-film`'s tools — `site-capture` → `build.py` → `render.mjs` → `mix`), scoped to this scene's duration, → `scene.mp4`. This is the method that mixes real-UI with generated assets in one frame.
+- **`authored-continuous`** — the same Family-A chain, but a single plate under one continuous word-anchored camera move and no `layers` (a straight product-tour beat).
+- **`whole-clip-generative`** — generate the scene as one whole clip via the generator below; do not decompose it.
+
+Pick the branch from `method`; do not generate a clip for the authored methods, and do not hand-author a composite for the generative one.
+
+## The scene-generation tool — the `whole-clip-generative` branch (swappable, like voice-production owns TTS)
+
+For `whole-clip-generative` scenes, this skill owns which generator builds the clip, the same way `voice-production` owns the TTS engine:
 
 - **HeyGen** — avatar / talking-head scenes.
 - **Higgsfield** — generative motion / cinematic b-roll scenes.
@@ -31,4 +41,6 @@ Generative clips drift in style between scenes — that is the whole reason scen
 
 ## Output
 
-The clip path once generation is live; until then, the scene's shot spec (generator + prompt + params + duration). Keep it to this one scene.
+Keep it to this one scene:
+- **`authored-composite` / `authored-continuous`** — the rendered `scene.mp4` path. If the render deps are unavailable in this environment, output the per-scene `film.json` you authored (fully specified, so the clip drops in unchanged).
+- **`whole-clip-generative`** — the clip path once generation is live; until then, the scene's shot spec (generator + prompt + params + duration).
