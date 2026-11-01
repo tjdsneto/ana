@@ -35,7 +35,7 @@ The storyboard is word-anchored: every `at`/`until` is a second, or a voiceover 
 
 Keys: `title · size [1920,1080] · url (address-bar text) · theme {bg,text,accent,highlight} · voice {id,speed,lead,gap} · tail · capture {width,base,redact,remove,hide} · plates {name:{url|file, js?}} · marks {key:"#selector"} · title_card {kicker,text} · camera [{at,plate,focus(mark or [x,y]),zoom,glide}] · clicks [{at,target}] · rings [{at,until,target}] · chips [{at,until,text}] · outro {at,kicker,text,sub,cta}`.
 
-Optional fields the chain acts on automatically (see the tools below): `music` (`"library:<mood>"` / a bed path / `"generate:<prompt>"` → `music.py`) · `audio` (a real voice clip path → narration via `align.py` instead of TTS) · `captions` (`true` / `"karaoke"` / `"block"` / an overrides object → word-timed caption burn + `.srt` via `captions.py`).
+Optional fields the chain acts on automatically (see the tools below): `music` (`"library:<mood>"` / a bed path / `"stock:<mood>"` [licence-clean fetch, e.g. Freesound CC0] / `"generate:<prompt>"` → `music.py`) · `audio` (a real voice clip path → narration via `align.py` instead of TTS) · `captions` (`true` / `"karaoke"` / `"block"` / an overrides object → word-timed caption burn + `.srt` via `captions.py`).
 
 The rules that make it good, not just working (from the good-video bar, `.claude/skills/critique-video/references/good-video-criteria.md`):
 

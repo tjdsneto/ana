@@ -21,6 +21,7 @@ Set the `music` field in `film.json` (or pass `music.py --request`):
 
 - `"library:energetic"` or just `"energetic"` — pick a library track whose `mood` contains that word.
 - `"assets/beds/mytrack.mp3"` — bring your own file (any audio path); used as-is.
+- `"stock:calm ambient"` — fetch a licence-clean track via a stock provider tool (default: `freesound`, CC0) into this library and record its licence in the manifest, then use it. Needs `$FREESOUND_API_KEY` (BYO-key). This is the only auto-fetch path, allowed because the source returns a known per-item licence (see `tmp/audio-provider-seam-design.md`).
 - `"generate:warm uplifting corporate"` — generate a bed via the `$MUSIC_GEN_CMD` seam (intended generator: ACE-Step, free + local). Not wired by default.
 
 `mix.py` then fades the chosen track to the film length, ducks it under the voice, and masters to −14 LUFS. Free sources to seed from: Mixkit, Pixabay Music, the YouTube Audio Library.

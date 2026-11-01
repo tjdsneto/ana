@@ -34,6 +34,7 @@ def test_parse_request():
     assert m.parse_request(None) == ("none", "")
     assert m.parse_request("   ") == ("none", "")
     assert m.parse_request("generate:warm uplifting") == ("generate", "warm uplifting")
+    assert m.parse_request("stock:calm ambient") == ("stock", "calm ambient")
     assert m.parse_request("library:calm") == ("library", "calm")
     assert m.parse_request("energetic") == ("library", "energetic")       # bare word = mood
     assert m.parse_request("assets/beds/x.mp3") == ("file", "assets/beds/x.mp3")

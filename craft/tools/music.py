@@ -5,12 +5,15 @@ A craft TOOL (not engine code). mix.py already does the hard part — fade, duck
 to -14 LUFS — but only once handed a `--music FILE`. This tool decides WHICH file, from the `music`
 field of film.json (or --request), and prints its path to stdout so make-film.sh can feed mix.py.
 
-Three sources, chosen by the request string:
+Four sources, chosen by the request string:
   - a PATH ("assets/beds/calm.mp3", or any .wav/.mp3/.m4a/...) -> bring-your-own, returned as-is.
   - "library:<mood>" or a bare "<mood>" -> pick from the local library (craft/assets/music/, a
     manifest.json of {file, mood, duration, license}). License-safe + offline; you/the brand seed the
     tracks (this tool never downloads audio). Picks the shortest track that still covers the film;
     if none is long enough, the longest match (mix.py fades it to length).
+  - "stock:<mood>" -> fetch a licence-clean track via a STOCK provider tool (default: freesound, CC0)
+    into the library + record its licence in the manifest, then return it. This is the only auto-fetch
+    path, allowed because the source returns a known per-item licence (see the audio-provider seam).
   - "generate:<prompt>" -> a generative bed via the $MUSIC_GEN_CMD seam (intended: ACE-Step, free +
     local). The command is configurable so we don't hard-code one generator's CLI; it is NOT run here
     unless $MUSIC_GEN_CMD is set. See --help for the placeholder contract.
@@ -31,14 +34,20 @@ from pathlib import Path
 
 AUDIO_EXT = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
 
+# Stock lane provider tools (the seam): name -> an adapter TOOL that fetches a licence-clean track.
+# music.py shells it; the engine never calls it. New stock sources land here as their own tool.
+STOCK_TOOLS = {"freesound": Path(__file__).resolve().parent / "stock" / "freesound.py"}
+
 
 def parse_request(spec: "str | None") -> tuple[str, str]:
-    """Request string -> (kind, value). kind in {none, file, library, generate}."""
+    """Request string -> (kind, value). kind in {none, file, library, stock, generate}."""
     if not spec or not spec.strip():
         return ("none", "")
     s = spec.strip()
     if s.startswith("generate:"):
         return ("generate", s[len("generate:"):].strip())
+    if s.startswith("stock:"):
+        return ("stock", s[len("stock:"):].strip())
     if s.startswith("library:"):
         return ("library", s[len("library:"):].strip())
     if Path(s).suffix.lower() in AUDIO_EXT:
@@ -74,6 +83,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--duration", type=float, default=None, help="film duration (s); overrides --words")
     p.add_argument("--library", default=None, help="music library dir (default: craft/assets/music next to this tool)")
     p.add_argument("--out", default=None, help="dir to write a generated track into (default: alongside --words)")
+    p.add_argument("--stock-provider", default=None, help="stock lane provider (default: $STOCK_PROVIDER or freesound)")
     return p.parse_args()
 
 
@@ -116,6 +126,24 @@ def main() -> None:
         if not track.exists():
             sys.exit(f"music: manifest points to a missing file: {track}")
         print(str(track.resolve()))
+        return
+
+    if kind == "stock":
+        provider = a.stock_provider or os.environ.get("STOCK_PROVIDER", "freesound")
+        tool = STOCK_TOOLS.get(provider)
+        if not tool:
+            sys.exit(f"music: unknown stock provider {provider!r} (have: {', '.join(STOCK_TOOLS)})")
+        if not tool.exists():
+            sys.exit(f"music: stock provider tool missing: {tool}")
+        cmd = [sys.executable, str(tool), "--query", value, "--out-dir", str(lib),
+               "--manifest", str(lib / "manifest.json")]
+        dur = film_duration(a)
+        if dur > 0:
+            cmd += ["--duration", str(dur)]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0 or not r.stdout.strip():
+            sys.exit(f"music: stock fetch ({provider}) failed — {r.stderr.strip()[:300]}")
+        print(r.stdout.strip().splitlines()[0])  # the tool prints the resolved path to stdout (notes to stderr)
         return
 
     if kind == "generate":
