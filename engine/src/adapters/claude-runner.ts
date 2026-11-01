@@ -70,10 +70,18 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		// The prompt goes on STDIN, never argv: a large upstream (e.g. a storyboard whose film.json
 		// embeds a font, or data-URL plates) makes the prompt megabytes, and a positional argv arg of
 		// that size throws spawn E2BIG (OS arg-list limit). `claude -p` reads the query from stdin.
-		const stdout = await spawnCollect(this.bin, args, input.cwd, stripNull(input.prompt))
+		const { stdout, code, stderr } = await spawnCollect(this.bin, args, input.cwd, stripNull(input.prompt))
 		const json = parse(stdout)
+		const result = (json.result ?? stdout).trim()
+		// A non-zero exit does NOT discard produced work: `claude -p` prints its result, THEN runs
+		// SessionEnd hooks, and a flaky hook (e.g. an agent-registry hook) can fail and exit 1 after the
+		// output is already on stdout. Only treat it as a failure when there is no usable result or the
+		// CLI itself flagged is_error.
+		if ((code !== 0 || json.is_error) && (!result || json.is_error)) {
+			throw new Error(`claude exited ${code}${json.is_error ? " (is_error)" : ""}: ${(stderr || stdout).slice(0, 500)}`)
+		}
 		return {
-			output: (json.result ?? stdout).trim(),
+			output: result,
 			sessionId: json.session_id,
 			model: modelOf(json) ?? model,
 			usage: toUsage(json),
@@ -84,7 +92,7 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 
 // Spawn `claude -p` with the query piped to stdin (not argv — see the call site). Collects stdout,
 // rejects on a non-zero exit or a stdout that blows the buffer cap.
-function spawnCollect(bin: string, args: string[], cwd: string | undefined, stdinData: string): Promise<string> {
+function spawnCollect(bin: string, args: string[], cwd: string | undefined, stdinData: string): Promise<{ stdout: string; code: number | null; stderr: string }> {
 	return new Promise((resolve, reject) => {
 		const MAX = 32 * 1024 * 1024
 		const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"] })
@@ -103,10 +111,10 @@ function spawnCollect(bin: string, args: string[], cwd: string | undefined, stdi
 			err += d
 		})
 		child.on("error", reject)
+		// Resolve with the exit code (don't reject on non-zero): the caller decides, so a post-output
+		// hook failure doesn't discard a produced result.
 		child.on("close", (code) => {
-			if (killed) return
-			if (code === 0) resolve(out)
-			else reject(new Error(`claude exited ${code}: ${err.slice(0, 500)}`))
+			if (!killed) resolve({ stdout: out, code, stderr: err })
 		})
 		child.stdin.on("error", () => {}) // ignore EPIPE if the CLI closes stdin early
 		child.stdin.end(stdinData)
