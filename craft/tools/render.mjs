@@ -50,6 +50,11 @@ await page.waitForFunction(() => !!(window.__timelines && window.__timelines.mai
 await page.evaluate(async () => {
 	await Promise.all([...document.images].map((im) => (im.complete ? null : im.decode().catch(() => {}))))
 })
+// Warm-up: force every plate image to raster once (large images otherwise paint blank on first use).
+const saved = await page.evaluate(() => [...document.querySelectorAll("img.shot")].map((im) => { const o = im.style.opacity; im.style.opacity = "1"; return o }))
+await page.waitForTimeout(800)
+await page.screenshot({ type: "jpeg", quality: 10, clip: { x: 0, y: 0, width, height } })
+await page.evaluate((saved) => [...document.querySelectorAll("img.shot")].forEach((im, i) => { im.style.opacity = saved[i] }), saved)
 const duration = await page.evaluate(() => window.__duration || window.__timelines.main.duration())
 const frames = Math.max(1, Math.ceil(duration * fps))
 
