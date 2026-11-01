@@ -14,15 +14,22 @@ Decide six fields, each traced to THIS brand's own material (its product, palett
 - **Swap test:** put a different product's name on your look — if it still fits, it's generic; redo it.
 - **Count tells (CRAFT-BAR §3):** gradients-everywhere + a rounded-card-for-everything + one-bright-accent-on-dark + a default font = a 4-tell cluster = slop. Keep to 0–1.
 
-## 2. Compose each card so the subject OWNS the frame
+## 2. Compose each card so the subject DOMINATES — inside a safe area, with room to breathe
 
-The failure that gets boards rejected: a big empty ring/band/gradient with the real content tiny in a corner. Fix it structurally:
+Two failures get boards rejected, and they are opposites. Guard against BOTH:
 
-- **One idea per card.** One headline, or one chart, or one number — never a busy dashboard. Large, set left or centre.
-- **The focal element fills ≥ ~50% of the frame.** If you draw a ring/shape, the content inside it IS the subject and is large; the ring is a thin accent, not a giant empty hoop. Size elements for how the camera frames them (a 1.0 zoom means the card as-drawn is the frame — so draw it full-bleed, not floating in margins).
+1. **Dead space** — a big empty ring/band/gradient with the real content tiny in a corner.
+2. **Overfill** — the content jammed edge to edge, type so big it fills all four edges with no margin (a wall of text, five lines touching the frame). This reads as amateur, and it is what a long line becomes when you refuse to scale the type.
+
+The fix is the same discipline for both: a dominant subject **set inside a safe area**.
+
+- **Ground full-bleed, content inside a safe area.** The flat colour ground covers the whole 1920×1080 frame (no letterbox of empty ground). But the *content* — text, subject, accent — lives inside a **safe area with a ≥ ~8–10% margin on all four sides** (≈150–190px). Nothing readable touches or bleeds past that safe edge. Full-bleed is the *background*, not the words.
+- **Type scales to fit — never a fixed giant size.** Choose the type size so the on-screen text sits in the safe area on **~1–3 lines with clear breathing room** between it and the edges. A long line means **smaller type or fewer words**, never overflow. Do not set a fixed 80px+ headline and let a 17-word sentence wrap to five edge-to-edge lines.
+- **On-screen text is usually a FOCAL PHRASE, not the whole VO line.** The full sentence is *spoken*; the card shows the few words the beat lands on (the hook, the pivot, the number). Whether a card shows a focal phrase or the full line is decided **at the production level** by the storyboard (per beat) — build the card to the treatment its spec names, and keep the safe area + breathing room either way.
+- **One idea per card.** One headline, or one chart, or one number — never a busy dashboard. Large, set left or centre, within the safe area.
+- **Dominance is bounded.** The focal element is clearly the largest, most important thing and reads instantly — but "dominant" means it commands the safe area, not that it overflows the frame. Dead-space-tiny = revise; edge-to-edge-crammed = revise.
 - **Hierarchy:** one hero element; labels/annotations are small-caps, tracked, and clearly secondary. Exactly one accent per card at most.
-- **Fill edge to edge.** No constant border of empty ground on all sides. Negative space is deliberate and asymmetric, never a letterbox of nothing.
-- **Legible receipts.** A number that is the proof (a metric, a result) gets its **own full-frame card**, big — not a footnote on a busy frame.
+- **Legible receipts.** A number that is the proof (a metric, a result) gets its **own card**, big and alone in the safe area — not a footnote on a busy frame, and not stretched wall-to-wall.
 
 ## 3. Motion = the camera + a SEQUENCE of plates (not one animated card)
 
@@ -50,4 +57,4 @@ Each is a concrete, imitable move from a real launch video. Choose a few; make o
 
 ## 5. Before you output
 
-- Render the board (`site-capture.mjs --spec film.json` then `storyboard-board.py`) and LOOK at every card. The subject dominates? Flat not gradient? 0–1 tells? Every beat distinct? A real CTA card? A signature move present? If not, fix the card HTML / camera and re-render — do not ship it to the reviewer to catch.
+- Render the board (`site-capture.mjs --spec film.json` then `storyboard-board.py`) and LOOK at every card. The subject dominates **inside a safe area with breathing room** (no text touching the edges, no five-line wall)? Flat not gradient? 0–1 tells? Every beat distinct? A real CTA card? A signature move present? If any card reads as a cramped wall of text, that is a reject — fix the card HTML / camera and re-render; do not ship it to the reviewer to catch.

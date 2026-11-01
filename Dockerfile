@@ -46,8 +46,16 @@ CMD ["node", "server/mcp/dist/http.js"]
 # espeak-ng-data; the model is baked so there is no network or key at runtime.
 FROM node:24-bookworm-slim AS engine-tools
 ARG TARGETARCH
+# Docker Desktop's VM filesystem (macOS/arm64) breaks apt's unprivileged `_apt` sandbox: that user
+# can't read the just-downloaded InRelease, so gpgv checks a garbage file and EVERY repo fails with a
+# false "At least one invalid signature was encountered". Run apt as root (no privilege drop) for the
+# whole image — the documented workaround for that false signature failure. Persists into the engine
+# stage (FROM engine-tools), so playwright's own `--with-deps` apt is covered too.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/00no-sandbox
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends bash curl ca-certificates ripgrep ffmpeg fonts-dejavu-core \
+	# chromium: the headless browser the HTML→video renderers drive (motion-graphics / HyperFrames via
+	# Puppeteer, and the Family-A html render). Baked so nothing downloads a browser at runtime.
+	&& apt-get install -y --no-install-recommends bash curl ca-certificates ripgrep ffmpeg fonts-dejavu-core chromium \
 	&& rm -rf /var/lib/apt/lists/* \
 	# npm blocks dependency install scripts, so claude-code's postinstall (install.cjs, which links its
 	# native binary) is skipped and `claude` won't launch — run it explicitly.
@@ -70,10 +78,36 @@ RUN set -eux; \
 	mkdir -p /opt/piper-voices; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+# python3 + the voice/compose toolchain the render shells out to (craft/tools/vo.py, mix.py, build.py).
+# build.py is stdlib python3; vo.py/mix.py need numpy + soundfile, and vo.py's word timing uses the
+# `whisper` CLI (openai-whisper). A venv at /opt/voenv holds those; make-film.sh runs vo.py/mix.py under
+# $KOKORO_PY (pointed at the venv), build.py under system python3. The whisper base model is baked so
+# there is no runtime download. libsndfile1 is soundfile's native dep.
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends python3 python3-venv libsndfile1 \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& python3 -m venv /opt/voenv \
+	&& /opt/voenv/bin/pip install --no-cache-dir numpy soundfile openai-whisper \
+	&& ln -s /opt/voenv/bin/whisper /usr/local/bin/whisper \
+	&& /opt/voenv/bin/python -c "import whisper; whisper.load_model('base')"
+# faster-whisper (speech → word-timed transcript for the edit-footage leaf) — a SEPARATE venv at
+# /opt/fw-venv (CTranslate2 ASR, distinct from the render voenv above), base model baked so nothing
+# downloads at runtime. transcribe.py decodes with ffmpeg + passes a numpy array (bypasses PyAV).
+# python3 / python3-venv are already installed above, so this only creates the venv.
+RUN python3 -m venv /opt/fw-venv \
+	&& /opt/fw-venv/bin/pip install --no-cache-dir faster-whisper numpy \
+	&& /opt/fw-venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
+# PUPPETEER_*/CHROME_PATH point the HTML→video renderers at the baked chromium so nothing downloads a
+# browser at runtime (Puppeteer / HyperFrames / the Family-A html render).
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 	DISABLE_AUTOUPDATER=1 \
+	KOKORO_PY=/opt/voenv/bin/python \
 	RENDER_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
-	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx
+	VOICE_MODEL=/opt/piper-voices/en_US-amy-medium.onnx \
+	PUPPETEER_SKIP_DOWNLOAD=1 \
+	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+	CHROME_PATH=/usr/bin/chromium \
+	FW_PY=/opt/fw-venv/bin/python
 
 # ── engine stage ──────────────────────────────────────────────────────────────────────────────────
 # The built app (from base) laid over the tools. Only this COPY re-runs when source changes — the
@@ -81,6 +115,11 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 FROM engine-tools AS engine
 WORKDIR /repo
 COPY --from=base /repo /repo
+# Playwright + chromium for the composed render (craft/tools/site-capture.mjs screenshots each plate).
+# Installed in the IMAGE only — not the shared repo package.json, which would shadow the host's own
+# playwright. npm 12 blocks the browser-download postinstall, so fetch chromium + its apt deps explicitly.
+RUN npm i --no-save playwright@1.48.2 \
+	&& npx playwright install --with-deps chromium
 CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────

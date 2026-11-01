@@ -9,7 +9,8 @@
 		{ "id": "script", "type": "script", "deps": ["brainstorm-select", "research"] },
 		{ "id": "moodboard", "type": "moodboard", "deps": ["brainstorm-select", "research"] },
 		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
-		{ "id": "build", "type": "build", "deps": ["storyboard"] },
+		{ "id": "assemble-board", "type": "assemble-board", "deps": ["storyboard", "moodboard"] },
+		{ "id": "build", "type": "build", "deps": ["assemble-board"] },
 		{ "id": "assemble", "type": "assemble", "deps": ["build"] },
 		{ "id": "polish", "type": "polish", "deps": ["assemble"] },
 		{ "id": "final-review", "type": "final-review", "deps": ["polish"] }

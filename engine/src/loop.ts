@@ -8,8 +8,8 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
@@ -298,17 +298,22 @@ export class Engine {
 			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
 			mkdirSync(workDir, { recursive: true })
 			stageRenderInputs(workDir, upstream)
-			producerPrompt = buildRenderPrompt(contract, { brief: root.description ?? "", workDir, feedback })
+			// Also stage any caller-provided assets (b-roll / audio / logo …) so an edit/compose leaf can
+			// use real footage. Harmless for render — extra files beside film.json are ignored.
+			const stagedAssets = stageAssets(workDir, await this.store.assetsFor(node.productionId))
+			producerPrompt = buildRenderedPrompt(contract, { brief: root.description ?? "", workDir, feedback, assets: stagedAssets })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
 				skill: contract.skill ?? "render-film",
 				cwd: this.config.craftRoot,
 			})
-			const mp4 = newestMp4(workDir)
-			if (!mp4) throw new Error(`render: the skill produced no .mp4 in ${workDir} — ${producerResult.output.slice(0, 200)}`)
-			artifactPath = mp4
+			// The skill writes a media file into the work dir; record it. Prefer an .mp4 (render), else any
+			// other media (an audio clip's .wav/.mp3 from the edit leaf).
+			const outFile = newestMedia(workDir)
+			if (!outFile) throw new Error(`rendered ${node.type}: the skill produced no media file in ${workDir} — ${producerResult.output.slice(0, 200)}`)
+			artifactPath = outFile
 			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
-			draft = `[rendered ${node.type}] file: ${mp4}`
+			draft = `[rendered ${node.type}] file: ${outFile}`
 		} else {
 			let boardOut: string | undefined
 			if (contract.emitsBoard) {
@@ -316,7 +321,13 @@ export class Engine {
 				boardOut = join(this.config.artifactsDir, node.productionId, "boards", `${base}-v${n}.jpg`)
 				mkdirSync(join(this.config.artifactsDir, node.productionId, "boards"), { recursive: true })
 			}
-			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut })
+			let boardDir: string | undefined
+			if (contract.boardDir) {
+				boardDir = join(this.config.artifactsDir, node.productionId, "board")
+				mkdirSync(join(boardDir, "plates"), { recursive: true })
+				mkdirSync(join(boardDir, "fonts"), { recursive: true })
+			}
+			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut, boardDir })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,
@@ -804,11 +815,49 @@ function readArtifact(path: string | null | undefined): string | undefined {
 // Stage a rendered leaf's upstream artifacts as files the render skill reads: the storyboard artifact
 // becomes film.json (the worker's make-film input); any other text upstream is written beside it.
 function stageRenderInputs(workDir: string, upstream: UpstreamArtifact[]): void {
+	// A boardDir producer (assemble-board) writes the REAL structured film.json + plates/ + fonts/ into
+	// <production>/board (sibling of this work dir); its own text artifact is only the assembler's chat
+	// reply. Prefer that board film.json — its plate/font refs are absolute, so render reads them in
+	// place — over the prose. The monolith generative branch has no board dir and still stages its
+	// film.json-as-text artifact below.
+	const boardFilm = join(dirname(workDir), "board", "film.json")
+	const haveBoard = existsSync(boardFilm)
+	if (haveBoard) {
+		const filmText = readFileSync(boardFilm, "utf8")
+		writeFileSync(join(workDir, "film.json"), filmText, "utf8")
+		// make-film.sh needs script.txt (one VO line per line) beside film.json — the board dir holds only
+		// film.json, so derive it from the film's `script` array.
+		try {
+			const film = JSON.parse(filmText) as { script?: unknown }
+			if (Array.isArray(film.script)) writeFileSync(join(workDir, "script.txt"), `${film.script.join("\n")}\n`, "utf8")
+		} catch {
+			// not parseable here — let the render skill surface the bad film.json
+		}
+	}
 	for (const u of upstream) {
 		if (u.content.includes("\0")) continue // never stage binary
-		const name = /storyboard|film/i.test(u.type) ? "film.json" : `${u.type}.txt`
+		const isFilm = /storyboard|film|assemble-board/i.test(u.type)
+		if (isFilm && haveBoard) continue // board film.json already staged; don't clobber it with the prose artifact
+		const name = isFilm ? "film.json" : `${u.type}.txt`
 		writeFileSync(join(workDir, name), u.content, "utf8")
 	}
+}
+
+// Stage caller-provided assets (video/audio/images) into the work dir by copying each from its
+// storagePath, so an edit/compose leaf's worker can use real footage. Returns the staged basenames
+// (named in the prompt). A missing/unreadable asset is skipped — the producer reports an absent input.
+export function stageAssets(workDir: string, assets: readonly { storagePath: string }[]): string[] {
+	const staged: string[] = []
+	for (const a of assets) {
+		try {
+			const dest = basename(a.storagePath)
+			copyFileSync(a.storagePath, join(workDir, dest))
+			staged.push(dest)
+		} catch {
+			// skip; the producer surfaces a genuinely-needed input that is absent
+		}
+	}
+	return staged
 }
 
 // The most-recently-written .mp4 under a work dir — what the render skill produced.
@@ -838,15 +887,53 @@ function newestMp4(dir: string): string | null {
 	return bestPath
 }
 
+const OTHER_MEDIA_EXT = [".mov", ".webm", ".mkv", ".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]
+
+// The media file a rendered leaf's skill produced: prefer the newest .mp4 (render/assemble always
+// write one), else the newest other media (an edit/compose leaf may output audio). Render behavior is
+// unchanged — a work dir with an .mp4 always resolves to it.
+export function newestMedia(dir: string): string | null {
+	const mp4 = newestMp4(dir)
+	if (mp4) return mp4
+	let best: string | null = null
+	let bestT = -1
+	const walk = (d: string): void => {
+		let entries: Dirent[]
+		try {
+			entries = readdirSync(d, { withFileTypes: true })
+		} catch {
+			return
+		}
+		for (const e of entries) {
+			const p = join(d, e.name)
+			if (e.isDirectory()) walk(p)
+			else if (OTHER_MEDIA_EXT.some((x) => e.name.toLowerCase().endsWith(x))) {
+				const t = statSync(p).mtimeMs
+				if (t > bestT) {
+					bestT = t
+					best = p
+				}
+			}
+		}
+	}
+	walk(dir)
+	return best
+}
+
 // The render leaf's task prompt: point the worker at the staged work dir; the /render-film skill (the
 // directive the runner injects) owns the steps (extract the script, run make-film, write the .mp4).
-function buildRenderPrompt(_contract: TypeContract, a: { brief: string; workDir: string; feedback?: string }): string {
-	return [
-		`Produce the finished video for this node.`,
-		`Work dir: ${a.workDir} — it holds film.json (the approved storyboard). Write the final MP4 into that same work dir.`,
-		`Brief: ${a.brief}`,
-		a.feedback ? `Revision feedback to address this round:\n${a.feedback}` : "",
-	]
-		.filter(Boolean)
-		.join("\n\n")
+export function buildRenderedPrompt(contract: TypeContract, a: { brief: string; workDir: string; feedback?: string; assets?: string[] }): string {
+	// Film renders (render / assemble) read the staged storyboard; an edit/compose leaf works from the
+	// staged provided assets. Both keep the exact "Work dir: <path>" phrase the worker reads.
+	const isFilm = contract.type === "render" || /render|film|assemble/i.test(contract.type)
+	const lines = [`Produce the finished artifact for this node.`]
+	if (isFilm) {
+		lines.push(`Work dir: ${a.workDir} — it holds film.json (the approved storyboard). Write the final MP4 into that same work dir.`)
+	} else {
+		lines.push(`Work dir: ${a.workDir} — write the produced media file into it.`)
+		if (a.assets?.length) lines.push(`Provided assets staged in the work dir: ${a.assets.join(", ")}.`)
+	}
+	lines.push(`Brief: ${a.brief}`)
+	if (a.feedback) lines.push(`Revision feedback to address this round:\n${a.feedback}`)
+	return lines.filter(Boolean).join("\n\n")
 }

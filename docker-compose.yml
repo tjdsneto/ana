@@ -79,6 +79,11 @@ services:
       # --resume keeps working across restarts. HOME is /root in the (root) engine image.
       # Transcripts: engine/data/claude/projects/-repo/<session>.jsonl
       - ./engine/data/claude:/root/.claude
+      # Live-mount the craft (skills + tools) so skill/tool edits reflect without an image rebuild
+      # (the engine DIST is still baked; only skills + the craft scripts are read at runtime). The
+      # node/python/chromium runtimes they shell out to stay baked in the image.
+      - ./.claude/skills:/repo/.claude/skills
+      - ./craft/tools:/repo/craft/tools
     depends_on:
       db:
         condition: service_healthy

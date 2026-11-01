@@ -68,13 +68,18 @@ def T(ref):
 
 
 # ------------------------------------------------------------------ layout
-CHROME = 56
+FB = bool(film.get("fullbleed", not film.get("url")))  # composed boards (no url) are full-frame cards, no browser window; a film with a url keeps the browser frame
+CHROME = 0 if FB else 56
 VW, VH = W, H - CHROME
 K = VW / CAPW
 FY = 0.5
 inset = film.get("window_inset", 0.07)
+# no url -> no address pill (an empty omnibox reads as a defect on a brand film)
+OMNI_URL = film.get("url")
 FULL = {"x": round(W * inset, 1), "y": round(H * inset, 1), "scale": round(1 - 2 * inset, 4), "borderRadius": 14}
 CARD = {"x": round(W * 0.13, 1), "y": round(H * 0.14, 1), "scale": 0.74, "borderRadius": 18}
+if FB:
+    FULL = CARD = {"x": 0, "y": 0, "scale": 1, "borderRadius": 0}
 
 CAMS = film["camera"]
 T_WIN = T(CAMS[0]["at"])
@@ -195,6 +200,7 @@ body { background:var(--bg); font-family:%(font)s; -webkit-font-smoothing:antial
 .big .w:last-child::after { content:"."; color:var(--ac); }
 .sub { margin-top:30px; font-size:34px; color:var(--mu); }
 .cta { margin-top:44px; padding:16px 30px; border-radius:999px; background:var(--ac); color:#fff; font-size:30px; font-weight:700; }
+.win.fb { opacity:1 !important; box-shadow:none; background:var(--bg); } .win.fb .bar { display:none; } .win.fb .vp { top:0; background:var(--bg); }
 .win { position:absolute; left:0; top:0; width:%(W)spx; height:%(H)spx; transform-origin:0 0; overflow:hidden; background:#f0f0f1; box-shadow:0 60px 160px rgba(0,0,0,.75), 0 0 0 2px rgba(255,255,255,.08); opacity:0; }
 .bar { position:absolute; left:0; right:0; top:0; height:56px; background:#E9EAED; border-bottom:1px solid #D5D7DB; display:flex; align-items:center; padding:0 18px; gap:18px; z-index:5; }
 .lights { display:flex; gap:9px; flex:none; } .lights i { width:14px; height:14px; border-radius:50%%; background:#FF5F57; } .lights i:nth-child(2) { background:#FEBC2E; } .lights i:nth-child(3) { background:#28C840; }
@@ -219,8 +225,8 @@ def html():
     tc = film.get("title_card", {})
     oc = film.get("outro", {})
     shots = "".join(f'<img class="shot" id="s_{p.replace("-", "_")}" src="assets/shots/{p}.jpg" alt="" style="width:{VW}px;height:{round(SHOTS[p]["_h"] * K, 1)}px">' for p in PLATES)
-    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{f';--ac:{col}' if col else ''}"></div>'
-                    for rid, _, _, (x, y, w, h), col in RINGS)
+    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{acx}"></div>'
+                    for rid, _, _, (x, y, w, h), col in RINGS for acx in [(";--ac:" + col) if col else ""])
     chips = "".join(f'<div class="chip" id="{cid}">{md(txt)}</div>' for cid, _, _, txt in CHIPS)
 
     def _layer(L):
@@ -245,6 +251,7 @@ def html():
     <div class="card" id="ocard"><div class="kick" id="ok">{oc.get("kicker", "")}</div><div class="big" id="ob">{words(oc.get("text", ""), "w")}</div>
     {f'<div class="sub" id="os">{oc["sub"]}</div>' if oc.get("sub") else ''}{f'<div class="cta" id="oc">{oc["cta"]}</div>' if oc.get("cta") else ''}</div>
   </section>"""
+    OMNI = f'<div class="omni"><span class="url">{LOCK}<span>{OMNI_URL}</span></span></div>' if OMNI_URL else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width={W}, height={H}">
 <title>{film.get("title", "Launch film")}</title>
@@ -254,8 +261,8 @@ def html():
 <div id="root">
   <div id="bg"><div class="glow" id="glow"></div><div class="dots"></div></div>{title}
   <section id="product" class="clip">
-    <div class="win" id="win">
-      <div class="bar"><span class="lights"><i></i><i></i><i></i></span><div class="omni"><span class="url">{LOCK}<span>{film.get("url", "example.com")}</span></span></div></div>
+    <div class="win{" fb" if FB else ""}" id="win">
+      <div class="bar"><span class="lights"><i></i><i></i><i></i></span>{OMNI}</div>
       <div class="vp"><div id="cam">{shots}{rings}<div class="cursor" id="cur">{CURSOR}<i class="ripple" id="rip"></i></div></div></div>
     </div>
     {chips}
@@ -281,13 +288,15 @@ tl.fromTo("#tb", { scale: 1.05 }, { scale: 1, duration: Math.max(0.5, P.TWIN - 0
 blurOut("#tcard", P.TWIN + 0.1);
 
 // browser window: floats in as a card, then expands to fill the frame
+if (P.FB) { gsap.set("#win", Object.assign({ opacity: 1 }, P.FULL)); tl.set("#win", Object.assign({ opacity: 1 }, P.FULL), 0); } else {
 gsap.set("#win", Object.assign({ opacity: 0 }, P.CARD)); tl.set("#win", Object.assign({ opacity: 0 }, P.CARD), 0);
 tl.fromTo("#win", { opacity: 0, y: P.CARD.y + 80 }, { opacity: 1, y: P.CARD.y, duration: 0.6, ease: "expo.out", immediateRender: false }, P.TWIN);
-tl.to("#win", Object.assign({ duration: 0.75, ease: "expo.inOut" }, P.FULL), P.EXP);
+tl.to("#win", Object.assign({ duration: 0.75, ease: "expo.inOut" }, P.FULL), P.EXP); }
 if (P.OUT < P.DUR) blurOut("#win", P.OUT + 0.1);
 
 // camera
-document.querySelectorAll(".shot").forEach(function (s) { gsap.set(s, { opacity: 0 }); tl.set(s, { opacity: 0 }, 0); });
+const FIRST = "s_" + P.CAM[0].shot.replace(/-/g, "_");
+document.querySelectorAll(".shot").forEach(function (s) { if (s.id === FIRST) return; gsap.set(s, { opacity: 0 }); tl.set(s, { opacity: 0 }, 0); });
 let cur = null;
 P.CAM.forEach(function (k, i) {
   const a = { x: k.a[0], y: k.a[1], scale: k.a[2] }, b = { x: k.b[0], y: k.b[1], scale: k.b[2] };
@@ -301,7 +310,7 @@ P.CAM.forEach(function (k, i) {
   if (k.hold > 0.05) tl.to("#cam", Object.assign({ duration: k.hold, ease: "none" }, b), k.t + k.d);
   if (k.shot !== cur) {
     if (cur) tl.set("#s_" + cur.replace(/-/g, "_"), { opacity: 0 }, k.t);
-    tl.set("#s_" + k.shot.replace(/-/g, "_"), { opacity: 1 }, i === 0 ? 0.001 : k.t);
+    tl.set("#s_" + k.shot.replace(/-/g, "_"), { opacity: 1 }, i === 0 ? 0 : k.t);
     cur = k.shot;
   }
 });
@@ -355,7 +364,7 @@ window.__timelines["main"] = tl;
 window.__duration = P.DUR;
 """
 
-PAYLOAD = {"DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
+PAYLOAD = {"FB": FB, "DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
            "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS],
            "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move", "kind")} for L in LAYERS]}
 
