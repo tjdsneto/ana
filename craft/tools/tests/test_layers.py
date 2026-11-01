@@ -122,6 +122,24 @@ def test_move_authored_transform():
     assert mv["to"]["scale"] == 0.32, f"move.to not carried: {mv}"
 
 
+def test_video_layer_rendered():
+    """A kind=video layer emits a <video> element (not <img>) and carries kind through the payload so
+    render.mjs can sync the clip's currentTime to the timeline."""
+    film = dict(BASE, layers=[
+        {"kind": "video", "src": "assets/overlays/selfie.mp4",
+         "at": "Alpha", "until": "hotel", "x": 1360, "y": 72, "w": 460, "z": 16},
+    ])
+    with tempfile.TemporaryDirectory() as d:
+        html = _build(film, d)
+    assert '<video class="layer"' in html, "video layer should be a <video> element"
+    assert "assets/overlays/selfie.mp4" in html, "video src not in index.html"
+    assert 'data-in="0.4"' in html, "video layer must expose its resolved in-time as data-in for render.mjs sync"
+    assert "<img" not in html.split('id="layers"')[1].split("</div>")[0] if 'id="layers"' in html else True, \
+        "video layer must not emit an <img>"
+    L = _payload(html)["LAYERS"][0]
+    assert L.get("kind") == "video", f"payload layer must carry kind=video, got {L.get('kind')!r}"
+
+
 def test_layer_ids_autogen():
     film = dict(BASE, layers=[
         {"kind": "image", "src": "a.png", "at": "Alpha", "until": "bravo", "x": 0, "y": 0},
@@ -135,7 +153,7 @@ def test_layer_ids_autogen():
 
 if __name__ == "__main__":
     tests = [test_image_layer_rendered, test_no_layers_unchanged, test_text_layer_rendered,
-             test_move_authored_transform, test_layer_ids_autogen]
+             test_move_authored_transform, test_video_layer_rendered, test_layer_ids_autogen]
     failed = 0
     for t in tests:
         try:

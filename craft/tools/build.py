@@ -224,6 +224,8 @@ def html():
             style += f';height:{L["h"]}px'
         if L["kind"] == "text":
             return f'<div class="layer ltext" id="L_{L["id"]}" style="{style}">{md(L["text"])}</div>'
+        if L["kind"] == "video":
+            return f'<video class="layer" id="L_{L["id"]}" src="{L["src"]}" data-in="{L["in"]}" muted playsinline preload="auto" style="{style}"></video>'
         return f'<img class="layer" id="L_{L["id"]}" src="{L["src"]}" alt="" style="{style}">'
     layers_div = f'<div id="layers">{"".join(_layer(L) for L in LAYERS)}</div>' if LAYERS else ""
     font_css = f'<link rel="stylesheet" href="{TH["fontCss"]}">' if TH.get("fontCss") else ""
@@ -348,7 +350,7 @@ window.__duration = P.DUR;
 
 PAYLOAD = {"DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
            "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS],
-           "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move")} for L in LAYERS]}
+           "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move", "kind")} for L in LAYERS]}
 
 if __name__ == "__main__":
     cues = ([["whoosh", T_WIN], ["swish", EXP], ["hit", 0.35]] + [["click", c[0]] for c in CLICKS]

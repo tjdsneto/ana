@@ -49,6 +49,10 @@ await page.goto(`file://${htmlPath}`, { waitUntil: "networkidle", timeout: 60000
 await page.waitForFunction(() => !!(window.__timelines && window.__timelines.main && window.gsap), null, { timeout: 30000 })
 await page.evaluate(async () => {
 	await Promise.all([...document.images].map((im) => (im.complete ? null : im.decode().catch(() => {}))))
+	// video layers must have metadata (duration/dimensions) before we can seek them per frame
+	await Promise.all([...document.querySelectorAll("video.layer")].map((v) =>
+		v.readyState >= 1 ? null : new Promise((r) => v.addEventListener("loadedmetadata", r, { once: true }))
+	))
 })
 const duration = await page.evaluate(() => window.__duration || window.__timelines.main.duration())
 const frames = Math.max(1, Math.ceil(duration * fps))
@@ -57,9 +61,20 @@ const dir = mkdtempSync(join(tmpdir(), "render-frames-"))
 console.log(`render: ${duration.toFixed(2)}s @ ${fps}fps = ${frames} frames, ${width}x${height}`)
 for (let i = 0; i < frames; i++) {
 	const t = Math.min(duration, i / fps)
-	// seek the paused timeline, then wait two animation frames so CSS transforms/filters paint
-	await page.evaluate((t) => {
+	// seek the paused timeline + sync each video layer's currentTime, then wait two animation
+	// frames so CSS transforms/filters and the decoded video frame paint
+	await page.evaluate(async (t) => {
 		window.__timelines.main.seek(t)
+		await Promise.all([...document.querySelectorAll("video.layer")].map((v) => {
+			const vin = parseFloat(v.dataset.in || "0")
+			const dur = isFinite(v.duration) ? v.duration : Infinity
+			const ct = Math.max(0, Math.min(dur - 0.001, t - vin))
+			if (Math.abs(v.currentTime - ct) < 1e-3) return null
+			return new Promise((r) => {
+				v.addEventListener("seeked", r, { once: true })
+				v.currentTime = ct
+			})
+		}))
 		return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 	}, t)
 	await page.screenshot({ path: join(dir, `f${String(i).padStart(5, "0")}.jpg`), type: "jpeg", quality: 95, clip: { x: 0, y: 0, width, height } })
