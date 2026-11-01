@@ -35,6 +35,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"            # craft/tools
 PY="${KOKORO_PY:-$HOME/.local/share/kokoro-onnx/venv/bin/python}"
 [ -x "$PY" ] || { echo "make-film: Kokoro venv python not found at $PY (set KOKORO_PY)" >&2; exit 3; }
 
+# Use whichever TTS engine is actually present. Kokoro needs its model; a piper-only host (e.g. the
+# engine container) has none, so fall back to piper instead of hard-failing the voice step. A host
+# with the kokoro model keeps kokoro.
+KOKORO_HOME_DIR="${KOKORO_HOME:-$HOME/.local/share/kokoro-onnx}"
+if [ "$VOICE_ENGINE" = "kokoro" ] && [ ! -f "$KOKORO_HOME_DIR/kokoro-v1.0.onnx" ]; then
+  echo "make-film: kokoro model not found under $KOKORO_HOME_DIR — falling back to piper" >&2
+  VOICE_ENGINE=piper
+fi
+
 echo "make-film: $F"
 if [ "$SKIP_CAPTURE" -eq 0 ]; then
   echo "  [1/5] capture"; ( cd "$HERE" && node site-capture.mjs --spec "$F/film.json" --out "$F" )
