@@ -3,6 +3,7 @@
 
 export * from "./schema.js"
 export * from "./types.js"
+export * from "./edl.js"
 export * from "./ports.js"
 export * from "./defaults.js"
 export * from "./runtime.js"
