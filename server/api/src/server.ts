@@ -4,6 +4,7 @@
 // app; index.ts wraps it in an http.Server and attaches the WebSocket.
 
 import { readFile, stat } from "node:fs/promises"
+import { basename, dirname, join } from "node:path"
 import { approve, approveBudget, getDeliverable, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
@@ -101,6 +102,35 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 			}
 			res.sendFile(abs, { headers: { "Content-Type": "video/mp4" } }, (err) => {
 				if (err && !res.headersSent) res.status(404).json({ error: "artifact not found" })
+			})
+		} catch (err) {
+			if (!res.headersSent) res.status(400).json({ error: err instanceof Error ? err.message : String(err) })
+		}
+	})
+
+	// ── storyboard board image ─────────────────────────────────────────────────────────────────
+	// The rendered board sheet for a storyboard version (one card per beat). The producer saves it to
+	// <prod>/boards/<type>-v<n>.jpg beside the version's artifact; derive that from the version's
+	// artifact_path and stream it. 404 is normal for versions produced before boards existed.
+	app.get("/api/board", async (req, res) => {
+		try {
+			if (typeof req.query.version_id !== "string") {
+				res.status(400).json({ error: "pass ?version_id=" })
+				return
+			}
+			const d = await getDeliverable(store, { versionId: req.query.version_id })
+			if (!d.artifact_path) {
+				res.status(404).json({ error: "no artifact for this version" })
+				return
+			}
+			const boardRel = join(dirname(d.artifact_path), "boards", basename(d.artifact_path).replace(/\.[^.]+$/, ".jpg"))
+			const abs = locateUnderRoot(artifactsRoot(), boardRel)
+			if (!abs) {
+				res.status(404).json({ error: "no board for this version" })
+				return
+			}
+			res.sendFile(abs, { headers: { "Content-Type": "image/jpeg" } }, (err) => {
+				if (err && !res.headersSent) res.status(404).json({ error: "board not found" })
 			})
 		} catch (err) {
 			if (!res.headersSent) res.status(400).json({ error: err instanceof Error ? err.message : String(err) })

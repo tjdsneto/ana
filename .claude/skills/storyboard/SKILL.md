@@ -117,3 +117,5 @@ Do not output `film.json` until every board card is honest. This is the gate tha
 ## 5. Before you output
 
 Re-check: valid JSON · `outro.at` = `line:<LAST>` (the last line) · every camera/chip `at`/`until` word is in `script` · no camera beat on the final line · all `y` ≤ `_h` · the board (`board/sheet.jpg`) was rendered and every card's picture matches its VO line. Output the JSON only.
+
+**Save the board for the dashboard.** If the prompt included a "Save your board for the dashboard" path, copy your rendered `<workDir>/board/sheet.jpg` to that exact path before you output (`cp <workDir>/board/sheet.jpg "<that path>"`, creating the parent dir if needed). The dashboard shows this image on the storyboard version row, so a missing or stale board means the reviewer and Tiago can't see what you built.

@@ -138,6 +138,15 @@ export function videoUrlByPath(path: string): string {
 	return `/api/video?path=${encodeURIComponent(path)}`
 }
 
+// Rendered storyboard board sheet for a version (404s for versions produced before boards existed).
+export function boardUrlByVersion(versionId: string): string {
+	return `/api/board?version_id=${encodeURIComponent(versionId)}`
+}
+
+export function emitsBoard(nodeType: string): boolean {
+	return nodeType === "storyboard"
+}
+
 export function isVideoPath(p: string | null | undefined): boolean {
 	return !!p && /\.mp4$/i.test(p)
 }

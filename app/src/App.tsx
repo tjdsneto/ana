@@ -8,6 +8,8 @@ import { useEffect, useRef, useState } from "react"
 import {
 	approveBudget,
 	approveOutput,
+	boardUrlByVersion,
+	emitsBoard,
 	getDeliverable,
 	getProduction,
 	getProductions,
@@ -310,9 +312,10 @@ function VersionBlock({
 					{producer && <RunButton interaction={producer} title={`${titleCase(nodeType)} · producer · v${version.n}`} versionId={version.id} />}
 				</div>
 				<div className="rev-art">
+					{emitsBoard(nodeType) && <BoardImage versionId={version.id} />}
 					<ArtifactView versionId={version.id} artifactPath={version.artifactPath} nodeType={nodeType} n={version.n} isLast={isLast} />
 				</div>
-				{version.feedback && <div className="feeds note-feedback"><b>Human feedback:</b> {version.feedback}</div>}
+				{version.feedback && <div className="feeds note-feedback"><b>Sent back:</b> {version.feedback}</div>}
 				{reviews.length > 0 && (
 					<>
 						<div className="sub-h">Feedback this version received</div>
@@ -335,6 +338,19 @@ function VersionBlock({
 				)}
 			</div>
 		</div>
+	)
+}
+
+// The rendered storyboard board (one card per beat) for this version — the exact regions the render
+// will frame. Streams from /api/board; hides itself if this version has no board (older versions).
+function BoardImage({ versionId }: { versionId: string }) {
+	const [ok, setOk] = useState(true)
+	if (!ok) return null
+	return (
+		<figure className="board-sheet">
+			<img src={boardUrlByVersion(versionId)} alt="storyboard board — one card per beat" loading="lazy" onError={() => setOk(false)} />
+			<figcaption>Board — one card per beat (what the render will frame)</figcaption>
+		</figure>
 	)
 }
 

@@ -309,7 +309,13 @@ export class Engine {
 			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
 			draft = `[rendered ${node.type}] file: ${mp4}`
 		} else {
-			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback })
+			let boardOut: string | undefined
+			if (contract.emitsBoard) {
+				const base = await this.artifactBase(node)
+				boardOut = join(this.config.artifactsDir, node.productionId, "boards", `${base}-v${n}.jpg`)
+				mkdirSync(join(this.config.artifactsDir, node.productionId, "boards"), { recursive: true })
+			}
+			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,

@@ -1333,3 +1333,8 @@ code {
 	font-family: var(--mono);
 	word-break: break-all;
 }
+
+/* Storyboard board sheet shown per version in the revision timeline */
+.board-sheet { margin: 0 0 10px; }
+.board-sheet img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line, rgba(255,255,255,.12)); background: #0b0b0f; }
+.board-sheet figcaption { margin-top: 4px; font-size: 11px; opacity: .6; }
