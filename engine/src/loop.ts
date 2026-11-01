@@ -321,7 +321,13 @@ export class Engine {
 				boardOut = join(this.config.artifactsDir, node.productionId, "boards", `${base}-v${n}.jpg`)
 				mkdirSync(join(this.config.artifactsDir, node.productionId, "boards"), { recursive: true })
 			}
-			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut })
+			let boardDir: string | undefined
+			if (contract.boardDir) {
+				boardDir = join(this.config.artifactsDir, node.productionId, "board")
+				mkdirSync(join(boardDir, "plates"), { recursive: true })
+				mkdirSync(join(boardDir, "fonts"), { recursive: true })
+			}
+			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut, boardDir })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,
@@ -811,7 +817,8 @@ function readArtifact(path: string | null | undefined): string | undefined {
 function stageRenderInputs(workDir: string, upstream: UpstreamArtifact[]): void {
 	for (const u of upstream) {
 		if (u.content.includes("\0")) continue // never stage binary
-		const name = /storyboard|film/i.test(u.type) ? "film.json" : `${u.type}.txt`
+		// assemble-board's artifact IS the final film.json (its content); stage it as such for render.
+		const name = /storyboard|film|assemble-board/i.test(u.type) ? "film.json" : `${u.type}.txt`
 		writeFileSync(join(workDir, name), u.content, "utf8")
 	}
 }

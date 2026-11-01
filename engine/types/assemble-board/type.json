@@ -1,0 +1,10 @@
+{
+	"type": "assemble-board",
+	"name": "Assemble board",
+	"boardDir": true,
+	"skill": "assemble-board",
+	"produce": "Stitch the approved cards into the final film.json, in playback order: each beat references its card's plate file (plates/<id>.html) and camera, with the one shared @font-face. Do not regenerate cards — assemble what the card nodes produced. Output the film.json the render consumes.",
+	"reviews": [
+		{ "name": "consistency", "kind": "consistency", "skill": "review-board-consistency" }
+	]
+}
