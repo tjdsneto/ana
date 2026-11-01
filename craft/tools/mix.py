@@ -64,6 +64,26 @@ def band_db(x):  # level in the 300-3400 Hz speech band
     return 20 * np.log10(np.sqrt(np.mean(np.square(y))) + 1e-9)
 
 
+# audio tracks plan (build.py), when the film declares an `audio` block: separate voice/music/sfx
+# tracks with resolved times. Absent -> the original single-bed path below (back-compat).
+PLAN = json.loads((ROOT / "src/audio-plan.json").read_text()) if (ROOT / "src/audio-plan.json").exists() else None
+
+
+def decode(src, start=0.0):
+    """ffmpeg-decode any audio file to SR stereo float32 from `start`s, length <= DUR+1s."""
+    out = TMP / f"dec-{abs(hash((str(src), start))) % 10**8}.wav"
+    ff("-ss", f"{float(start):.3f}", "-t", f"{DUR + 1:.3f}", "-i", str(src), "-ac", "2", "-ar", str(SR), str(out))
+    return fit(sf.read(out, dtype="float32")[0])
+
+
+def place(buf, x, at=0.0, gain_db=0.0):
+    """mix signal x into buf at `at` seconds with gain (dB), clipped to buf length."""
+    i = max(0, int(at * SR))
+    n = min(len(x), len(buf) - i)
+    if n > 0:
+        buf[i:i + n] += x[:n] * (10 ** (gain_db / 20))
+
+
 # ---------- synthesized sound effects (no samples)
 def t(d):
     return np.arange(int(d * SR)) / SR
@@ -124,6 +144,8 @@ GEN = {"click": click, "tick": tick, "pop": pop, "hit": hit, "whoosh": whoosh, "
 LEAD = {"whoosh": 0.3, "swish": 0.18}  # sweeps peak on the cut, so they start a little before it
 fx = np.zeros(L, np.float32)
 cues = [] if A.no_sfx or not (ROOT / "src/sfx-cues.json").exists() else json.loads((ROOT / "src/sfx-cues.json").read_text())
+if PLAN and PLAN.get("sfx") and not A.no_sfx:
+    cues = cues + [[c["cue"], c["at"]] for c in PLAN["sfx"] if c.get("cue")]  # explicit sfx cues from the audio plan
 for kind, at in cues:
     if kind not in GEN:
         continue
@@ -137,16 +159,10 @@ for kind, at in cues:
         fx[i:i + m] += s[:m]
 sf.write(ROOT / "media/sfx.wav", fx, SR)
 
-# ---------- voice, (optional) bed, ducking
-vo = fit(sf.read(ROOT / "media/vo.wav", dtype="float32")[0])
-clear = A.clear
-if A.music:
-    ff("-ss", f"{A.start:.3f}", "-t", f"{DUR + 1:.3f}", "-i", A.music, "-ac", "2", "-ar", str(SR), str(TMP / "bed.wav"))
-    bed = fit(sf.read(TMP / "bed.wav", dtype="float32")[0])
-    tt = np.arange(L) / SR
-    bed *= (np.clip(tt / 0.4, 0, 1) * np.clip((DUR - tt) / 1.6, 0, 1) ** 1.5)[:, None]   # fade in, 1.6 s fade out
+def duck_env(voice):
+    """a 0..1 envelope that rises while `voice` is speaking (for ducking a bed under it)."""
     k = int(0.02 * SR)
-    lev = np.sqrt(np.convolve(np.square(vo[:, 0]), np.ones(k) / k, "same"))
+    lev = np.sqrt(np.convolve(np.square(voice[:, 0]), np.ones(k) / k, "same"))
     gate = np.clip((lev - 0.01) / 0.03, 0, 1)
     att, rel = np.exp(-1 / (0.025 * SR)), np.exp(-1 / (0.42 * SR))
     g = np.empty(L)
@@ -155,14 +171,49 @@ if A.music:
         c = att if v > acc else rel
         acc = c * acc + (1 - c) * v
         g[i] = acc
-    duck = 10 ** (-7 * g / 20)                                                           # 7 dB dip under the voice
-    speech = g > 0.5
-    bed_d = bed * duck[:, None]
-    clear = band_db(vo[speech]) - band_db(bed_d[speech]) if speech.any() else A.clear
-    bed_d *= 10 ** ((clear - A.clear) / 20)
-    mix = vo + bed_d + fit(fx) * 10 ** (-9 / 20)
+    return g
+
+
+# ---------- voice, (optional) bed, ducking
+if PLAN:
+    # multi-track: sum voice clip(s), sum music clip(s) ducked under the voice, + SFX
+    voclips = PLAN.get("voice") or [{"src": "media/vo.wav", "at": 0, "gain": 0}]
+    vo = np.zeros((L, 2), np.float32)
+    for c in voclips:
+        place(vo, decode(ROOT / c.get("src", "media/vo.wav")), c.get("at", 0), c.get("gain", 0))
+    beds = [c for c in PLAN.get("music", []) if c.get("src")]
+    if beds:
+        tt = np.arange(L) / SR
+        fade = (np.clip(tt / 0.4, 0, 1) * np.clip((DUR - tt) / 1.6, 0, 1) ** 1.5)[:, None]
+        duck = (10 ** (-7 * duck_env(vo) / 20))[:, None]                                  # 7 dB dip under the voice
+        bedsum = np.zeros((L, 2), np.float32)
+        for c in beds:
+            b = np.zeros((L, 2), np.float32)
+            place(b, decode(ROOT / c["src"], c.get("start", 0)), c.get("at", 0), c.get("gain", 0))
+            b *= fade
+            if c.get("duck", True):
+                b *= duck
+            bedsum += b
+        mix = vo + bedsum + fit(fx) * 10 ** (-9 / 20)
+    else:
+        mix = vo + fit(fx) * 10 ** (-9 / 20)
 else:
-    mix = vo + fit(fx) * 10 ** (-9 / 20)                                                 # VO + SFX only
+    vo = fit(sf.read(ROOT / "media/vo.wav", dtype="float32")[0])
+    clear = A.clear
+    if A.music:
+        ff("-ss", f"{A.start:.3f}", "-t", f"{DUR + 1:.3f}", "-i", A.music, "-ac", "2", "-ar", str(SR), str(TMP / "bed.wav"))
+        bed = fit(sf.read(TMP / "bed.wav", dtype="float32")[0])
+        tt = np.arange(L) / SR
+        bed *= (np.clip(tt / 0.4, 0, 1) * np.clip((DUR - tt) / 1.6, 0, 1) ** 1.5)[:, None]   # fade in, 1.6 s fade out
+        g = duck_env(vo)
+        duck = 10 ** (-7 * g / 20)                                                           # 7 dB dip under the voice
+        speech = g > 0.5
+        bed_d = bed * duck[:, None]
+        clear = band_db(vo[speech]) - band_db(bed_d[speech]) if speech.any() else A.clear
+        bed_d *= 10 ** ((clear - A.clear) / 20)
+        mix = vo + bed_d + fit(fx) * 10 ** (-9 / 20)
+    else:
+        mix = vo + fit(fx) * 10 ** (-9 / 20)                                                 # VO + SFX only
 sf.write(TMP / "pre.wav", mix, SR)
 
 
@@ -173,4 +224,6 @@ def lufs(p):
 
 gain = A.lufs - lufs(TMP / "pre.wav")
 ff("-i", str(TMP / "pre.wav"), "-af", f"volume={gain:.2f}dB,alimiter=limit=0.841:level=disabled", "-ar", str(SR), str(ROOT / "media/mix.wav"))
-print(f"media/mix.wav: {DUR}s, {'music bed' if A.music else 'no music'}, master {gain:+.2f} dB -> {lufs(ROOT / 'media/mix.wav'):.1f} LUFS, {len(cues)} sfx cues")
+has_music = bool(A.music) or bool(PLAN and PLAN.get("music"))
+tracks = f"plan: {len(PLAN.get('voice') or [1])} voice + {len(PLAN.get('music', []))} music" if PLAN else ('music bed' if A.music else 'no music')
+print(f"media/mix.wav: {DUR}s, {tracks}, master {gain:+.2f} dB -> {lufs(ROOT / 'media/mix.wav'):.1f} LUFS, {len(cues)} sfx cues")

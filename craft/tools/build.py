@@ -365,5 +365,12 @@ if __name__ == "__main__":
             + [["whoosh", c["t"]] for c in CAM[1:] if c["a0"]] + ([["whoosh", OUT], ["hit", OUT + 0.25]] if film.get("outro") else []))
     (ROOT / "src").mkdir(exist_ok=True)
     (ROOT / "src/sfx-cues.json").write_text(json.dumps(sorted(cues, key=lambda c: c[1])))
+    # audio tracks: resolve each clip's word-anchored `at` to seconds for mix.py to sum (separate
+    # voice/music/sfx tracks). Only emitted when the film declares `audio` (else mix.py's current path).
+    audio = film.get("audio")
+    if audio:
+        plan = {track: [dict(c, at=round(T(c.get("at", 0)), 3)) for c in audio.get(track, [])]
+                for track in ("voice", "music", "sfx")}
+        (ROOT / "src/audio-plan.json").write_text(json.dumps(plan))
     (ROOT / "index.html").write_text(html())
     print(f"index.html: {DUR}s, {len(CAM)} camera keys, {len(CLICKS)} clicks, {len(CHIPS)} chips, {len(RINGS)} rings, {len(cues)} sfx cues")
