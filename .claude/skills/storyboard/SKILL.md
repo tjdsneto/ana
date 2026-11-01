@@ -86,6 +86,10 @@ A beat's `focus` decides what the viewer sees while a line is spoken. Guessing a
 
 You MUST render and look at the board before output — for composed boards too. Composed plates are inline `data:text/html` URLs (below), and `site-capture.mjs` screenshots a data-URL exactly like a site URL, so the board renders either way. Do NOT output on composed-card reasoning alone — the reviewer will render the pixel board and reject dead space, tiny focal elements, repetitive beats and sparse closes, so catch them here first.
 
+### Composed cards — follow the playbook
+
+For composed/generative videos, build the cards to **`craft/COMPOSED-CARDS.md`** (read it): source the look (no default fonts, flat over gradient), make the focal element own the frame (the dead-space-ring failure is what gets boards rejected), express motion as a SEQUENCE of plates (one plate per reveal state — the camera cuts/pushes between them; do not put the end-state on one plate and zoom around it), use the premium templates, and carry one signature move + an explicit CTA card. Keep the AI-slop tell cluster to 0–1.
+
 ### Composed plates MUST be inline data-URLs (critical — the render screenshots them)
 
 The render builds every beat from a **screenshot** of its plate (`site-capture.mjs` loads the plate's `url` in a browser → `assets/shots/<id>.jpg` → `build.py` composes it). So a composed card has to be a thing a browser can open **with no external file**. Emit each composed plate as a self-contained inline **data-URL**, exactly this shape:
