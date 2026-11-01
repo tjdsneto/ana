@@ -1,0 +1,9 @@
+{
+	"type": "clip",
+	"name": "Clip",
+	"rendered": true,
+	"skill": "edit-footage",
+	"reviews": [
+		{ "name": "edit-quality", "kind": "craft", "skill": "review-edit-quality" }
+	]
+}
