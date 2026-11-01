@@ -342,6 +342,8 @@ describe("type registry", () => {
 		// assembly is its own rendered step (concatenates scene clips), not a monolithic render
 		expect(disk.get("assemble").produces).toBe("file")
 		expect(disk.get("assemble").skill).toBe("assemble-scenes")
+		// a scene realizes its beat into a clip — a file-output leaf (authored render, or keyless spec)
+		expect(disk.get("scene").produces).toBe("file")
 		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
 		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-scene-quality", "review-scene-conformance", "review-scene-consistency"]),
