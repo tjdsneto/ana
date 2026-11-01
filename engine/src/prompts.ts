@@ -14,6 +14,7 @@ export interface ProduceContext {
 	nodeBrief?: string // this node's own spec — set when a planner fanned the node out of a larger plan (e.g. one scene's spec)
 	priorContent?: string // the version being revised
 	feedback?: string // reviewer union or user feedback that drove this redo
+	boardOut?: string // if set, save the rendered self-check board sheet here (absolute path) so the dashboard can show it
 }
 
 export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext): string {
@@ -32,6 +33,9 @@ export function buildProducerPrompt(contract: TypeContract, ctx: ProduceContext)
 	}
 	if (ctx.feedback) {
 		parts.push(`\n## Feedback to address\n${ctx.feedback}`)
+	}
+	if (ctx.boardOut) {
+		parts.push(`\n## Save your board for the dashboard\nAfter you render your self-check board, copy the board sheet image to EXACTLY this path (the dashboard reads it per version): \`${ctx.boardOut}\`\nUse \`cp <yourWorkDir>/board/sheet.jpg "${ctx.boardOut}"\` (create the parent dir if needed). Do this before you output.`)
 	}
 	return parts.join("\n")
 }
@@ -101,6 +105,7 @@ export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, 
 		craft: "Judge the deliverable on its own craft merits against the rubric.",
 		coverage: "Check that every point from the brief and approved upstream work made it in.",
 		consistency: "Check that it matches the design language and the sibling artifacts.",
+		audio: "Run the deterministic verifier and relay its verdict: the voiceover matches the script exactly (no duplicated or dropped lines, in order), the mp4/vo durations are in sync, no dead air, no blank open.",
 	}
 	const parts: string[] = []
 	// A reviewer skill (if declared) owns the per-step rubric for this axis — the runner injects it as a

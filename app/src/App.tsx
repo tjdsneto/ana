@@ -8,6 +8,8 @@ import { useEffect, useRef, useState } from "react"
 import {
 	approveBudget,
 	approveOutput,
+	boardUrlByVersion,
+	emitsBoard,
 	getDeliverable,
 	getProduction,
 	getProductions,
@@ -34,7 +36,8 @@ type Tab = "productions" | "videos"
 export function App() {
 	const [tab, setTab] = useState<Tab>("productions")
 	const [productions, setProductions] = useState<Node[]>([])
-	const [selectedId, setSelectedId] = useState<string | null>(null)
+	// The selected production lives in the URL (?p=<id>) so a view is shareable and survives reload.
+	const [selectedId, setSelectedId] = useState<string | null>(() => productionIdFromUrl())
 	const [detail, setDetail] = useState<ProductionDetail | null>(null)
 	const [videos, setVideos] = useState<VideoFile[]>([])
 	const [error, setError] = useState<string | null>(null)
@@ -84,6 +87,21 @@ export function App() {
 		if (id) void refreshDetail(id)
 	})
 
+	// Set the selection and reflect it in the URL (and vice versa on back/forward).
+	const selectProduction = (id: string | null) => {
+		setSelectedId(id)
+		const url = new URL(location.href)
+		if (id) url.searchParams.set("p", id)
+		else url.searchParams.delete("p")
+		history.pushState({ p: id }, "", url)
+	}
+
+	useEffect(() => {
+		const onPop = () => setSelectedId(productionIdFromUrl())
+		window.addEventListener("popstate", onPop)
+		return () => window.removeEventListener("popstate", onPop)
+	}, [])
+
 	return (
 		<div className="app">
 			<header className="topline">
@@ -108,10 +126,11 @@ export function App() {
 						<div className="rail-head"><span>Productions</span><span>{productions.length}</span></div>
 						{productions.length === 0 && <p className="muted pad">No productions yet.</p>}
 						{productions.map((p) => (
-							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""}`} onClick={() => setSelectedId(p.id)}>
+							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""} ${isActive(p.status) ? "active" : ""} ${isPending(p.status) ? "pending" : ""}`} onClick={() => selectProduction(p.id)}>
 								<div className="ptitle">{p.name}</div>
 								<div className="pmeta">
 									<StatusChip status={p.status} />
+									{isActive(p.status) && <Spinner label="running" />}
 									<span className="muted">{fmtTime(p.createdAt)}</span>
 								</div>
 							</button>
@@ -119,7 +138,7 @@ export function App() {
 					</aside>
 					<main className="detail">
 						{!detail && <p className="muted pad">Select a production.</p>}
-						{detail && <Detail detail={detail} onAction={() => selectedId && refreshDetail(selectedId)} />}
+						{detail && <Detail detail={detail} videos={videos} onAction={() => selectedId && refreshDetail(selectedId)} />}
 					</main>
 				</div>
 			)}
@@ -127,18 +146,47 @@ export function App() {
 	)
 }
 
-function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () => void }) {
+// The production's full id, shown plainly and copied on click (with brief confirmation).
+function ProdId({ id }: { id: string }) {
+	const [copied, setCopied] = useState(false)
+	const copy = () => {
+		void navigator.clipboard?.writeText(id).then(
+			() => {
+				setCopied(true)
+				setTimeout(() => setCopied(false), 1200)
+			},
+			() => {},
+		)
+	}
+	return (
+		<button className="prodid" onClick={copy} title="Copy id">
+			<span className="prodid-k">ID</span>
+			<span className="prodid-v">{id}</span>
+			<span className="prodid-copy">{copied ? "copied" : "copy"}</span>
+		</button>
+	)
+}
+
+function productionIdFromUrl(): string | null {
+	try {
+		return new URLSearchParams(location.search).get("p")
+	} catch {
+		return null
+	}
+}
+
+function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos: VideoFile[]; onAction: () => void }) {
 	const stages = childrenOf(detail, detail.root.id)
 	const fv = finalVideoOf(detail)
 	const head = (
 		<>
-			<h2>{detail.root.name} <StatusChip status={detail.root.status} /></h2>
+			<h2>{detail.root.name} <StatusChip status={detail.root.status} />{isActive(detail.root.status) && <Spinner label="production running" />}</h2>
 			<div className="hmeta muted">
 				<span>started {fmtTime(detail.root.createdAt)}</span>
 				<span>· {detail.root.autonomyLever ?? "—"}</span>
 				<span>· {detail.root.actorKind ?? "—"}</span>
-				<span className="idtag" title={detail.root.id}>{shortId(detail.root.id)}</span>
 			</div>
+			<ProdId id={detail.root.id} />
 		</>
 	)
 	return (
@@ -161,7 +209,7 @@ function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () =
 			<div className="stages">
 				{stages.length === 0 && <p className="muted pad">No stages yet — the worker hasn't expanded this production.</p>}
 				{stages.map((nv) => (
-					<StageCard key={nv.node.id} nv={nv} detail={detail} />
+					<StageCard key={nv.node.id} nv={nv} detail={detail} videos={videos} />
 				))}
 			</div>
 			{detail.assets.length > 0 && (
@@ -182,28 +230,25 @@ function Detail({ detail, onAction }: { detail: ProductionDetail; onAction: () =
 
 // One major pipeline step as a big card. Collapsed = name + status + latest version + a preview.
 // Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
-function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: ProductionDetail; depth?: number }) {
+function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: ProductionDetail; videos: VideoFile[]; depth?: number }) {
 	const [open, setOpen] = useState(() => needsAttention(nv.node.status))
 	const kids = childrenOf(detail, nv.node.id)
 	const versions = [...nv.versions].sort((a, b) => a.version.n - b.version.n)
 	const latest = versions[versions.length - 1]
-	const nRevise = versions.reduce((s, v) => s + v.reviews.filter((r) => r.verdict === "revise").length, 0)
 
 	return (
-		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""}`}>
+		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""} ${isActive(nv.node.status) ? "active" : ""} ${isPending(nv.node.status) ? "pending" : ""}`}>
 			<button className="stage-head" onClick={() => setOpen((o) => !o)}>
 				<span className="stage-ico" aria-hidden="true"><StageIcon type={nv.node.type} /></span>
 				<span className="stage-main">
 					<span className="stage-name">
 						{titleCase(nv.node.type)}
 						<StatusChip status={nv.node.status} />
-						{nRevise > 0 && <span className="chip danger">{nRevise} revise</span>}
-						{versions.length > 1 && <span className="chip muted">{versions.length} revisions</span>}
+						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
 					</span>
-					<span className="stage-prev">{previewOf(nv, latest)}</span>
+					<span className="stage-prev">{stageMeta(nv, latest, videos)}</span>
 				</span>
 				<span className="stage-right">
-					<span className="ver">{latest ? `v${latest.version.n}` : "—"}</span>
 					<Chevron />
 				</span>
 			</button>
@@ -228,7 +273,7 @@ function StageCard({ nv, detail, depth = 0 }: { nv: NodeView; detail: Production
 						<div className="sub-h">Sub-steps</div>
 						<div className="stages nested-stages">
 							{kids.map((k) => (
-								<StageCard key={k.node.id} nv={k} detail={detail} depth={depth + 1} />
+								<StageCard key={k.node.id} nv={k} detail={detail} videos={videos} depth={depth + 1} />
 							))}
 						</div>
 					</>
@@ -255,24 +300,27 @@ function VersionBlock({
 	const { version, reviews } = vw
 	const producer = interactions.find((i) => i.versionId === version.id && i.role === "producer")
 	const revStatus = version.status === "needs-work" || version.status === "revise" || version.status === "denied"
+	const active = isActive(version.status)
 	return (
-		<div className={`rev ${isLast ? "cur" : ""} ${revStatus && !isLast ? "fail" : ""}`}>
+		<div className={`rev ${isLast ? "cur" : ""} ${revStatus && !isLast ? "fail" : ""} ${active ? "active" : ""}`}>
 			<div className="rev-mark"><span className="rev-dot">v{version.n}</span><span className="rev-line" /></div>
 			<div className="rev-content">
 				<div className="rev-top">
 					<StatusChip status={version.status} />
+					{active && <Spinner label={`producing v${version.n}`} />}
 					<span className="rev-time">{fmtTime(version.createdAt)}</span>
 					{producer && <RunButton interaction={producer} title={`${titleCase(nodeType)} · producer · v${version.n}`} versionId={version.id} />}
 				</div>
 				<div className="rev-art">
+					{emitsBoard(nodeType) && <BoardImage versionId={version.id} />}
 					<ArtifactView versionId={version.id} artifactPath={version.artifactPath} nodeType={nodeType} n={version.n} isLast={isLast} />
 				</div>
-				{version.feedback && <div className="feeds note-feedback"><b>Human feedback:</b> {version.feedback}</div>}
+				{version.feedback && <div className="feeds note-feedback"><b>Sent back:</b> {version.feedback}</div>}
 				{reviews.length > 0 && (
 					<>
 						<div className="sub-h">Feedback this version received</div>
 						{reviews.map((r) => (
-							<ReviewCard key={r.id} review={r} interaction={interactions.find((i) => i.versionId === version.id && i.role === `review:${r.kind}`)} defaultOpen={isLast} />
+							<ReviewCard key={r.id} review={r} interaction={interactions.find((i) => i.versionId === version.id && i.role === `review:${r.kind}`)} />
 						))}
 					</>
 				)}
@@ -290,6 +338,19 @@ function VersionBlock({
 				)}
 			</div>
 		</div>
+	)
+}
+
+// The rendered storyboard board (one card per beat) for this version — the exact regions the render
+// will frame. Streams from /api/board; hides itself if this version has no board (older versions).
+function BoardImage({ versionId }: { versionId: string }) {
+	const [ok, setOk] = useState(true)
+	if (!ok) return null
+	return (
+		<figure className="board-sheet">
+			<img src={boardUrlByVersion(versionId)} alt="storyboard board — one card per beat" loading="lazy" onError={() => setOk(false)} />
+			<figcaption>Board — one card per beat (what the render will frame)</figcaption>
+		</figure>
 	)
 }
 
@@ -433,29 +494,51 @@ function StoryboardBoard({ content }: { content: string }) {
 	)
 }
 
-// One reviewer verdict: badge + one-line summary, expands to the full body, with the reviewer run's
-// telemetry beneath it.
-function ReviewCard({ review, interaction, defaultOpen }: { review: Review; interaction?: Interaction; defaultOpen?: boolean }) {
-	const [open, setOpen] = useState(!!defaultOpen && review.verdict === "revise")
-	const summary = firstLine(review.body)
-	// Drop a summary that just echoes the verdict ("pass"); keep real revise feedback.
-	const showSummary = summary && summary.toLowerCase() !== review.verdict.toLowerCase()
+// One reviewer verdict, flat (no accordion): label + verdict chip. For a revise, the feedback shows
+// inline (that is the actionable part); the full reviewer run — telemetry + raw output — is behind the
+// run-details modal, so there is nothing left to expand.
+function ReviewCard({ review, interaction }: { review: Review; interaction?: Interaction }) {
+	const detail = review.verdict === "revise" ? stripVerdict(review.body) : null
+	// A review with no settled verdict yet is still running — show a spinner instead of a chip.
+	const running = !/^(pass|revise|fail|failed|denied)$/i.test((review.verdict ?? "").trim())
+	const [open, setOpen] = useState(false)
+	// Only a review with feedback to read is collapsible; a pass (or a running one) is just the head.
+	const collapsible = detail != null
+	const toggle = () => collapsible && setOpen((o) => !o)
 	return (
-		<div className={`verdict ${open ? "open" : ""}`}>
-			<button className="vd-head" onClick={() => setOpen((o) => !o)}>
+		<div className={`verdict flat ${collapsible ? "collapsible" : ""} ${open ? "open" : ""} ${running ? "active" : ""}`}>
+			<div
+				className={`vd-head ${collapsible ? "clickable" : ""}`}
+				onClick={toggle}
+				role={collapsible ? "button" : undefined}
+				tabIndex={collapsible ? 0 : undefined}
+				onKeyDown={collapsible ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle()) : undefined}
+			>
 				<span className="vd-label">{reviewLabel(review)}</span>
-				{showSummary && <span className="sum">{summary}</span>}
 				<span className="vd-right">
-					<VerdictChip verdict={review.verdict} />
-					<Chevron small />
+					{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
+					{running ? (
+						<span className="vd-running"><Spinner label="reviewing" />reviewing</span>
+					) : (
+						<VerdictChip verdict={review.verdict} />
+					)}
+					{collapsible && <Chevron small />}
 				</span>
-			</button>
-			<div className="vd-body">
-				{review.body ? <p className="vd-text">{review.body}</p> : <p className="muted">No detail.</p>}
-				{interaction && <RunButton interaction={interaction} title={`${reviewLabel(review)} · reviewer`} output={review.body} />}
 			</div>
+			{detail && (
+				<div className="vd-foot">
+					<p className="vd-text">{detail}</p>
+				</div>
+			)}
 		</div>
 	)
+}
+
+// Strip a leading "VERDICT: pass|revise" line so only the reviewer's actual reasoning remains.
+function stripVerdict(body: string | null): string | null {
+	if (!body) return null
+	const s = body.replace(/^\s*VERDICT:\s*(pass|revise)\s*[-–.:]?\s*/i, "").trim()
+	return s || null
 }
 
 // The review axis as a human label: "Quality review", "Conformance review". Falls back to the
@@ -472,14 +555,46 @@ function RunButton({ interaction, title, versionId, output }: { interaction: Int
 	const [open, setOpen] = useState(false)
 	return (
 		<>
-			<button className="run-btn" onClick={() => setOpen(true)} title="Show the subagent run">
-				<span className="run-dot" />
+			<button className="run-btn" onClick={(e) => { e.stopPropagation(); setOpen(true) }} title="Show the subagent run">
+				<EngineMark engine={interaction.engine} />
 				<span>{interaction.model ?? interaction.engine}</span>
 				{interaction.durationMs != null && <span className="muted">· {fmtDur(interaction.durationMs)}</span>}
 				<span className="muted">· run details</span>
 			</button>
 			{open && <RunModal interaction={interaction} title={title} versionId={versionId} output={output} onClose={() => setOpen(false)} />}
 		</>
+	)
+}
+
+// Which engine produced the run. A Claude run gets the Claude burst mark; anything else (the fake
+// runner, or a future engine) gets a neutral dot.
+function EngineMark({ engine }: { engine: string }) {
+	if (/claude/i.test(engine)) return <ClaudeMark />
+	return <span className="run-dot" />
+}
+
+// The Claude "burst" mark — rounded spokes radiating from the centre, in Anthropic's clay orange.
+// Drawn inline so it needs no asset and inherits crisp rendering at small sizes.
+function ClaudeMark({ size = 13 }: { size?: number }) {
+	const spokes = 12
+	const lines = Array.from({ length: spokes }, (_, i) => {
+		const a = (Math.PI * 2 * i) / spokes
+		const inner = 1.6
+		const outer = i % 3 === 0 ? 10 : 7.5
+		return (
+			<line
+				key={i}
+				x1={12 + Math.cos(a) * inner}
+				y1={12 + Math.sin(a) * inner}
+				x2={12 + Math.cos(a) * outer}
+				y2={12 + Math.sin(a) * outer}
+			/>
+		)
+	})
+	return (
+		<svg className="claude-mark" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#d97757" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
+			{lines}
+		</svg>
 	)
 }
 
@@ -677,6 +792,31 @@ function needsAttention(status: string): boolean {
 	return ["in-progress", "producing", "review", "needs-work", "presentable", "escalated", "denied"].includes(status)
 }
 
+// Lifecycle buckets for the live view. Active = work is running right now (show a spinner, full
+// opacity). Pending = not started yet (dim it). Everything else (done/approved/failed) renders normally.
+const ACTIVE_STATUSES = ["in-progress", "producing", "queued-running", "running", "review", "reviewing"]
+const PENDING_STATUSES = ["pending", "queued", "blocked", "waiting", "not-started"]
+
+function isActive(status: string): boolean {
+	return ACTIVE_STATUSES.includes(status)
+}
+
+function isPending(status: string): boolean {
+	return PENDING_STATUSES.includes(status)
+}
+
+// A spinning ring marking the one thing currently executing. Respects prefers-reduced-motion (the CSS
+// stops the animation and leaves a static ring).
+function Spinner({ label }: { label?: string }) {
+	return (
+		<span className="spinner" role="status" aria-label={label ?? "running"} title={label ?? "running"}>
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round">
+				<path d="M12 3a9 9 0 1 0 9 9" />
+			</svg>
+		</span>
+	)
+}
+
 function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "text" {
 	if (isVideoPath(path)) return "video"
 	const t = nodeType.toLowerCase()
@@ -716,12 +856,34 @@ function Loop() {
 	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
 }
 
-function previewOf(nv: NodeView, latest?: { version: Version; reviews: Review[] }): string {
+// The collapsed card's sub-line: version (vN of N), then the step's rolled-up telemetry — runs,
+// cost, duration — and, for a render, the finished file's size. Only the parts that have data show,
+// so a cheap fake-engine step stays short.
+function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[]): string {
 	if (!latest) return "Nothing produced yet."
 	const n = nv.versions.length
-	const lead = n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`
-	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) return `${lead} · ${baseName(latest.version.artifactPath)}`
-	return `${lead} · ${latest.version.status}`
+	const parts = [n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`]
+
+	const runs = nv.interactions.length
+	if (runs > 0) parts.push(`${runs} run${runs === 1 ? "" : "s"}`)
+	const cost = nv.interactions.reduce((s, it) => s + (it.costUsd ?? 0), 0)
+	if (cost > 0) parts.push(`$${cost.toFixed(2)}`)
+	const dur = nv.interactions.reduce((s, it) => s + (it.durationMs ?? 0), 0)
+	if (dur > 0) parts.push(fmtDur(dur))
+
+	// Step-specific fact: a render's finished file size, matched from the videos list by path.
+	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
+		const vid = findVideo(videos, latest.version.artifactPath)
+		if (vid) parts.push(fmtBytes(vid.sizeBytes))
+	}
+	return parts.join(" · ")
+}
+
+// Match a version's stored (possibly absolute) artifact path to a VideoFile whose `path` is relative
+// to the artifacts root, by suffix.
+function findVideo(videos: VideoFile[], artifactPath: string): VideoFile | undefined {
+	const norm = artifactPath.replace(/\\/g, "/")
+	return videos.find((v) => norm.endsWith(v.path))
 }
 
 function titleCase(s: string): string {
@@ -735,13 +897,6 @@ function baseName(p: string): string {
 	const parent = parts[parts.length - 2]
 	if (parent && /^nd_[0-9a-f]+$/i.test(parent)) return parts[parts.length - 1] ?? p
 	return parts.slice(-2).join("/")
-}
-
-function firstLine(s: string | null): string | null {
-	if (!s) return null
-	const line = s.split("\n").map((l) => l.trim()).find(Boolean)
-	if (!line) return null
-	return line.replace(/^VERDICT:\s*(pass|revise)\s*[-–.]?\s*/i, "").slice(0, 120)
 }
 
 function fmtTime(iso: string | null | undefined): string {

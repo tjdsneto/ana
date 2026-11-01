@@ -2,5 +2,8 @@
 	"type": "render",
 	"name": "Render",
 	"rendered": true,
-	"reviews": [{ "name": "consistency", "kind": "consistency", "skill": "review-render-consistency" }]
+	"reviews": [
+		{ "name": "audio", "kind": "audio", "skill": "review-render-audio" },
+		{ "name": "consistency", "kind": "consistency", "skill": "review-render-consistency" }
+	]
 }

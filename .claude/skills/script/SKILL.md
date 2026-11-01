@@ -5,6 +5,8 @@ description: Write the spoken voiceover for the video — short, payoff-first, g
 
 # script
 
+**Aim at the bar.** Read `craft/CRAFT-BAR.md` §1 and write to it: the hook earns the first 1–5s and is never a logo/brand line; the arc is hook → (problem only if cold) → reveal → 2–4 heroes (never a feature dump) → **proof with a specific number** → an explicit CTA line to close; density ≤ ~2.5 words/sec. The reviewer judges your script against that bar at the ship test.
+
 Write the narration. Rules:
 
 - **Short:** 3-5 lines, ~12-18s spoken total. One idea the whole video serves.

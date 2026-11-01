@@ -52,6 +52,7 @@ export interface Interaction {
 	durationMs: number | null
 	status: string
 	createdAt: string
+	prompt: string | null // the full prompt sent to the subagent; null on old rows / pre-prompt failures
 }
 
 export interface UsageSummary {
@@ -135,6 +136,15 @@ export function videoUrlByVersion(versionId: string): string {
 
 export function videoUrlByPath(path: string): string {
 	return `/api/video?path=${encodeURIComponent(path)}`
+}
+
+// Rendered storyboard board sheet for a version (404s for versions produced before boards existed).
+export function boardUrlByVersion(versionId: string): string {
+	return `/api/board?version_id=${encodeURIComponent(versionId)}`
+}
+
+export function emitsBoard(nodeType: string): boolean {
+	return nodeType === "storyboard"
 }
 
 export function isVideoPath(p: string | null | undefined): boolean {

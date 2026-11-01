@@ -276,6 +276,49 @@ code {
 	color: var(--muted);
 }
 
+/* full production id, copy on click */
+.prodid {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin-top: 8px;
+	padding: 3px 8px;
+	background: var(--surface-3);
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	cursor: pointer;
+	max-width: 100%;
+}
+
+.prodid:hover {
+	border-color: var(--line-strong);
+}
+
+.prodid-k {
+	font-size: 9.5px;
+	letter-spacing: 0.1em;
+	font-weight: 700;
+	color: var(--faint);
+	flex: none;
+}
+
+.prodid-v {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--fg);
+	user-select: all;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.prodid-copy {
+	font-size: 10px;
+	color: var(--accent);
+	flex: none;
+}
+
 .usage {
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);
@@ -434,6 +477,66 @@ code {
 
 .stage.nested {
 	background: var(--surface-2);
+}
+
+/* ---- live progress: dim pending work, spin + emphasise active work ---- */
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.spinner {
+	display: inline-flex;
+	align-items: center;
+	color: var(--info);
+	vertical-align: middle;
+}
+
+.spinner svg {
+	animation: spin 0.8s linear infinite;
+	transform-origin: 50% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.spinner svg {
+		animation: none;
+	}
+}
+
+/* pending steps/productions are dimmed until they start */
+.stage.pending {
+	opacity: 0.55;
+}
+
+.prod.pending {
+	opacity: 0.6;
+}
+
+/* active work: full strength + an accent edge so the eye lands on what's running */
+.stage.active {
+	opacity: 1;
+	border-color: color-mix(in srgb, var(--info) 55%, var(--line));
+	box-shadow: inset 3px 0 0 var(--info);
+}
+
+.rev.active .rev-dot {
+	color: #fff;
+	background: var(--info);
+	border-color: var(--info);
+}
+
+.verdict.flat.active {
+	border-color: color-mix(in srgb, var(--info) 45%, var(--line));
+}
+
+.vd-running {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--info);
 }
 
 .stage-head {
@@ -793,7 +896,7 @@ code {
 /* ---- revision timeline ---- */
 .revs {
 	display: grid;
-	margin-top: 4px;
+	margin-top: 10px;
 }
 
 .rev {
@@ -848,15 +951,15 @@ code {
 
 .rev-content {
 	min-width: 0;
-	padding: 2px 0 20px 8px;
+	padding: 5px 0 24px 10px;
 }
 
 .rev-top {
 	display: flex;
 	align-items: center;
-	gap: 9px;
+	gap: 9px 12px;
 	flex-wrap: wrap;
-	margin-bottom: 9px;
+	margin-bottom: 14px;
 }
 
 .rev-time {
@@ -898,29 +1001,13 @@ code {
 	align-items: center;
 	gap: 10px;
 	padding: 10px 12px;
-	background: none;
-	border: 0;
 	text-align: left;
-}
-
-.vd-head:hover {
-	background: var(--surface-3);
 }
 
 .vd-head .vd-label {
 	font-weight: 600;
 	font-size: 12.5px;
 	white-space: nowrap;
-}
-
-.vd-head .sum {
-	color: var(--muted);
-	font-size: 12px;
-	flex: 1;
-	min-width: 0;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 .vd-head .vd-right {
@@ -930,25 +1017,38 @@ code {
 	gap: 8px;
 }
 
-.verdict .chev {
+.vd-head.clickable {
+	cursor: pointer;
+}
+
+.vd-head.clickable:hover {
+	background: var(--surface-3);
+}
+
+.vd-head .chev {
 	font-size: 11px;
+	transition: transform 0.18s ease;
 }
 
 .verdict.open .vd-head .chev {
 	transform: rotate(90deg);
 }
 
-.vd-body {
-	padding: 0 12px 12px 40px;
+.vd-foot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 4px 14px 16px;
 }
 
-.verdict:not(.open) .vd-body {
+.verdict.collapsible:not(.open) .vd-foot {
 	display: none;
 }
 
 .vd-text {
-	margin: 0 0 4px;
+	margin: 0;
 	font-size: 13px;
+	line-height: 1.7;
 	white-space: pre-wrap;
 }
 
@@ -1014,6 +1114,11 @@ code {
 	border-radius: 50%;
 	background: var(--accent);
 	flex: none;
+}
+
+.claude-mark {
+	flex: none;
+	display: block;
 }
 
 .verdict .run-btn {
@@ -1228,3 +1333,8 @@ code {
 	font-family: var(--mono);
 	word-break: break-all;
 }
+
+/* Storyboard board sheet shown per version in the revision timeline */
+.board-sheet { margin: 0 0 10px; }
+.board-sheet img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line, rgba(255,255,255,.12)); background: #0b0b0f; }
+.board-sheet figcaption { margin-top: 4px; font-size: 11px; opacity: .6; }

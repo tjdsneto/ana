@@ -35,6 +35,7 @@ export class Engine {
 	private realCalls = 0 // real (non-fake) subagent calls made this process — the spend-guard counter
 	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
 	private readonly globalRevisions = new Map<string, number>() // productionId → holistic-reopen passes used (per-process; v0 single worker)
+	private readonly nearPassStreak = new Map<string, number>() // nodeId → consecutive rounds a version passed all-but-one reviewer (convergence; per-process)
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -236,6 +237,19 @@ export class Engine {
 		log.info("node.plan", { versionId: version.id, children: planned.length })
 	}
 
+	// Artifact filename base for a node. Fanned-out children of a planner share a type, so a
+	// type-keyed filename (`idea-v1.md`) would make siblings clobber one another (and race, since they
+	// run in parallel). Give each fanned child a node-scoped name so its artifact is its own.
+	private async artifactBase(node: Node): Promise<string> {
+		if (node.parentId) {
+			const parent = (await this.store.nodesFor(node.productionId)).find((s) => s.id === node.parentId)
+			if (parent && this.types.has(parent.type) && this.types.get(parent.type).planner) {
+				return `${node.type}-${node.id.slice(-6)}`
+			}
+		}
+		return node.type
+	}
+
 	// The leaf path: produce → specialist reviewer set → gate. A failing review redoes (fed the
 	// reviewers' feedback) up to maxRedos, then escalates. Agreement leaves (briefing) never block on
 	// review; they present and loop on human feedback, capped by actor_kind (spec 02).
@@ -265,9 +279,11 @@ export class Engine {
 		const upstream = await this.collectUpstream(node)
 
 		// produce — always via a subagent: a rendered leaf runs the render-film skill (which owns its
-		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. The
-		// producer resumes its prior session (the latest version's subagent.sessionId) so a redo
-		// round continues the same provider session rather than starting cold.
+		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. A redo
+		// does NOT resume the prior provider session: the producer prompt already carries the prior
+		// draft + the reviewers' feedback, and resuming a stale session meant an edited skill never
+		// reached a redo and the producer re-emitted its old output instead of acting on the feedback
+		// (the "resume trap"). Each produce runs fresh so it re-reads the current skill and the feedback.
 		let draft: string
 		let artifactPath: string
 		let producerResult: SubagentResult | undefined
@@ -287,7 +303,6 @@ export class Engine {
 				prompt: producerPrompt,
 				skill: contract.skill ?? "render-film",
 				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			const mp4 = newestMp4(workDir)
 			if (!mp4) throw new Error(`render: the skill produced no .mp4 in ${workDir} — ${producerResult.output.slice(0, 200)}`)
@@ -295,15 +310,20 @@ export class Engine {
 			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
 			draft = `[rendered ${node.type}] file: ${mp4}`
 		} else {
-			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback })
+			let boardOut: string | undefined
+			if (contract.emitsBoard) {
+				const base = await this.artifactBase(node)
+				boardOut = join(this.config.artifactsDir, node.productionId, "boards", `${base}-v${n}.jpg`)
+				mkdirSync(join(this.config.artifactsDir, node.productionId, "boards"), { recursive: true })
+			}
+			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
 				skill: contract.skill ?? node.type,
 				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
 			})
 			draft = producerResult.output
-			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
+			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
 		}
 		const producerMs = Date.now() - t0
 		const version = await this.store.createVersion({
@@ -341,8 +361,28 @@ export class Engine {
 
 		const advisory = contract.advisoryReview === true
 		if (advisory || verdicts.every((v) => v === "pass")) {
+			this.nearPassStreak.delete(node.id)
 			await this.present(node, contract, version.id, root, log)
 			return
+		}
+
+		// Convergence: with 3+ reviewers a genuinely good deliverable can oscillate — each round one
+		// reviewer dissents on a different nit — and never get a unanimous pass. If a version passes
+		// all-but-one reviewer for `convergeAfter` CONSECUTIVE rounds, accept it rather than grind to
+		// the redo cap. A worse result (more than one dissent) resets the streak, so weak work (which
+		// never sustains an all-but-one pass) still never converges here — it escalates below.
+		const passCount = verdicts.filter((v) => v === "pass").length
+		if (verdicts.length >= 3 && passCount >= verdicts.length - 1) {
+			const streak = (this.nearPassStreak.get(node.id) ?? 0) + 1
+			this.nearPassStreak.set(node.id, streak)
+			if (streak >= this.config.convergeAfter) {
+				this.nearPassStreak.delete(node.id)
+				log.info("node.converge", { versionId: version.id, passCount, of: verdicts.length, streak })
+				await this.present(node, contract, version.id, root, log)
+				return
+			}
+		} else {
+			this.nearPassStreak.delete(node.id)
 		}
 
 		// a reviewer said revise — never shown to the user
@@ -556,16 +596,30 @@ export class Engine {
 
 	private async collectUpstream(node: Node): Promise<UpstreamArtifact[]> {
 		const out: UpstreamArtifact[] = []
+		// A dep's artifact may be binary (a rendered .mp4). Never put raw bytes in a subagent prompt
+		// (null bytes crash the CLI); hand down a descriptor instead. Text artifacts pass through.
+		const push = (type: string, path: string | null | undefined, content: string) =>
+			out.push({ type, content: content.includes("\0") ? `[binary ${type} artifact: ${path ?? "?"}]` : content })
 		for (const depId of node.deps) {
 			const dep = await this.store.getNode(depId)
 			if (!dep) continue
 			const version = await this.store.latestVersion(dep.id)
 			const content = readArtifact(version?.artifactPath ?? null)
-			if (!content) continue
-			// A dep's artifact may be binary (a rendered .mp4). Never put raw bytes in a subagent prompt
-			// (null bytes crash the CLI); hand down a descriptor instead. Text artifacts pass through.
-			const safe = content.includes("\0") ? `[binary ${dep.type} artifact: ${version?.artifactPath ?? "?"}]` : content
-			out.push({ type: dep.type, content: safe })
+			if (content) push(dep.type, version?.artifactPath, content)
+			// If the dep fanned out and opts in (exposeChildrenToDependents, e.g. brainstorm), also hand
+			// down each approved child's artifact, so a node depending on the fan-out sees the produced
+			// units (the developed ideas), not just the plan. Off by default — a planner like `build`
+			// is unaffected, so the B-branch (build → assemble) keeps its current upstream.
+			if (this.types.has(dep.type) && this.types.get(dep.type).exposeChildrenToDependents) {
+				const kids = (await this.store.nodesFor(node.productionId))
+					.filter((n) => n.parentId === dep.id && n.status === "approved")
+					.sort((a, b) => a.position - b.position)
+				for (const kid of kids) {
+					const kv = await this.store.latestVersion(kid.id)
+					const kc = readArtifact(kv?.artifactPath ?? null)
+					if (kc) push(kid.type, kv?.artifactPath, kc)
+				}
+			}
 		}
 		return out
 	}
@@ -730,10 +784,10 @@ function builtFromEqual(a: Record<string, string>, b: Record<string, string>): b
 
 // ── artifact files (on the shared volume; the DB only references the path) ─────────────────────────
 
-function writeArtifact(artifactsDir: string, productionId: string, type: string, n: number, content: string): string {
+function writeArtifact(artifactsDir: string, productionId: string, name: string, n: number, content: string): string {
 	const dir = join(artifactsDir, productionId)
 	mkdirSync(dir, { recursive: true })
-	const path = join(dir, `${type}-v${n}.md`)
+	const path = join(dir, `${name}-v${n}.md`)
 	writeFileSync(path, content, "utf8")
 	return path
 }

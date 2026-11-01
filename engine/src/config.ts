@@ -10,6 +10,12 @@ export interface EngineConfig {
 	// upstream work back to revise). Analogous to maxRedos but global, so the whole-video loop can't
 	// thrash: once hit, final-review presents to the human with a caveat instead of reopening again.
 	maxGlobalRevisions: number
+	// Convergence: a leaf with 3+ reviewers can oscillate — each redo one reviewer dissents, the
+	// dissenter rotating — and never get a unanimous pass on a genuinely good deliverable. When a
+	// version passes all-but-one reviewer for this many CONSECUTIVE rounds, the gate accepts it
+	// instead of grinding to the redo cap. A weaker result (more than one dissent) resets the streak,
+	// so weak work still never converges — it escalates.
+	convergeAfter: number
 	pollIntervalMs: number
 	// Process-lifetime ceiling on REAL (non-fake) subagent calls, a spend guardrail. Once the worker
 	// has made this many real calls, it stops claiming new leaves (the in-flight one finishes) and
@@ -30,6 +36,7 @@ export function configFromEnv(env = process.env): EngineConfig {
 		agreementMaxRoundsHuman: num(env.AGREEMENT_MAX_ROUNDS_HUMAN, 5),
 		agreementMaxRoundsAgent: num(env.AGREEMENT_MAX_ROUNDS_AGENT, 2),
 		maxGlobalRevisions: num(env.MAX_GLOBAL_REVISIONS, 2),
+		convergeAfter: num(env.CONVERGE_AFTER, 3),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,

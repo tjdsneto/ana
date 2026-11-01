@@ -15,7 +15,7 @@ export interface ChecklistEntry {
 
 export interface ReviewSpec {
 	name: string
-	kind: "craft" | "coverage" | "consistency" // the axis: craft = quality, coverage = conformance-to-params, consistency = matches siblings
+	kind: "craft" | "coverage" | "consistency" | "audio" // the axis: craft = quality, coverage = conformance-to-params, consistency = matches siblings, audio = deterministic VO/sync check
 	skill?: string // reviewer skill that owns this axis's per-step rubric; omitted → generic kind lens (prompts.ts)
 }
 
@@ -33,6 +33,8 @@ export interface TypeContract {
 	rendered?: boolean // file-output leaf: a worker runs the render skill (writes a file artifact), not a text producer
 	holisticReview?: boolean // final whole-production review: on revise it reopens named upstream nodes (approved → pending) + cascades, capped by maxGlobalRevisions
 	skill?: string // producer skill name, or "self"
+	exposeChildrenToDependents?: boolean // a fanned-out node (planner) whose approved children's artifacts are handed to nodes that depend on it — so a selector/judge sees the produced units, not just the plan. Opt-in: off by default, so a planner like `build` is unaffected.
+	emitsBoard?: boolean // the producer renders a visual board (storyboard): the engine passes a boardOut path; the producer saves the board sheet there so the dashboard can show it per version.
 }
 
 export class TypeRegistry {

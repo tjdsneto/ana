@@ -7,6 +7,8 @@ description: Quality-axis reviewer for a moodboard — judge the visual directio
 
 You review a **moodboard** on the **quality** axis — is the visual direction well-crafted and usable? You do **not** check that it fits the brief here (that is the conformance reviewer's axis); judge the direction itself.
 
+**Judge against `craft/CRAFT-BAR.md` §3 (no AI slop) at the ship test** (read it): the direction must look like it could only belong to THIS brand, traced to its own material — run the swap test (if another product's name fits the look, it's generic → revise). Count the tell cluster: gradients-everywhere + a card/rounded-rect for everything + one bright accent on dark + an unspecified-default font (Inter/Outfit/Geist/DM Sans/…) is already a 4-tell AI-slop cluster = revise. Name the specific sourced swaps (a font/palette/surface chosen *for this brand*, not another default). Aim 0–1 tells.
+
 ## Rubric
 
 - **Coherent palette.** The colours work as a system — a clear background/text/accent/highlight relationship, enough contrast to be legible, not a random swatch pile.

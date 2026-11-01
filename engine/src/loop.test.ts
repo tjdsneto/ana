@@ -1,7 +1,7 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
 // tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -43,6 +43,7 @@ function makeConfig(over: Partial<EngineConfig> = {}): EngineConfig {
 		agreementMaxRoundsHuman: 5,
 		agreementMaxRoundsAgent: 2,
 		maxGlobalRevisions: 2,
+		convergeAfter: 99, // off by default; the convergence test sets it low
 		pollIntervalMs: 1000,
 		...over,
 	}
@@ -178,8 +179,10 @@ describe("interaction log + session capture", () => {
 		expect(ints.every((i) => typeof i.prompt === "string" && i.prompt.length > 0)).toBe(true) // the prompt sent to each subagent is persisted
 	})
 
-	it("resumes the producer's session across redo rounds (one session per leaf producer)", async () => {
-		// every reviewer says revise → the script producer redoes up to the cap, resuming its session.
+	it("runs each producer attempt FRESH across redo rounds (no resumed session — avoids the resume trap)", async () => {
+		// every reviewer says revise → the script producer redoes up to the cap. Each redo must start a
+		// fresh provider session (no resumeSessionId) so it re-reads the current skill and acts on the
+		// reviewers' feedback, rather than resuming a stale session and re-emitting its old output.
 		const runner = new FakeSubagentRunner((input) =>
 			input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "a draft" },
 		)
@@ -198,12 +201,10 @@ describe("interaction log + session capture", () => {
 		const script = (await store.nodesFor(root.id)).find((n) => n.type === "script")!
 		const versions = await store.versionsFor(script.id)
 		expect(versions).toHaveLength(3) // producer ran 3 times
-		const sessionIds = new Set(versions.map((v) => v.subagent?.sessionId))
-		expect(sessionIds.size).toBe(1) // all three redo rounds share ONE session
-		expect([...sessionIds][0]).toBeDefined()
-		// the 2nd and 3rd producer attempts carried a resumeSessionId (the 1st started cold)
-		const scriptResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
-		expect(scriptResumes.length).toBeGreaterThanOrEqual(2)
+		// no producer attempt resumes a prior session — every redo is cold, so an edited skill and the
+		// reviewer feedback reach each attempt.
+		const producerResumes = runner.calls.filter((c) => !c.skill?.startsWith("review:") && c.resumeSessionId)
+		expect(producerResumes.length).toBe(0)
 	})
 })
 
@@ -289,6 +290,31 @@ describe("type registry", () => {
 		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
 		// render's consistency gate is an owned pixel-watch (faithful execution of the board)
 		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
+		// render also carries a deterministic audio/sync gate (VO matches script, no dup/dropped lines, in sync)
+		expect(disk.get("render").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
+		// the video-project pipeline ends render → final-review (no polish re-render step between them)
+		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
+		expect(vp).not.toContain("polish")
+		expect(vp.slice(-2)).toEqual(["render", "final-review"])
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "final-review")?.deps).toEqual(["render"])
+	})
+
+	it("wires research + brainstorm as real chain steps before the script", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		for (const t of ["research", "brainstorm", "idea", "brainstorm-select"]) expect(disk.has(t)).toBe(true)
+		// brainstorm is a planner that fans out idea agents and exposes them to its dependents (the judge)
+		expect(disk.get("brainstorm").planner).toBe(true)
+		expect(disk.get("brainstorm").childType).toBe("idea")
+		expect(disk.get("brainstorm").exposeChildrenToDependents).toBe(true)
+		// the chain: briefing → research → brainstorm → brainstorm-select → script, and script no longer
+		// hangs straight off briefing (it writes from the winning concept + the dossier)
+		const chain = disk.get("video-project").checklist ?? []
+		const byId = new Map(chain.map((e) => [e.id, e]))
+		expect(chain.map((e) => e.type).slice(0, 5)).toEqual(["briefing", "research", "brainstorm", "brainstorm-select", "script"])
+		expect(byId.get("research")?.deps).toEqual(["briefing"])
+		expect(byId.get("brainstorm")?.deps).toEqual(["briefing", "research"])
+		expect(byId.get("brainstorm-select")?.deps).toEqual(["brainstorm"])
+		expect(byId.get("script")?.deps).toEqual(["brainstorm-select", "research"])
 	})
 
 	it("loads the generative (Family B) scene pipeline", async () => {
@@ -451,6 +477,72 @@ describe("recursive fan-out — plan node, dynamic children, rollup at depth", (
 	})
 })
 
+// Brainstorm phase: a planner fans out N `idea` candidates, then a `brainstorm-select` judge that
+// depends on the brainstorm node must SEE the developed ideas (not just the plan) — the
+// exposeChildrenToDependents path. Proves the fresh-judge gets the fanned-out units as upstream.
+const BRAINSTORM_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "brainstorm", type: "brainstorm", deps: [] },
+			{ id: "select", type: "brainstorm-select", deps: ["brainstorm"] },
+			{ id: "script", type: "script", deps: ["select"] },
+		],
+	},
+	{ type: "brainstorm", name: "Brainstorm", planner: true, childType: "idea", exposeChildrenToDependents: true, skill: "brainstorm", produce: "seed concepts" },
+	{ type: "idea", name: "Idea", produce: "develop", skill: "idea" },
+	{ type: "brainstorm-select", name: "Select", produce: "pick the winner", skill: "brainstorm-select" },
+	{ type: "script", name: "Script", produce: "script", reviews: [{ name: "craft", kind: "craft" }] },
+]
+const brainstormTypes = TypeRegistry.fromContracts(BRAINSTORM_CONTRACTS)
+
+describe("brainstorm phase — fan out ideas, fresh judge sees the developed ideas", () => {
+	it("fans out 3 idea candidates and hands all three to the select judge's upstream", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "brainstorm") {
+				return { output: '```json\n[{"name":"Angle A","brief":"ALPHA"},{"name":"Angle B","brief":"BRAVO"},{"name":"Angle C","brief":"CHARLIE"}]\n```' }
+			}
+			if (input.skill === "idea") {
+				// Echo the one seed this fanned-out idea node was handed, so each sibling's developed
+				// treatment is genuinely distinct — a collision would make them clobber to one.
+				const seed = ["ALPHA", "BRAVO", "CHARLIE"].find((s) => input.prompt.includes(s)) ?? "?"
+				return { output: `IDEA TREATMENT for ${seed}` }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const engine = new Engine({ store, runner, types: brainstormTypes, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const all = await store.nodesFor(root.id)
+		const brainstorm = all.find((n) => n.type === "brainstorm")!
+		const ideas = all.filter((n) => n.type === "idea")
+		expect(ideas).toHaveLength(3) // fanned out one candidate per seed
+		expect(ideas.every((i) => i.parentId === brainstorm.id && i.status === "approved")).toBe(true)
+		// the select judge's producer call saw every developed idea in its upstream (exposeChildrenToDependents)
+		const selectCall = runner.calls.find((c) => c.skill === "brainstorm-select")!
+		expect(selectCall).toBeDefined()
+		const ideaMentions = (selectCall.prompt.match(/### idea/g) ?? []).length
+		expect(ideaMentions).toBe(3) // all three idea artifacts handed to the judge, not just the plan
+		// …and the three are genuinely distinct — fanned siblings must not share an artifact path or
+		// clobber one another on disk (the type-keyed filename bug that collapsed them to one).
+		const ideaVersions = await Promise.all(ideas.map((i) => store.latestVersion(i.id)))
+		const ideaPaths = ideaVersions.map((v) => v!.artifactPath!)
+		expect(new Set(ideaPaths).size).toBe(3)
+		const ideaContents = ideaPaths.map((p) => readFileSync(p, "utf8"))
+		expect(new Set(ideaContents).size).toBe(3)
+	})
+})
+
 // The headline capability: the final review reopens ONE fanned-out scene, and only that scene's own
 // re-production + everything downstream rebuilds — its sibling scenes and the upstream are left alone.
 const SURGICAL_CONTRACTS: TypeContract[] = [
@@ -581,5 +673,71 @@ describe("planner re-plan — reopen the storyboard, reconcile scenes by name", 
 		const build = all.find((n) => n.type === "build")!
 		expect(build.status).toBe("approved") // re-rolled-up over {A,B,D approved, C skipped}
 		expect((await store.versionsFor(build.id)).length).toBe(2) // re-planned once
+	})
+})
+
+// Convergence: 3 reviewers can oscillate (each round a different one dissents) and never all pass a
+// genuinely good leaf. After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it
+// instead of grinding to the redo cap. A weak leaf (more than one dissent) never sustains the streak.
+const CONVERGE_CONTRACTS: TypeContract[] = [
+	{ type: "video-project", name: "Root", checklist: [{ id: "leaf", type: "leaf", deps: [] }] },
+	{
+		type: "leaf",
+		name: "Leaf",
+		produce: "make it",
+		reviews: [
+			{ name: "a", kind: "craft" },
+			{ name: "b", kind: "coverage" },
+			{ name: "c", kind: "consistency" },
+		],
+	},
+]
+const convergeTypes = TypeRegistry.fromContracts(CONVERGE_CONTRACTS)
+
+describe("convergence — accept an oscillating near-pass instead of grinding to the cap", () => {
+	it("accepts a leaf that passes all-but-one reviewer for convergeAfter consecutive rounds", async () => {
+		let round = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (!input.skill?.startsWith("review:")) {
+				round++
+				return { output: "draft" }
+			}
+			const kind = input.skill.slice("review:".length)
+			const dissenter = ["craft", "coverage", "consistency"][(round - 1) % 3] // rotate the single dissenter each round
+			return { output: kind === dissenter ? "VERDICT: revise" : "VERDICT: pass" }
+		})
+		const engine = new Engine({ store, runner, types: convergeTypes, config: makeConfig({ convergeAfter: 3, maxRedos: 20 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
+		expect(leaf.status).toBe("approved") // converged — accepted though no version ever got a unanimous pass
+		expect((await store.versionsFor(leaf.id)).length).toBe(3) // 3 near-pass rounds, then converge (not 20)
+	})
+
+	it("does NOT converge a weak leaf — more than one dissent resets the streak, and it escalates at the cap", async () => {
+		const runner = new FakeSubagentRunner((input) => (input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "draft" }))
+		const engine = new Engine({ store, runner, types: convergeTypes, config: makeConfig({ convergeAfter: 3, maxRedos: 4 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 100; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")
+			if (pending.some((o) => o.nodeId === leaf?.id)) break // escalated to the gate
+			for (const o of pending) await gateApprove(store, o)
+			if (!did && pending.length === 0) throw new Error("stuck")
+		}
+
+		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
+		const versions = await store.versionsFor(leaf.id)
+		expect(versions.length).toBe(4) // ground to the cap (never converged), then escalated
 	})
 })

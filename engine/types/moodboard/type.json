@@ -6,5 +6,5 @@
 		{ "name": "quality", "kind": "craft", "skill": "review-moodboard-quality" },
 		{ "name": "conformance", "kind": "coverage", "skill": "review-moodboard-conformance" }
 	],
-	"skill": "self"
+	"skill": "moodboard"
 }

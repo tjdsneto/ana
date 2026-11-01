@@ -6,11 +6,8 @@
 // continues a prior session (the producer's, across redo rounds). The exact flags/field names are
 // the seam to verify against the installed CLI when first exercised — parsing is defensive.
 
-import { execFile } from "node:child_process"
-import { promisify } from "node:util"
+import { spawn } from "node:child_process"
 import type { SubagentInput, SubagentResult, SubagentRunner, SubagentUsage } from "@core/shared"
-
-const run = promisify(execFile)
 
 // Shape of `claude -p --output-format json`. Every field optional: ones the installed CLI omits are
 // simply left undefined, and non-JSON stdout falls back to the raw text as the output.
@@ -70,17 +67,61 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		// Strip null bytes: execFile rejects argv with embedded \0 (e.g. if a prompt ever carries binary
 		// artifact content). Belt — the loop also avoids feeding binary into prompts.
 		if (sys.length > 0) args.push("--append-system-prompt", stripNull(sys.join("\n\n")))
-		args.push(stripNull(input.prompt)) // positional query
-		const { stdout } = await run(this.bin, args, { cwd: input.cwd, maxBuffer: 10 * 1024 * 1024 })
+		// The prompt goes on STDIN, never argv: a large upstream (e.g. a storyboard whose film.json
+		// embeds a font, or data-URL plates) makes the prompt megabytes, and a positional argv arg of
+		// that size throws spawn E2BIG (OS arg-list limit). `claude -p` reads the query from stdin.
+		const { stdout, code, stderr } = await spawnCollect(this.bin, args, input.cwd, stripNull(input.prompt))
 		const json = parse(stdout)
+		const result = (json.result ?? stdout).trim()
+		// A non-zero exit / is_error does NOT discard produced work when the CLI actually returned a
+		// result. `claude -p` prints its result, THEN runs SessionEnd hooks; a flaky host hook (e.g. an
+		// agent-registry SessionEnd hook, "Hook cancelled") fails and makes the CLI exit 1 and set
+		// is_error AFTER the artifact is on stdout. The engine must not let the host's session hooks
+		// discard a produced artifact. Treat it as a failure ONLY when the CLI returned no result field
+		// at all and exited non-zero (a genuine mid-run failure with no output).
+		const producedResult = typeof json.result === "string" && json.result.trim() !== ""
+		if (!producedResult && code !== 0) {
+			throw new Error(`claude exited ${code}${json.is_error ? " (is_error)" : ""} with no result: ${(stderr || stdout).slice(0, 500)}`)
+		}
 		return {
-			output: (json.result ?? stdout).trim(),
+			output: result,
 			sessionId: json.session_id,
 			model: modelOf(json) ?? model,
 			usage: toUsage(json),
 			raw: json,
 		}
 	}
+}
+
+// Spawn `claude -p` with the query piped to stdin (not argv — see the call site). Collects stdout,
+// rejects on a non-zero exit or a stdout that blows the buffer cap.
+function spawnCollect(bin: string, args: string[], cwd: string | undefined, stdinData: string): Promise<{ stdout: string; code: number | null; stderr: string }> {
+	return new Promise((resolve, reject) => {
+		const MAX = 32 * 1024 * 1024
+		const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"] })
+		let out = ""
+		let err = ""
+		let killed = false
+		child.stdout.on("data", (d) => {
+			out += d
+			if (out.length > MAX && !killed) {
+				killed = true
+				child.kill()
+				reject(new Error("claude stdout exceeded 32MB buffer"))
+			}
+		})
+		child.stderr.on("data", (d) => {
+			err += d
+		})
+		child.on("error", reject)
+		// Resolve with the exit code (don't reject on non-zero): the caller decides, so a post-output
+		// hook failure doesn't discard a produced result.
+		child.on("close", (code) => {
+			if (!killed) resolve({ stdout: out, code, stderr: err })
+		})
+		child.stdin.on("error", () => {}) // ignore EPIPE if the CLI closes stdin early
+		child.stdin.end(stdinData)
+	})
 }
 
 function parse(stdout: string): ClaudeJson {

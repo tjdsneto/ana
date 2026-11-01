@@ -1,0 +1,8 @@
+{
+	"type": "research",
+	"name": "Research",
+	"produce": "Explore and capture the subject of this video per your research skill, then output the research dossier (verified vs. unverified facts, captured assets + focus marks).",
+	"reviews": [
+		{ "name": "conformance", "kind": "coverage" }
+	]
+}
