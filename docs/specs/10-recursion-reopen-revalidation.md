@@ -64,6 +64,6 @@ The planner records a new plan version and re-rolls-up once the reconciled set s
 
 ## 6. Known gaps
 
-- **Generative is keyless.** The Family-B scene pipeline (`video-project-generative`: build → scene → assemble) is scaffolded but can't produce real clips until HeyGen/Higgsfield keys are provisioned; `build-scene` emits a shot spec and `scene` is a text leaf until then (flip to a rendered leaf when keys land). `assemble`'s consistency reviewer is still a generic lens for the same reason.
+- **Generative scenes are keyless.** The scene pipeline is now `video-project`'s own tail (`build → scene → assemble`); there is no separate `video-project-generative` type. A scene's realization `method` decides how it is produced: `authored-composite` / `authored-continuous` render via the Family-A craft chain today, while `whole-clip-generative` scenes can't produce real clips until HeyGen/Higgsfield keys are provisioned (`build-scene` emits a shot spec and `scene` is a text leaf until then; flip to a rendered leaf when keys land). `assemble`'s consistency reviewer is still a generic lens for the same reason.
 - **Revalidation precision = reviewer precision.** Whether a change is "substantial" is the conformance/consistency reviewers' call; the rubrics are where that quality lives.
 - **Reopen budget is in-memory, per-process** (like the spend guard) — a worker restart mid-production resets the count. Fine for v0 single-worker; persist it for multi-worker.

@@ -292,11 +292,12 @@ describe("type registry", () => {
 		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
 		// render also carries a deterministic audio/sync gate (VO matches script, no dup/dropped lines, in sync)
 		expect(disk.get("render").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
-		// the video-project pipeline ends render → final-review (no polish re-render step between them)
+		// the unified video-project ends build → assemble → polish → final-review (the scene fan-out tail;
+		// the monolithic render node is retired from the pipeline)
 		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
-		expect(vp).not.toContain("polish")
-		expect(vp.slice(-2)).toEqual(["render", "final-review"])
-		expect(disk.get("video-project").checklist?.find((e) => e.type === "final-review")?.deps).toEqual(["render"])
+		expect(vp).not.toContain("render")
+		expect(vp.slice(-4)).toEqual(["build", "assemble", "polish", "final-review"])
+		expect(disk.get("video-project").checklist?.find((e) => e.type === "final-review")?.deps).toEqual(["polish"])
 	})
 
 	it("wires research + brainstorm as real chain steps before the script", async () => {
@@ -317,16 +318,16 @@ describe("type registry", () => {
 		expect(byId.get("script")?.deps).toEqual(["brainstorm-select", "research"])
 	})
 
-	it("loads the generative (Family B) scene pipeline", async () => {
+	it("loads the unified scene pipeline (build → scene → assemble)", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
-		// a parallel root type whose build step fans out into scenes (the flat video-project is untouched)
-		expect(disk.has("video-project-generative")).toBe(true)
-		const genChecklist = disk.get("video-project-generative").checklist?.map((e) => e.type) ?? []
-		expect(genChecklist).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
+		// the scene fan-out is now video-project's own tail — the separate generative project type is gone
+		expect(disk.has("video-project-generative")).toBe(false)
+		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
+		expect(vp).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
 		// build is the planner that fans out one scene child per storyboard scene
 		expect(disk.get("build").planner).toBe(true)
 		expect(disk.get("build").childType).toBe("scene")
-		// generative assembly is its own rendered step (concatenates scene clips), not render-film
+		// assembly is its own rendered step (concatenates scene clips), not a monolithic render
 		expect(disk.get("assemble").rendered).toBe(true)
 		expect(disk.get("assemble").skill).toBe("assemble-scenes")
 		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
