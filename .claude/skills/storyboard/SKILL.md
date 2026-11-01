@@ -13,7 +13,8 @@ You own the **whole-board coherence** — the cards only see their own brief, so
 - **One signature move** — name it, and say which 1–2 cards carry it (every good launch video has one recognizable device).
 - **Colour-per-beat + the sourced look** — from the moodboard (flat ground, the chosen non-default font, one accent). Assign each beat its ground.
 - **The VO line per beat** — from the script, in order, each line spoken once; the CTA line only on the final card.
-- **Each beat's focal subject + camera intent** — the one element that must dominate that card, and a rough zoom.
+- **The on-screen text treatment per beat** — decide, per card, whether the screen shows a short **focal phrase** (the few words the beat lands on — the full line is only *spoken*) or the **full line**. **Default to a focal phrase**; reserve the full line for a beat whose whole sentence must be read (often the CTA). This is a production-level call you own — the card honors it, and either way keeps a safe-area margin with breathing room (never a five-line wall of text). See COMPOSED-CARDS §2.
+- **Each beat's focal subject + camera intent** — the one element that must dominate that card (within the safe area — dominant, not overflowing), and a rough zoom.
 
 ## Output — ONLY a JSON array (no prose, no code fence)
 
@@ -21,7 +22,7 @@ One object per card, in playback order:
 
 ```
 [
-  {"name":"hook","brief":"VO line: \"<the line>\". Role: hook. Focal element that must fill the frame: <…>. Signature: <present? how>. Ground/colour: <…>. Font: <the moodboard's sourced face>. Camera intent: frame <…>, zoom ~<n>. Proof number (if any): <…>."},
+  {"name":"hook","brief":"VO line (spoken): \"<the line>\". On-screen text: <the focal phrase to show, e.g. \\\"three campaigns?\\\" — or \"the full line\" when it must be read>. Role: hook. Focal element that must dominate the safe area: <…>. Signature: <present? how>. Ground/colour: <…>. Font: <the moodboard's sourced face>. Camera intent: frame <…>, zoom ~<n>. Proof number (if any): <…>."},
   {"name":"<id>","brief":"<same shape>"}
 ]
 ```
