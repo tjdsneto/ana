@@ -73,12 +73,15 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		const { stdout, code, stderr } = await spawnCollect(this.bin, args, input.cwd, stripNull(input.prompt))
 		const json = parse(stdout)
 		const result = (json.result ?? stdout).trim()
-		// A non-zero exit does NOT discard produced work: `claude -p` prints its result, THEN runs
-		// SessionEnd hooks, and a flaky hook (e.g. an agent-registry hook) can fail and exit 1 after the
-		// output is already on stdout. Only treat it as a failure when there is no usable result or the
-		// CLI itself flagged is_error.
-		if ((code !== 0 || json.is_error) && (!result || json.is_error)) {
-			throw new Error(`claude exited ${code}${json.is_error ? " (is_error)" : ""}: ${(stderr || stdout).slice(0, 500)}`)
+		// A non-zero exit / is_error does NOT discard produced work when the CLI actually returned a
+		// result. `claude -p` prints its result, THEN runs SessionEnd hooks; a flaky host hook (e.g. an
+		// agent-registry SessionEnd hook, "Hook cancelled") fails and makes the CLI exit 1 and set
+		// is_error AFTER the artifact is on stdout. The engine must not let the host's session hooks
+		// discard a produced artifact. Treat it as a failure ONLY when the CLI returned no result field
+		// at all and exited non-zero (a genuine mid-run failure with no output).
+		const producedResult = typeof json.result === "string" && json.result.trim() !== ""
+		if (!producedResult && code !== 0) {
+			throw new Error(`claude exited ${code}${json.is_error ? " (is_error)" : ""} with no result: ${(stderr || stdout).slice(0, 500)}`)
 		}
 		return {
 			output: result,
