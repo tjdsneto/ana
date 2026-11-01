@@ -1,9 +1,0 @@
-{
-	"type": "video-project-edit",
-	"name": "Video project (edit)",
-	"checklist": [
-		{ "id": "briefing", "type": "briefing", "deps": [] },
-		{ "id": "clip", "type": "clip", "deps": ["briefing"] },
-		{ "id": "final-review", "type": "final-review", "deps": ["clip"] }
-	]
-}
