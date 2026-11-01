@@ -8,7 +8,7 @@ import { buildRenderedPrompt, newestMedia, stageAssets } from "./loop.js"
 import type { TypeContract } from "./typereg.js"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "rl-"))
-const c = (type: string): TypeContract => ({ type, rendered: true })
+const c = (type: string): TypeContract => ({ type, produces: "file" })
 
 describe("buildRenderedPrompt", () => {
 	it("render + assemble keep the film.json wording (unchanged behavior)", () => {

@@ -289,17 +289,16 @@ export class Engine {
 		let producerResult: SubagentResult | undefined
 		let producerPrompt = ""
 		const t0 = Date.now()
-		if (contract.rendered) {
-			// A rendered leaf is produced by a WORKER running the render skill (skills + tools, spec 09),
-			// not by engine code. Stage the upstream (the storyboard film.json) into a work dir, dispatch a
-			// worker that runs the craft tools and writes an .mp4 there, then record that file as the
-			// artifact. The engine owns no renderer — craft/tools does. The worker runs from craftRoot (its .claude/skills), and
-			// the work dir is passed in the prompt.
+		if (contract.produces === "file") {
+			// A file-output leaf is produced by a WORKER running the type's skill (skills + tools, spec 09),
+			// not by engine code. Stage the upstream artifacts into a work dir, dispatch the worker from
+			// craftRoot (its .claude/skills), and capture the file it writes. The engine owns no renderer —
+			// the craft skills do. Generic: no video knowledge here (the type names its skill + staging).
 			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
 			mkdirSync(workDir, { recursive: true })
 			stageRenderInputs(workDir, upstream)
 			// Also stage any caller-provided assets (b-roll / audio / logo …) so an edit/compose leaf can
-			// use real footage. Harmless for render — extra files beside film.json are ignored.
+			// use real footage. Harmless for others — extra staged files are simply unused.
 			const stagedAssets = stageAssets(workDir, await this.store.assetsFor(node.productionId))
 			producerPrompt = buildRenderedPrompt(contract, { brief: root.description ?? "", workDir, feedback, assets: stagedAssets })
 			producerResult = await this.runSubagent({
@@ -307,13 +306,19 @@ export class Engine {
 				skill: contract.skill ?? "render-film",
 				cwd: this.config.craftRoot,
 			})
-			// The skill writes a media file into the work dir; record it. Prefer an .mp4 (render), else any
-			// other media (an audio clip's .wav/.mp3 from the edit leaf).
+			// Capture the file the skill wrote (newest media). If it wrote NONE — e.g. a keyless generative
+			// leaf that can only emit a spec — fall back to recording the skill's text output, so the node
+			// still produces a reviewable artifact instead of failing the whole production. Downstream
+			// (assemble / the reviewers) surface a genuinely missing file where it matters.
 			const outFile = newestMedia(workDir)
-			if (!outFile) throw new Error(`rendered ${node.type}: the skill produced no media file in ${workDir} — ${producerResult.output.slice(0, 200)}`)
-			artifactPath = outFile
-			// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
-			draft = `[rendered ${node.type}] file: ${outFile}`
+			if (outFile) {
+				artifactPath = outFile
+				// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
+				draft = `[file ${node.type}] ${outFile}`
+			} else {
+				draft = producerResult.output
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			}
 		} else {
 			let boardOut: string | undefined
 			if (contract.emitsBoard) {
@@ -351,7 +356,7 @@ export class Engine {
 			},
 		})
 		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs, producerPrompt)
-		log.info("node.produce", { versionId: version.id, n, rendered: Boolean(contract.rendered), ms: producerMs })
+		log.info("node.produce", { versionId: version.id, n, produces: contract.produces ?? "text", ms: producerMs })
 
 		// internal quality gate — independent specialist reviewers
 		const verdicts: ("pass" | "revise")[] = []
@@ -692,9 +697,9 @@ export class Engine {
 		}
 
 		const sensitive = (contract.reviews ?? []).filter((r) => r.kind === "coverage" || r.kind === "consistency")
-		if (contract.rendered || sensitive.length === 0) {
+		if (contract.produces === "file" || sensitive.length === 0) {
 			await this.store.updateVersion(latest.id, { status: "superseded" })
-			log.info("node.revalidate_rebuild", { reason: contract.rendered ? "mechanical" : "no-upstream-reviewer" })
+			log.info("node.revalidate_rebuild", { reason: contract.produces === "file" ? "mechanical" : "no-upstream-reviewer" })
 			return false
 		}
 

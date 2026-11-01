@@ -29,7 +29,7 @@ const CONTRACTS: TypeContract[] = [
 	{ type: "script", name: "Script", produce: "script", reviews: [{ name: "craft", kind: "craft" }, { name: "coverage", kind: "coverage" }] },
 	{ type: "moodboard", name: "Moodboard", produce: "mood", reviews: [{ name: "craft", kind: "craft" }] },
 	{ type: "storyboard", name: "Storyboard", produce: "board", reviews: [{ name: "craft", kind: "craft" }, { name: "consistency", kind: "consistency" }] },
-	{ type: "render", name: "Render", rendered: true, reviews: [{ name: "consistency", kind: "consistency" }] },
+	{ type: "render", name: "Render", produces: "file", skill: "render-film", reviews: [{ name: "consistency", kind: "consistency" }] },
 	{ type: "polish", name: "Polish", produce: "polish", reviews: [{ name: "craft", kind: "craft" }] },
 	{ type: "final-review", name: "Final review", holisticReview: true },
 ]
@@ -274,7 +274,7 @@ describe("type registry", () => {
 		for (const t of ["briefing", "script", "moodboard", "storyboard", "render", "polish", "final-review"]) {
 			expect(disk.has(t)).toBe(true)
 		}
-		expect(disk.get("render").rendered).toBe(true)
+		expect(disk.get("render").produces).toBe("file")
 		expect(disk.get("briefing").agreement).toBe(true)
 		expect(disk.get("final-review").holisticReview).toBe(true)
 		// storyboard is now a PLANNER that fans out one `card` per beat and exposes the cards to its
@@ -340,7 +340,7 @@ describe("type registry", () => {
 		expect(disk.get("build-scenes").planner).toBe(true)
 		expect(disk.get("build-scenes").childType).toBe("scene")
 		// assembly is its own rendered step (concatenates scene clips), not a monolithic render
-		expect(disk.get("assemble").rendered).toBe(true)
+		expect(disk.get("assemble").produces).toBe("file")
 		expect(disk.get("assemble").skill).toBe("assemble-scenes")
 		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
 		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
@@ -814,5 +814,41 @@ describe("recursive build — a planner nested inside a non-root expand node", (
 		expect(scenes).toHaveLength(2) // the nested planner fanned out
 		expect(scenes.every((s) => s.parentId === buildScenes.id)).toBe(true)
 		expect(build.status).toBe("approved") // rolled up through the nested planner
+	})
+})
+
+describe("file-leaf output contract (produces: file)", () => {
+	// A produces:"file" leaf whose skill writes NO file (e.g. a keyless generative scene that can only
+	// emit a spec) must record the skill's TEXT output as the artifact, not fail the whole production.
+	it("records the skill's text when the leaf produces no file (keyless), instead of throwing", async () => {
+		const C: TypeContract[] = [
+			{
+				type: "video-project",
+				name: "VP",
+				checklist: [
+					{ id: "briefing", type: "briefing", deps: [] },
+					{ id: "spec", type: "spec", deps: ["briefing"] },
+					{ id: "final-review", type: "final-review", deps: ["spec"] },
+				],
+			},
+			{ type: "briefing", name: "Briefing", produce: "brief", agreement: true, advisoryReview: true, reviews: [{ name: "coverage", kind: "coverage" }] },
+			// produces:"file", but skill "generate-scene" — the fake only writes a file for "render-film",
+			// so this leaf produces no file and must fall back to recording its text (the keyless path).
+			{ type: "spec", name: "Spec", produces: "file", skill: "generate-scene", reviews: [{ name: "craft", kind: "craft" }] },
+			{ type: "final-review", name: "Final review", holisticReview: true },
+		]
+		const t2 = TypeRegistry.fromContracts(C)
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: t2, config: makeConfig() })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 200; guard++) {
+			await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const spec = (await store.nodesFor(root.id)).find((n) => n.type === "spec")!
+		const v = await store.latestVersion(spec.id)
+		expect(v?.artifactPath?.endsWith(".mp4")).toBeFalsy() // no file was produced
+		expect(readFileSync(v!.artifactPath!, "utf8")).toContain("generate-scene") // the skill's text recorded
 	})
 })

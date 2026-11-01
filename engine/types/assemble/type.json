@@ -1,7 +1,7 @@
 {
 	"type": "assemble",
 	"name": "Assemble",
-	"rendered": true,
+	"produces": "file",
 	"skill": "assemble-scenes",
 	"reviews": [{ "name": "consistency", "kind": "consistency" }]
 }

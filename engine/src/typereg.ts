@@ -30,7 +30,7 @@ export interface TypeContract {
 	advisoryReview?: boolean // rollup/review never blocks (agreement types)
 	agreement?: boolean // agreement-terminal (briefing): client approval is the gate, capped back-and-forth
 	router?: boolean // emits VERDICT to gate a sibling — v0-flat: not exercised
-	rendered?: boolean // file-output leaf: a worker runs the render skill (writes a file artifact), not a text producer
+	produces?: "file" | "text" // leaf artifact kind: "file" = a worker runs a skill in a staged work dir and the engine captures the file it writes (falling back to the skill's text when it writes none, e.g. a keyless generative leaf that can only emit a spec); "text" (default) = a plain text producer. Generic: no video knowledge — a type declares its own skill + staging.
 	holisticReview?: boolean // final whole-production review: on revise it reopens named upstream nodes (approved → pending) + cascades, capped by maxGlobalRevisions
 	skill?: string // producer skill name, or "self"
 	exposeChildrenToDependents?: boolean // a fanned-out node (planner) whose approved children's artifacts are handed to nodes that depend on it — so a selector/judge sees the produced units, not just the plan. Opt-in: off by default, so a planner like `build` is unaffected.

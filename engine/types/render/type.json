@@ -1,7 +1,7 @@
 {
 	"type": "render",
 	"name": "Render",
-	"rendered": true,
+	"produces": "file",
 	"reviews": [
 		{ "name": "audio", "kind": "audio", "skill": "review-render-audio" },
 		{ "name": "consistency", "kind": "consistency", "skill": "review-render-consistency" }
