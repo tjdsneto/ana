@@ -1,0 +1,80 @@
+#!/usr/bin/env sh
+# studio — one entrypoint for the craft audio/asset tools (host venvs + ffmpeg).
+# Separate from ./x (the Docker node/npm toolbox); these are host Python tools, not container ones.
+# Keys load from repo/.engine_env (FREESOUND_API_KEY, OPENAI_API_KEY, ELEVENLABS_API_KEY); the music
+# generate: seam defaults to local MusicGen. A command with no --out writes to /tmp and opens it.
+#
+#   ./studio sfx whoosh [--out F]              synth a UI sound: click|tick|pop|hit|whoosh|swish
+#   ./studio sfx-list
+#   ./studio voice "Your line." [--engine kokoro|openai-tts|elevenlabs|piper] [--voice V] [--out F]
+#   ./studio music "stock:calm ambient" [--duration D]   request: library: / stock: / generate: / a file
+#   ./studio music-gen "warm uplifting" [--duration D] [--out F]   direct MusicGen
+#   ./studio under video.mp4 bed.wav [--out F] [--mode replace|mix]  put audio under a video
+#   ./studio still image.png vo.wav [--out F]              image + audio -> mp4
+#   ./studio play FILE                                     open in the default player (macOS)
+set -eu
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TOOLS="$HERE/craft/tools"
+KOKORO_PY="${KOKORO_PY:-$HOME/.local/share/kokoro-onnx/venv/bin/python}"
+MUSICGEN_PY="${MUSICGEN_PY:-$HOME/.local/share/musicgen/venv/bin/python}"
+
+# Load API keys from the engine env file if present (never printed).
+ENV_FILE="${CRAFT_ENV_FILE:-$HERE/../repo/.engine_env}"
+[ -f "$ENV_FILE" ] && { set -a; . "$ENV_FILE"; set +a; } || true
+
+# Default the music generate: seam to local MusicGen unless the caller already set it.
+if [ -z "${MUSIC_GEN_CMD:-}" ]; then
+  MUSIC_GEN_CMD="$MUSICGEN_PY $TOOLS/music/musicgen.py --prompt \"{prompt}\" --duration {duration} --out \"{out}\""
+fi
+export MUSIC_GEN_CMD
+
+has_flag() { _f="$1"; shift; for _a in "$@"; do [ "$_a" = "$_f" ] && return 0; done; return 1; }
+_open() { open "$1" 2>/dev/null || true; }
+
+cmd="${1:-}"; [ "$#" -gt 0 ] && shift || true
+case "$cmd" in
+  sfx)
+    name="${1:-}"; [ -n "$name" ] && shift || { echo "usage: ./studio sfx <name> [--out F]" >&2; exit 2; }
+    if has_flag --out "$@"; then exec "$KOKORO_PY" "$TOOLS/sfx.py" "$name" "$@"; fi
+    out="/tmp/craft-sfx-$name.wav"; "$KOKORO_PY" "$TOOLS/sfx.py" "$name" --out "$out" "$@"; _open "$out" ;;
+  sfx-list)
+    exec "$KOKORO_PY" "$TOOLS/sfx.py" --list ;;
+  music-gen)
+    prompt="${1:-}"; [ -n "$prompt" ] && shift || { echo "usage: ./studio music-gen \"<prompt>\" [--duration D] [--out F]" >&2; exit 2; }
+    if has_flag --out "$@"; then exec "$MUSICGEN_PY" "$TOOLS/music/musicgen.py" --prompt "$prompt" "$@"; fi
+    out="/tmp/craft-music.wav"; "$MUSICGEN_PY" "$TOOLS/music/musicgen.py" --prompt "$prompt" --out "$out" "$@"; _open "$out" ;;
+  music)
+    req="${1:-}"; [ -n "$req" ] && shift || { echo "usage: ./studio music \"<request>\" [--duration D] [--out DIR]" >&2; exit 2; }
+    exec python3 "$TOOLS/music.py" --request "$req" "$@" ;;
+  voice)
+    text="${1:-}"; [ -n "$text" ] && shift || { echo "usage: ./studio voice \"<text>\" [--engine E] [--voice V] [--out F]" >&2; exit 2; }
+    engine=kokoro; voiceid=""; out=""
+    while [ "$#" -gt 0 ]; do case "$1" in
+      --engine) engine="$2"; shift 2 ;;
+      --voice) voiceid="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      *) echo "voice: unknown arg '$1'" >&2; exit 2 ;;
+    esac; done
+    tmpd="$(mktemp -d)"; printf '%s\n' "$text" > "$tmpd/script.txt"
+    if [ -n "$voiceid" ]; then
+      "$KOKORO_PY" "$TOOLS/vo.py" --script "$tmpd/script.txt" --out "$tmpd/media" --engine "$engine" --voice "$voiceid"
+    else
+      "$KOKORO_PY" "$TOOLS/vo.py" --script "$tmpd/script.txt" --out "$tmpd/media" --engine "$engine"
+    fi
+    if [ -z "$out" ]; then out="/tmp/craft-voice.wav"; cp "$tmpd/media/vo.wav" "$out"; echo "voice -> $out"; _open "$out";
+    else cp "$tmpd/media/vo.wav" "$out"; echo "voice -> $out"; fi ;;
+  under)
+    v="${1:?usage: ./studio under <video> <audio> [--out F] [--mode replace|mix]}"; a="${2:?audio required}"; shift 2
+    if has_flag --out "$@"; then exec python3 "$TOOLS/compose.py" under --video "$v" --audio "$a" "$@"; fi
+    out="/tmp/craft-under.mp4"; python3 "$TOOLS/compose.py" under --video "$v" --audio "$a" --out "$out" "$@"; _open "$out" ;;
+  still)
+    img="${1:?usage: ./studio still <image> <audio> [--out F]}"; a="${2:?audio required}"; shift 2
+    if has_flag --out "$@"; then exec python3 "$TOOLS/compose.py" still --image "$img" --audio "$a" "$@"; fi
+    out="/tmp/craft-still.mp4"; python3 "$TOOLS/compose.py" still --image "$img" --audio "$a" --out "$out" "$@"; _open "$out" ;;
+  play)
+    exec open "$@" ;;
+  ""|-h|--help|help)
+    sed -n '2,19p' "$0"; exit 0 ;;
+  *)
+    echo "studio: unknown command '$cmd' (see ./studio --help)" >&2; exit 2 ;;
+esac
