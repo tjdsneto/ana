@@ -37,7 +37,10 @@ SR = 48000  # composition sample rate
 # Voice provider seam (tmp/audio-provider-seam-design.md): name -> an adapter TOOL that writes an audio
 # file from text on stdin. vo.py shells it per line and keeps owning the timing + laydown. kokoro/piper
 # stay in-process (they are local binaries already); new + all API providers land here as their own tool.
-TTS_TOOLS = {"openai-tts": Path(__file__).resolve().parent / "tts" / "openai-tts.py"}
+TTS_TOOLS = {
+    "openai-tts": Path(__file__).resolve().parent / "tts" / "openai-tts.py",
+    "elevenlabs": Path(__file__).resolve().parent / "tts" / "elevenlabs.py",
+}
 
 
 def parse_args() -> argparse.Namespace:
