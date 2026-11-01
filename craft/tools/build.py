@@ -68,14 +68,14 @@ def T(ref):
 
 
 # ------------------------------------------------------------------ layout
-FB = bool(film.get("fullbleed"))  # composed boards: plates are full-frame cards, no browser window
+FB = bool(film.get("fullbleed", not film.get("url")))  # composed boards (no url) are full-frame cards, no browser window; a film with a url keeps the browser frame
 CHROME = 0 if FB else 56
 VW, VH = W, H - CHROME
 K = VW / CAPW
 FY = 0.5
 inset = film.get("window_inset", 0.07)
 # no url -> no address pill (an empty omnibox reads as a defect on a brand film)
-OMNI_URL = film.get("url", "example.com")
+OMNI_URL = film.get("url")
 FULL = {"x": round(W * inset, 1), "y": round(H * inset, 1), "scale": round(1 - 2 * inset, 4), "borderRadius": 14}
 CARD = {"x": round(W * 0.13, 1), "y": round(H * 0.14, 1), "scale": 0.74, "borderRadius": 18}
 if FB:
@@ -201,8 +201,8 @@ def html():
     tc = film.get("title_card", {})
     oc = film.get("outro", {})
     shots = "".join(f'<img class="shot" id="s_{p.replace("-", "_")}" src="assets/shots/{p}.jpg" alt="" style="width:{VW}px;height:{round(SHOTS[p]["_h"] * K, 1)}px">' for p in PLATES)
-    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{f';--ac:{col}' if col else ''}"></div>'
-                    for rid, _, _, (x, y, w, h), col in RINGS)
+    rings = "".join(f'<div class="ring" id="{rid}" style="left:{(x - 8) * K:.1f}px;top:{(y - 8) * K:.1f}px;width:{(w + 16) * K:.1f}px;height:{(h + 16) * K:.1f}px{acx}"></div>'
+                    for rid, _, _, (x, y, w, h), col in RINGS for acx in [(";--ac:" + col) if col else ""])
     chips = "".join(f'<div class="chip" id="{cid}">{md(txt)}</div>' for cid, _, _, txt in CHIPS)
     font_css = f'<link rel="stylesheet" href="{TH["fontCss"]}">' if TH.get("fontCss") else ""
     title = f"""
