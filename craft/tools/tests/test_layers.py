@@ -140,6 +140,43 @@ def test_video_layer_rendered():
     assert L.get("kind") == "video", f"payload layer must carry kind=video, got {L.get('kind')!r}"
 
 
+def test_layer_asset_ref():
+    """A layer may reference an `assets` entry by id instead of inlining src/text; build.py resolves
+    kind + src/text from the asset (the layer's own fields override)."""
+    film = dict(BASE,
+                assets={
+                    "mascot": {"kind": "image", "src": "assets/overlays/mascot.png"},
+                    "pres": {"kind": "video", "src": "assets/overlays/pres.mp4"},
+                    "hero": {"kind": "text", "text": "**Hi**"},
+                },
+                layers=[
+                    {"asset": "mascot", "at": "Alpha", "until": "bravo", "x": 10, "y": 10},
+                    {"asset": "pres", "at": "Echo", "until": "golf", "x": 20, "y": 20},
+                    {"asset": "hero", "at": "charlie", "until": "delta", "x": 30, "y": 30},
+                ])
+    with tempfile.TemporaryDirectory() as d:
+        html = _build(film, d)
+    assert "assets/overlays/mascot.png" in html, "image asset src not resolved"
+    assert '<video class="layer"' in html and "assets/overlays/pres.mp4" in html, "video asset not resolved"
+    assert "<b>Hi</b>" in html, "text asset not resolved"
+
+
+def test_layer_asset_unknown():
+    """A layer referencing an asset id that isn't in `assets` fails the build, naming the id."""
+    film = dict(BASE, assets={}, layers=[{"asset": "ghost", "at": "Alpha", "until": "bravo", "x": 0, "y": 0}])
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "src").mkdir(parents=True, exist_ok=True)
+        (root / "media").mkdir(parents=True, exist_ok=True)
+        (root / "film.json").write_text(json.dumps(film))
+        (root / "src/shots.json").write_text(json.dumps(SHOTS))
+        (root / "media/words.json").write_text(json.dumps(WORDS))
+        r = subprocess.run([sys.executable, str(TOOLS / "build.py"), "--root", str(root)],
+                           capture_output=True, text=True)
+    assert r.returncode != 0, "unknown asset id should fail the build"
+    assert "ghost" in r.stderr, f"error should name the missing asset id; got: {r.stderr!r}"
+
+
 def test_layer_ids_autogen():
     film = dict(BASE, layers=[
         {"kind": "image", "src": "a.png", "at": "Alpha", "until": "bravo", "x": 0, "y": 0},
@@ -153,7 +190,8 @@ def test_layer_ids_autogen():
 
 if __name__ == "__main__":
     tests = [test_image_layer_rendered, test_no_layers_unchanged, test_text_layer_rendered,
-             test_move_authored_transform, test_video_layer_rendered, test_layer_ids_autogen]
+             test_move_authored_transform, test_video_layer_rendered,
+             test_layer_asset_ref, test_layer_asset_unknown, test_layer_ids_autogen]
     failed = 0
     for t in tests:
         try:

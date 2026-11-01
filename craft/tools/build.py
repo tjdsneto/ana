@@ -143,12 +143,19 @@ for i, r in enumerate(film.get("rings", [])):
     t0, t1 = T(r["at"]), T(r["until"])
     RINGS.append([f"r{i}", t0, t1, rect(r["target"], r.get("plate", plate_at(t0))), r.get("color", "")])
 CHIPS = [[f"c{i}", T(c["at"]), T(c["until"]), c["text"]] for i, c in enumerate(film.get("chips", []))]
+ASSETS = film.get("assets", {})
 LAYERS = []
 for i, L in enumerate(film.get("layers", [])):
+    a = {}
+    if "asset" in L:
+        if L["asset"] not in ASSETS:
+            sys.exit(f'build: layer references unknown asset "{L["asset"]}" (not in film.assets)')
+        a = ASSETS[L["asset"]]  # asset fields are defaults; the layer's own fields override
     el = {"id": L.get("id", f"l{i}"),
           "in": round(T(L["at"]) if "at" in L else 0.0, 3),
           "out": round(T(L["until"]) if "until" in L else OUT, 3),
-          "kind": L.get("kind", "image"), "src": L.get("src", ""), "text": L.get("text", ""),
+          "kind": L.get("kind", a.get("kind", "image")), "src": L.get("src", a.get("src", "")),
+          "text": L.get("text", a.get("text", "")),
           "x": L.get("x", 0), "y": L.get("y", 0), "w": L.get("w"), "h": L.get("h"), "z": L.get("z", 15)}
     mv = L.get("move")
     if mv:
