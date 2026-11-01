@@ -32,6 +32,14 @@ A **work dir** holding the caller's **provided asset** (the video/audio to edit)
    Video source → write `.mp4`; audio source → write the matching audio extension.
 5. **Confirm** the output exists and its duration matches the sum of your kept ranges (`ffprobe`).
 
+## Optional emphasis — punch-in
+
+To draw the eye to a moment, add a ken-burns zoom after the cut:
+```
+node craft/tools/punch.mjs --in <clip>.mp4 --out <clip>-punch.mp4 --zoom 1.3 --to 0.5,0.5
+```
+`--zoom` is the end magnification; `--to x,y` is the point to zoom toward (frame fractions). Audio passes through. Use it sparingly — one deliberate punch beats constant motion.
+
 ## Output
 
 The derived asset path (the `.mp4`/`.wav` the tool wrote). Nothing else — do not read the media into your reply.
