@@ -43,6 +43,7 @@ function makeConfig(over: Partial<EngineConfig> = {}): EngineConfig {
 		agreementMaxRoundsHuman: 5,
 		agreementMaxRoundsAgent: 2,
 		maxGlobalRevisions: 2,
+		convergeAfter: 99, // off by default; the convergence test sets it low
 		pollIntervalMs: 1000,
 		...over,
 	}
@@ -672,5 +673,71 @@ describe("planner re-plan — reopen the storyboard, reconcile scenes by name", 
 		const build = all.find((n) => n.type === "build")!
 		expect(build.status).toBe("approved") // re-rolled-up over {A,B,D approved, C skipped}
 		expect((await store.versionsFor(build.id)).length).toBe(2) // re-planned once
+	})
+})
+
+// Convergence: 3 reviewers can oscillate (each round a different one dissents) and never all pass a
+// genuinely good leaf. After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it
+// instead of grinding to the redo cap. A weak leaf (more than one dissent) never sustains the streak.
+const CONVERGE_CONTRACTS: TypeContract[] = [
+	{ type: "video-project", name: "Root", checklist: [{ id: "leaf", type: "leaf", deps: [] }] },
+	{
+		type: "leaf",
+		name: "Leaf",
+		produce: "make it",
+		reviews: [
+			{ name: "a", kind: "craft" },
+			{ name: "b", kind: "coverage" },
+			{ name: "c", kind: "consistency" },
+		],
+	},
+]
+const convergeTypes = TypeRegistry.fromContracts(CONVERGE_CONTRACTS)
+
+describe("convergence — accept an oscillating near-pass instead of grinding to the cap", () => {
+	it("accepts a leaf that passes all-but-one reviewer for convergeAfter consecutive rounds", async () => {
+		let round = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (!input.skill?.startsWith("review:")) {
+				round++
+				return { output: "draft" }
+			}
+			const kind = input.skill.slice("review:".length)
+			const dissenter = ["craft", "coverage", "consistency"][(round - 1) % 3] // rotate the single dissenter each round
+			return { output: kind === dissenter ? "VERDICT: revise" : "VERDICT: pass" }
+		})
+		const engine = new Engine({ store, runner, types: convergeTypes, config: makeConfig({ convergeAfter: 3, maxRedos: 20 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
+		expect(leaf.status).toBe("approved") // converged — accepted though no version ever got a unanimous pass
+		expect((await store.versionsFor(leaf.id)).length).toBe(3) // 3 near-pass rounds, then converge (not 20)
+	})
+
+	it("does NOT converge a weak leaf — more than one dissent resets the streak, and it escalates at the cap", async () => {
+		const runner = new FakeSubagentRunner((input) => (input.skill?.startsWith("review:") ? { output: "VERDICT: revise" } : { output: "draft" }))
+		const engine = new Engine({ store, runner, types: convergeTypes, config: makeConfig({ convergeAfter: 3, maxRedos: 4 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 100; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")
+			if (pending.some((o) => o.nodeId === leaf?.id)) break // escalated to the gate
+			for (const o of pending) await gateApprove(store, o)
+			if (!did && pending.length === 0) throw new Error("stuck")
+		}
+
+		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
+		const versions = await store.versionsFor(leaf.id)
+		expect(versions.length).toBe(4) // ground to the cap (never converged), then escalated
 	})
 })

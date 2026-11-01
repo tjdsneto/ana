@@ -35,6 +35,7 @@ export class Engine {
 	private realCalls = 0 // real (non-fake) subagent calls made this process — the spend-guard counter
 	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
 	private readonly globalRevisions = new Map<string, number>() // productionId → holistic-reopen passes used (per-process; v0 single worker)
+	private readonly nearPassStreak = new Map<string, number>() // nodeId → consecutive rounds a version passed all-but-one reviewer (convergence; per-process)
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -360,8 +361,28 @@ export class Engine {
 
 		const advisory = contract.advisoryReview === true
 		if (advisory || verdicts.every((v) => v === "pass")) {
+			this.nearPassStreak.delete(node.id)
 			await this.present(node, contract, version.id, root, log)
 			return
+		}
+
+		// Convergence: with 3+ reviewers a genuinely good deliverable can oscillate — each round one
+		// reviewer dissents on a different nit — and never get a unanimous pass. If a version passes
+		// all-but-one reviewer for `convergeAfter` CONSECUTIVE rounds, accept it rather than grind to
+		// the redo cap. A worse result (more than one dissent) resets the streak, so weak work (which
+		// never sustains an all-but-one pass) still never converges here — it escalates below.
+		const passCount = verdicts.filter((v) => v === "pass").length
+		if (verdicts.length >= 3 && passCount >= verdicts.length - 1) {
+			const streak = (this.nearPassStreak.get(node.id) ?? 0) + 1
+			this.nearPassStreak.set(node.id, streak)
+			if (streak >= this.config.convergeAfter) {
+				this.nearPassStreak.delete(node.id)
+				log.info("node.converge", { versionId: version.id, passCount, of: verdicts.length, streak })
+				await this.present(node, contract, version.id, root, log)
+				return
+			}
+		} else {
+			this.nearPassStreak.delete(node.id)
 		}
 
 		// a reviewer said revise — never shown to the user
