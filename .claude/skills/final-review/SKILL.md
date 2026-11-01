@@ -27,7 +27,7 @@ If the brief marks the video an explainer / case-study / walkthrough, judge it a
 
 ## Output contract
 
-One verdict line, then — only on revise — one `REOPEN` line per step to redo:
+Start with the verdict line and the `REOPEN` lines the engine parses, THEN a timecoded critique the dashboard shows on the final-review row (so Tiago sees your read of the finished video, not just a verdict). The engine only reads the `VERDICT:`/`REOPEN:` lines; everything after is for the human.
 
 ```
 VERDICT: pass
@@ -37,6 +37,27 @@ or
 VERDICT: revise
 REOPEN: moodboard — tone reads cold vs. the upbeat brief
 REOPEN: scene[3] — too much empty space; scale the UI/text up to fill the frame
+```
+
+### Then a timecoded critique (always, pass or revise)
+
+After the verdict/reopen lines, append a critique in this shape — per-dimension against `craft/CRAFT-BAR.md`, every claim with a timecode you actually watched and a confidence tag (`[seen]`/`[heard]`/`[inferred]`), worst issue first, ending in the single highest-leverage fix:
+
+```
+## Critique
+Dimensions (pass / weak / fail):
+- Hook & one idea — <score> — <one line> [t0.5s] [seen]
+- Structure & pacing — <score> — ... [seen]
+- Visual craft (focal dominance, no dead space/slideshow) — <score> — ... [seen]
+- Look (0–1 AI-slop tells; flat not gradient; sourced font) — <score> — ... [seen]
+- Sound (bed + no dead tail) — <score> — ... [heard|not-verifiable-from-frames]
+- CTA & close — <score> — ... [seen]
+
+Issues (worst first):
+1. [t12.0s] <what's wrong> — <the fix> [seen]
+2. ...
+
+TOP FIX: <the single highest-leverage change>
 ```
 
 - `REOPEN: <step> — <reason>` — `<step>` is the pipeline node to redo (`script`, `moodboard`, `storyboard`, `render`, `polish`). The engine reopens that node **and everything downstream of it** (reopen `moodboard` ⇒ storyboard, build, render, polish all rebuild), re-produces, and brings the result back to you.
