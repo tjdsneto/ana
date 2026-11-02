@@ -180,7 +180,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 	const fv = finalVideoOf(detail)
 	const head = (
 		<>
-			<h2>{detail.root.name} <StatusChip status={detail.root.status} />{isActive(detail.root.status) && <Spinner label="production running" />}</h2>
+			<h2>{detail.root.name} {awaitingFeedback(detail) ? <StatusChip status="awaiting feedback" /> : <><StatusChip status={detail.root.status} />{isActive(detail.root.status) && <Spinner label="production running" />}</>}</h2>
 			<div className="hmeta muted">
 				<span>started {fmtTime(detail.root.createdAt)}</span>
 				<span>· {detail.root.autonomyLever ?? "—"}</span>
@@ -195,7 +195,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 				<section className="hero">
 					<div className="hero-media">
 						<video className="hero-video" controls preload="metadata" src={videoUrlByVersion(fv.versionId)} />
-						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status !== "approved" ? " (production still running)" : ""}</span>
+						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status === "approved" ? "" : awaitingFeedback(detail) ? " (awaiting your feedback)" : " (production still running)"}</span>
 					</div>
 					<div className="hero-info">{head}</div>
 				</section>
@@ -782,6 +782,7 @@ function chipVariant(status: string): string {
 		case "review":
 		case "needs-work":
 		case "presentable":
+		case "awaiting feedback":
 			return "warn"
 		default:
 			return "muted"
@@ -803,6 +804,14 @@ function isActive(status: string): boolean {
 
 function isPending(status: string): boolean {
 	return PENDING_STATUSES.includes(status)
+}
+
+// A production that isn't finished yet but has gate items waiting (a present, a question/options, or an
+// unapproved render budget) is blocked on the human, not running. Surface that as its own state so the
+// header reads "awaiting feedback" instead of a misleading "in-progress" + spinner.
+function awaitingFeedback(detail: ProductionDetail): boolean {
+	if (["approved", "done", "failed", "denied"].includes(detail.root.status)) return false
+	return detail.inbox.length > 0 || (!!detail.budget && !detail.budget.approved)
 }
 
 // A spinning ring marking the one thing currently executing. Respects prefers-reduced-motion (the CSS
