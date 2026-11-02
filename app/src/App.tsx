@@ -775,6 +775,8 @@ function chipVariant(status: string): string {
 		case "revise":
 		case "failed":
 			return "danger"
+		case "cancelled":
+			return "muted"
 		case "in-progress":
 		case "producing":
 		case "queued-running":
@@ -810,7 +812,7 @@ function isPending(status: string): boolean {
 // unapproved render budget) is blocked on the human, not running. Surface that as its own state so the
 // header reads "awaiting feedback" instead of a misleading "in-progress" + spinner.
 function awaitingFeedback(detail: ProductionDetail): boolean {
-	if (["approved", "done", "failed", "denied"].includes(detail.root.status)) return false
+	if (["approved", "done", "failed", "denied", "cancelled"].includes(detail.root.status)) return false
 	return detail.inbox.length > 0 || (!!detail.budget && !detail.budget.approved)
 }
 
