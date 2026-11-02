@@ -105,6 +105,23 @@ describe("approveBudget", () => {
 	})
 })
 
+describe("gate ops are refused on a retired production", () => {
+	it("approve / submitFeedback / approveBudget all throw once the production root is cancelled", async () => {
+		const { production_id, node, version, output } = await presentSomething()
+		await store.updateNodeStatus(production_id, "cancelled") // the root node carries the production status
+
+		await expect(approve(store, { outputId: output.id })).rejects.toThrow(/cancelled/)
+		await expect(approve(store, { versionId: version.id })).rejects.toThrow(/cancelled/)
+		await expect(submitFeedback(store, { outputId: output.id, body: "redo" })).rejects.toThrow(/cancelled/)
+		await expect(submitFeedback(store, { productionId: production_id, body: "redo" })).rejects.toThrow(/cancelled/)
+		await expect(approveBudget(store, { productionId: production_id })).rejects.toThrow(/cancelled/)
+
+		// nothing was written: the present output is still unresolved, the child node untouched
+		expect((await store.getOutput(output.id))?.status).toBe("pending")
+		expect((await store.getNode(node.id))?.status).toBe("pending") // createChildNodes seeds it pending
+	})
+})
+
 describe("getDeliverable", () => {
 	it("returns the version + path, no inline content when there is no artifact", async () => {
 		const { version } = await presentSomething()

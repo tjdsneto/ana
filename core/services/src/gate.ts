@@ -4,10 +4,24 @@
 
 import type { Store } from "@core/shared"
 
+// Production statuses that retire the whole production — no gate write is accepted against them. The
+// production status is the root node's status. Mirrors the engine's claim-seam RETIRED_PRODUCTION:
+// a cancelled (human stop) or skipped/failed production is terminal, so approving/feeding back/funding
+// it is a no-op the engine would never act on. Reject loudly instead of writing dead state.
+const RETIRED_PRODUCTION = new Set(["cancelled", "skipped", "failed"])
+
+async function assertProductionActive(store: Store, productionId: string, op: string): Promise<void> {
+	const root = await store.getProduction(productionId)
+	if (root && RETIRED_PRODUCTION.has(root.status)) {
+		throw new Error(`${op}: production ${productionId} is ${root.status}; no gate action can be taken on it`)
+	}
+}
+
 export async function approve(store: Store, input: { outputId?: string; versionId?: string }): Promise<{ ok: true }> {
 	if (input.outputId) {
 		const out = await store.getOutput(input.outputId)
 		if (!out) throw new Error(`approve: chat_output ${input.outputId} not found`)
+		await assertProductionActive(store, out.productionId, "approve")
 		await store.recordInput({
 			productionId: out.productionId,
 			userId: out.userId ?? undefined,
@@ -26,6 +40,7 @@ export async function approve(store: Store, input: { outputId?: string; versionI
 		if (!version) throw new Error(`approve: version ${input.versionId} not found`)
 		const node = await store.getNode(version.nodeId)
 		if (!node) throw new Error(`approve: node ${version.nodeId} not found`)
+		await assertProductionActive(store, node.productionId, "approve")
 		await store.recordInput({ productionId: node.productionId, nodeId: node.id, versionId: version.id, kind: "approve" })
 		await store.updateVersion(version.id, { status: "approved" })
 		await store.updateNodeStatus(node.id, "approved")
@@ -41,6 +56,7 @@ export async function submitFeedback(
 	if (input.outputId) {
 		const out = await store.getOutput(input.outputId)
 		if (!out) throw new Error(`submit_feedback: chat_output ${input.outputId} not found`)
+		await assertProductionActive(store, out.productionId, "submit_feedback")
 		await store.recordInput({
 			productionId: out.productionId,
 			userId: out.userId ?? undefined,
@@ -56,6 +72,7 @@ export async function submitFeedback(
 		return { ok: true }
 	}
 	if (input.productionId) {
+		await assertProductionActive(store, input.productionId, "submit_feedback")
 		// unsolicited feedback (no responds_to) — the engine folds it into the next pass (spec 02)
 		await store.recordInput({ productionId: input.productionId, kind: "feedback", body: input.body })
 		return { ok: true }
@@ -64,6 +81,7 @@ export async function submitFeedback(
 }
 
 export async function approveBudget(store: Store, input: { productionId: string }): Promise<{ ok: true }> {
+	await assertProductionActive(store, input.productionId, "approve_budget")
 	await store.approveBudget(input.productionId)
 	return { ok: true }
 }
