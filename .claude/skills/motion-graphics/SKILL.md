@@ -26,6 +26,8 @@ Write a self-contained `.html` in the HyperFrames shape — a `#stage` root carr
 
 Composition length = the latest clip end. Keep the look on-brand (reuse the moodboard's palette/type); this clip composites onto the storyboard timeline like any other bit.
 
+**Local assets just work by relative path.** Reference images, video, fonts, etc. with a relative or absolute local path (`<img src="assets/icon.png">`, `url(fonts/brand.woff2)`); the render tool inlines them to data URIs before handing the HTML to the backend, so they load regardless of where the backend serves the file. Do NOT hand-inline them yourself. Remote URLs (CDN `<script>`, `https://…`) are left untouched.
+
 ## Render
 
 ```

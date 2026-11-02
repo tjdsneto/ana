@@ -1,0 +1,9 @@
+{
+	"name": "motion-graphics",
+	"private": true,
+	"type": "module",
+	"description": "motion-graphics render backends (HTML->video). hyperframes pinned + vendored so the render never fetches a package at runtime (npx).",
+	"dependencies": {
+		"hyperframes": "0.8.230"
+	}
+}

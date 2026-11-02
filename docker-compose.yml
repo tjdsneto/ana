@@ -144,10 +144,19 @@ services:
   # (root is hoisted; app/ keeps its own). Add a workspace's volume here if it ever grows one.
   # In the `tools` profile so a plain `docker compose up` never starts it.
   toolbox:
-    <<: *engine-image
+    # Same image as engine-worker (target: engine) so ./x IS the engine container — it has the baked
+    # chromium + ffmpeg + python3 + voice venvs the craft tools shell out to, not just node/npm. A plain
+    # `./x npm ci|test|build` still works; `./x node craft/tools/motion-graphics/index.mjs …` and
+    # `./x python3 craft/tools/image.py …` now render + generate here, keyed from .engine_env.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: engine
+    image: production-engine-claude:local
     working_dir: /work
     env_file:
       - .common_env
+      - .engine_env
     volumes:
       - .:/work
       - toolbox_node_modules:/work/node_modules

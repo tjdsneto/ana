@@ -30,6 +30,14 @@ SUBAGENT_ENGINE=fake
 # RENDER_FONT=                 # override the baked drawtext TTF
 # VOICE_MODEL=                 # override the baked piper .onnx voice
 
+# Image generation (the asset / moodboard lane — craft/tools/image.py). Default: stub (keyless SVG
+# placeholder, zero cost), matching the render/voice stub defaults. Keyed providers are BYO-key, never
+# baked: the adapter reads $OPENAI_API_KEY / $GEMINI_API_KEY (or an --api-key-file the skill passes).
+# IMAGE_PROVIDER=stub          # stub | openai | gemini | custom
+# IMAGE_MODEL=                 # override the provider default (openai: gpt-image-1; gemini: gemini-2.5-flash-image)
+# IMAGE_SIZE=1024x1024         # requested size WxH (openai honours it; gemini ignores it — put aspect in the prompt)
+# IMAGE_GEN_CMD=               # provider 'custom': a shell template, {prompt} {out} {model} {size} (local SD / Replicate / fal)
+
 # Claude subscription auth (the engine image bundles the Claude Code CLI). Generate once on the host
 # with `claude setup-token`, store in 1Password, inject here. NEVER set ANTHROPIC_API_KEY /
 # ANTHROPIC_AUTH_TOKEN — either silently outranks the OAuth token and bills the API.
