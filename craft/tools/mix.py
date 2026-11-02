@@ -88,8 +88,8 @@ def place(buf, x, at=0.0, gain_db=0.0):
 fx = np.zeros(L, np.float32)
 cues = [] if A.no_sfx or not (ROOT / "src/sfx-cues.json").exists() else json.loads((ROOT / "src/sfx-cues.json").read_text())
 if PLAN and PLAN.get("sfx") and not A.no_sfx:
-    cues = cues + [[c["cue"], c["at"]] for c in PLAN["sfx"] if c.get("cue")]  # explicit sfx cues from the audio plan
-for kind, at in cues:
+    cues = cues + [[c["cue"], c["at"], c.get("gain", -9)] for c in PLAN["sfx"] if c.get("cue")]  # explicit sfx cues from the audio plan
+for kind, at, *g in cues:
     if kind not in GEN:
         continue
     s = GEN[kind]().astype(np.float32)
@@ -99,7 +99,7 @@ for kind, at in cues:
         i = 0
     m = min(len(s), L - i)
     if m > 0:
-        fx[i:i + m] += s[:m]
+        fx[i:i + m] += s[:m] * (10 ** ((g[0] + 9) / 20) if g else 1.0)  # per-cue gain (dB) relative to the -9 dB sfx bus
 sf.write(ROOT / "media/sfx.wav", fx, SR)
 
 def duck_env(voice):
@@ -127,13 +127,13 @@ if PLAN:
     beds = [c for c in PLAN.get("music", []) if c.get("src")]
     if beds:
         tt = np.arange(L) / SR
-        fade = (np.clip(tt / 0.4, 0, 1) * np.clip((DUR - tt) / 1.6, 0, 1) ** 1.5)[:, None]
         duck = (10 ** (-7 * duck_env(vo) / 20))[:, None]                                  # 7 dB dip under the voice
         bedsum = np.zeros((L, 2), np.float32)
         for c in beds:
             b = np.zeros((L, 2), np.float32)
             place(b, decode(ROOT / c["src"], c.get("start", 0)), c.get("at", 0), c.get("gain", 0))
-            b *= fade
+            fi, fo = float(c.get("fade_in", 0.4)), float(c.get("fade_out", 1.6))        # per-clip fades (s); defaults = the old fixed ones
+            b *= (np.clip(tt / max(fi, 1e-3), 0, 1) * np.clip((DUR - tt) / max(fo, 1e-3), 0, 1) ** 1.5)[:, None]
             if c.get("duck", True):
                 b *= duck
             bedsum += b

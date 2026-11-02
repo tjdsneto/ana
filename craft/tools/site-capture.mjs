@@ -73,7 +73,10 @@ const cleanup = async ({ cap, js }) => {
 const measure = ({ marks, maxH, vh }) => {
 	const r = {}
 	for (const [k, s] of Object.entries(marks || {})) {
-		const e = document.querySelector(s)
+		// "text:<substring>" picks the first visible <a>/<button> containing that text (not just CSS)
+		const e = s.startsWith("text:")
+			? [...document.querySelectorAll("a,button")].find((x) => x.textContent.includes(s.slice(5)) && x.getBoundingClientRect().width)
+			: document.querySelector(s)
 		if (!e) continue
 		const b = e.getBoundingClientRect()
 		if (b.width) r[k] = [Math.round(b.x), Math.round(b.y + scrollY), Math.round(b.width), Math.round(b.height)]
@@ -119,9 +122,17 @@ for (const [name, p] of Object.entries(film.plates)) {
 			console.log(`  step skipped (${JSON.stringify(step)}): ${String(e).slice(0, 80)}`)
 		}
 	}
+	// Trigger lazy-loading: scroll the full page, wait for images, return to top.
+	await page.evaluate(async () => {
+		const h = document.documentElement.scrollHeight
+		for (let y = 0; y < h; y += 500) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 150)) }
+		document.querySelectorAll("img[loading=lazy]").forEach((i) => (i.loading = "eager"))
+		await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; setTimeout(r, 5000) })))
+		scrollTo(0, 0)
+	})
 	await page.evaluate(cleanup, { cap, js: spec.js || "" })
 	await page.waitForTimeout(300)
-	const rects = await page.evaluate(measure, { marks: film.marks, maxH: cap.maxHeight, vh })
+	const rects = await page.evaluate(measure, { marks: { ...(film.marks || {}), ...(spec.marks || {}) }, maxH: cap.maxHeight, vh })
 	await page.screenshot({ path: join(outDir, `assets/shots/${name}.jpg`), type: "jpeg", quality: 90, fullPage: true, clip: { x: 0, y: 0, width: cap.width, height: rects._h } })
 	out[name] = rects
 	console.log(`${name}: ${cap.width}x${rects._h}, marks: ${Object.keys(rects).filter((k) => k !== "_h").join(" ") || "(none)"}`)
