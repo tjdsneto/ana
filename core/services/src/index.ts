@@ -3,5 +3,6 @@
 // API calls the same functions. One place for the logic, two transports.
 
 export { requestProduction, requestVideo, type RequestProductionInput, type RequestVideoInput } from "./request.js"
+export { getCapabilities } from "./capabilities.js"
 export { getDeliverable, getStatus, inbox } from "./reads.js"
 export { approve, approveBudget, submitFeedback } from "./gate.js"

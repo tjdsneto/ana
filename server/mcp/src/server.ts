@@ -7,7 +7,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
-import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "@core/services"
+import { approve, approveBudget, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "@core/services"
 import { type Logger, NoopLogger, type Store } from "@core/shared"
 import { z } from "zod"
 
@@ -48,6 +48,15 @@ export function buildServer(store: Store, logger: Logger = new NoopLogger()): Mc
 			},
 		},
 		(a) => run("request_video", () => requestVideo(store, { brief: a.brief, sessionId: a.session_id, autonomyLever: a.autonomy_lever, actorKind: a.actor_kind })),
+	)
+
+	server.registerTool(
+		"get_capabilities",
+		{
+			description: "List what the engine can produce: the rootCapable capabilities (a full video-project, and standalone ones like scene / clip / card) with their intake params. Call this first to discover what can be requested and what each needs; then request_video (or a typed production) with those params.",
+			inputSchema: {},
+		},
+		() => run("get_capabilities", async () => getCapabilities()),
 	)
 
 	server.registerTool(
