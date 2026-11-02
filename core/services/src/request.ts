@@ -11,7 +11,13 @@ export interface RequestVideoInput {
 	actorKind?: ActorKind
 }
 
-export async function requestVideo(store: Store, input: RequestVideoInput): Promise<{ production_id: string; status: string }> {
+// A production is just a root node of some type. requestProduction roots it at any rootCapable type
+// (default "video-project"); requestVideo is the back-compat shim that always roots a video-project.
+export interface RequestProductionInput extends RequestVideoInput {
+	type?: string
+}
+
+export async function requestProduction(store: Store, input: RequestProductionInput): Promise<{ production_id: string; status: string }> {
 	const account = await store.defaultAccount()
 	const user = await store.defaultUser()
 	const root = await store.createProduction({
@@ -21,6 +27,11 @@ export async function requestVideo(store: Store, input: RequestVideoInput): Prom
 		sessionId: input.sessionId,
 		autonomyLever: input.autonomyLever ?? "medium",
 		actorKind: input.actorKind ?? "human",
+		type: input.type,
 	})
 	return { production_id: root.id, status: root.status }
+}
+
+export function requestVideo(store: Store, input: RequestVideoInput): Promise<{ production_id: string; status: string }> {
+	return requestProduction(store, input) // type omitted → defaults to "video-project"
 }

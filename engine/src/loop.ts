@@ -93,7 +93,19 @@ export class Engine {
 
 	private async startQueuedProductions(): Promise<boolean> {
 		const queued = (await this.store.listProductions()).filter((r) => r.status === "queued")
-		for (const root of queued) await this.expandNode(root)
+		for (const root of queued) {
+			// A production is a root node of ANY type, not only an expand video-project. Route it by kind:
+			// an expand root fans its checklist; a planner/leaf root (a standalone capability — a scene, a
+			// clip, a one-shot sfx) is dispatched directly, marked in-progress first (the claim a non-root
+			// node would get) so it isn't re-claimed this tick.
+			const contract = this.types.get(root.type)
+			if (contract.checklist && contract.checklist.length > 0) {
+				await this.expandNode(root)
+			} else {
+				await this.store.updateNodeStatus(root.id, "in-progress")
+				await this.dispatch(root)
+			}
+		}
 		return queued.length > 0
 	}
 

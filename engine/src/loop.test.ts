@@ -899,3 +899,20 @@ describe("file-leaf output contract (produces: file)", () => {
 		expect(readdirSync(scenesDir).sort()).toEqual(["01-Hook.mp4", "02-CTA.mp4"])
 	})
 })
+
+describe("root as capability — a production rooted at any type", () => {
+	// A production is just a root node of some type. Rooting at a leaf capability (e.g. a one-shot sfx)
+	// must run end to end: produce → review → approve → roll up, with no video-project wrapper.
+	it("roots at a non-video-project leaf type and runs it to approved", async () => {
+		const C: TypeContract[] = [{ type: "sfx", name: "SFX", produce: "a synthesized sound effect", reviews: [{ name: "quality", kind: "craft" }] }]
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		const root = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "a short whoosh", sessionId: "sess_1", autonomyLever: "medium", actorKind: "human", type: "sfx" })
+		expect(root.type).toBe("sfx") // the root type is honored, not hardcoded video-project
+		for (let guard = 0; guard < 50; guard++) {
+			await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved") // a leaf root rolls up to done
+	})
+})

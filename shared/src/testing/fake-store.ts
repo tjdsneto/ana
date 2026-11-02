@@ -92,7 +92,7 @@ export class FakeStore implements Store {
 			userId: input.userId,
 			productionId: id,
 			parentId: null,
-			type: "video-project",
+			type: input.type ?? "video-project",
 			name: input.brief.trim().slice(0, 60),
 			description: input.brief,
 			status: "queued",

@@ -85,7 +85,7 @@ export class PgStore implements Store {
 				userId: input.userId,
 				productionId: id, // the root's own id groups the tree
 				parentId: null,
-				type: "video-project",
+				type: input.type ?? "video-project",
 				name: deriveName(input.brief),
 				description: input.brief,
 				status: "queued",
