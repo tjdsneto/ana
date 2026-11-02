@@ -2,5 +2,6 @@
 	"type": "build-assets",
 	"name": "Build assets",
 	"skill": "build-assets",
-	"produce": "Produce the assets the scenes draw from: capture the real-UI plates (one plate-capture can yield several plates) and generate or specify the images, characters, or 3D assets the storyboard calls for. Output the asset set, not a scene."
+	"produce": "Produce the assets the scenes draw from: capture the real-UI plates (one plate-capture can yield several plates) and generate or specify the images, characters, or 3D assets the storyboard calls for. Output the asset set, not a scene.",
+	"reviews": [{ "name": "quality", "kind": "craft" }]
 }

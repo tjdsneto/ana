@@ -4,5 +4,8 @@
 	"produces": "file",
 	"skill": "assemble-scenes",
 	"collectArtifacts": { "type": "scene", "into": "scenes" },
-	"reviews": [{ "name": "consistency", "kind": "consistency" }]
+	"reviews": [
+		{ "name": "consistency", "kind": "consistency" },
+		{ "name": "audio", "kind": "audio", "skill": "review-render-audio" }
+	]
 }

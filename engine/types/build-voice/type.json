@@ -2,5 +2,6 @@
 	"type": "build-voice",
 	"name": "Build voice",
 	"skill": "voice-production",
-	"produce": "Produce the voiceover and its word timing (the shared timeline clock the scenes anchor to) for the whole video."
+	"produce": "Produce the voiceover and its word timing (the shared timeline clock the scenes anchor to) for the whole video.",
+	"reviews": [{ "name": "quality", "kind": "craft" }]
 }

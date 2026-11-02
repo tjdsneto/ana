@@ -2,5 +2,6 @@
 	"type": "build-soundtrack",
 	"name": "Build soundtrack",
 	"skill": "build-soundtrack",
-	"produce": "Produce the music track and declare the audio tracks (voice / music / sfx) the mix will sum. Output the soundtrack asset(s) + the audio plan, not a scene."
+	"produce": "Produce the music track and declare the audio tracks (voice / music / sfx) the mix will sum. Output the soundtrack asset(s) + the audio plan, not a scene.",
+	"reviews": [{ "name": "quality", "kind": "craft" }]
 }

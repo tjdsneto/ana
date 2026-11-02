@@ -342,6 +342,10 @@ describe("type registry", () => {
 		// assembly is its own rendered step (concatenates scene clips), not a monolithic render
 		expect(disk.get("assemble").produces).toBe("file")
 		expect(disk.get("assemble").skill).toBe("assemble-scenes")
+		// assemble carries the whole-film audio gate (relocated from the retired render node)
+		expect(disk.get("assemble").reviews?.some((r) => r.kind === "audio")).toBe(true)
+		// the build leaves are no longer ungated — each carries a quality gate
+		for (const t of ["build-assets", "build-voice", "build-soundtrack"]) expect((disk.get(t).reviews ?? []).length).toBeGreaterThan(0)
 		// a scene realizes its beat into a clip — a file-output leaf (authored render, or keyless spec)
 		expect(disk.get("scene").produces).toBe("file")
 		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
