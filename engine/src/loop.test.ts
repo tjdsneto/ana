@@ -1037,3 +1037,27 @@ describe("expand is idempotent — a re-routed checklist node does not duplicate
 		expect((await store.getProduction(root.id))!.status).toBe("in-progress") // re-expand leaves it producing
 	})
 })
+
+describe("the loop never claims work for a cancelled production", () => {
+	it("claimReadyNode skips a ready node whose production root is cancelled, even deep in the tree", async () => {
+		const root = await newProduction(store)
+		await store.updateNodeStatus(root.id, "in-progress")
+		// A mid node still in-progress, with a ready (pending, no-dep) grandchild under it. This is the
+		// case the parent-active readiness check does NOT catch: the shot's immediate parent (the scene)
+		// stays in-progress when only the root is cancelled, so without the production-root guard the deep
+		// shot would still be claimed.
+		const [scene] = await store.createChildNodes(root.id, [{ type: "scene", name: "Scene 1" }])
+		await store.updateNodeStatus(scene!.id, "in-progress")
+		const [shot] = await store.createChildNodes(scene!.id, [{ type: "shot", name: "Shot 1" }])
+
+		// Active production: the deep ready shot is claimable.
+		const claimed = await store.claimReadyNode()
+		expect(claimed?.id).toBe(shot!.id)
+		await store.updateNodeStatus(shot!.id, "pending") // undo the claim for the cancelled case
+
+		// Cancel the production. The scene is still in-progress, so only the production-root guard stops
+		// the shot being picked up.
+		await store.updateNodeStatus(root.id, "cancelled")
+		expect(await store.claimReadyNode()).toBeNull()
+	})
+})

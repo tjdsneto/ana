@@ -38,6 +38,11 @@ const { accounts, assets, budget, chatInput, chatOutput, interactions, nodes, re
 // node statuses that count as "the parent is still active" for readiness (engine refines in step 5)
 const ACTIVE_PARENT = new Set<NodeStatus>(["in-progress", "ready"])
 
+// Production root statuses that retire the whole production: no node under such a root is ever claimed,
+// even a deep pending node whose immediate parent is still in-progress. "cancelled" is a human stop;
+// "skipped"/"failed" are the loop's own terminal outcomes. (The production status lives on the root node.)
+const RETIRED_PRODUCTION = new Set<NodeStatus>(["cancelled", "skipped", "failed"])
+
 export class PgStore implements Store {
 	private readonly db: NodePgDatabase<typeof schema>
 
@@ -141,6 +146,10 @@ export class PgStore implements Store {
 				.for("update", { skipLocked: true })
 			for (const n of pending) {
 				const tree = await tx.select().from(nodes).where(eq(nodes.productionId, n.productionId))
+				// Never claim work for a retired production (cancelled/skipped/failed). The production status
+				// is the root node's status; if it is retired, skip every descendant at any depth.
+				const root = tree.find((r) => r.id === n.productionId)
+				if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
 				if (isReady(n, tree)) {
 					await tx.update(nodes).set({ status: "in-progress", updatedAt: this.clock.now() }).where(eq(nodes.id, n.id))
 					return { ...n, status: "in-progress" }

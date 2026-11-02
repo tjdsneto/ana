@@ -132,6 +132,10 @@ export class FakeStore implements Store {
 	async claimReadyNode(): Promise<Node | null> {
 		for (const n of [...this.nodes.values()].sort((a, b) => a.position - b.position)) {
 			if (n.status !== "pending") continue
+			// Never claim work for a retired production (cancelled/skipped/failed). The production status
+			// is the root node's status; if it is retired, skip every descendant at any depth.
+			const root = this.nodes.get(n.productionId)
+			if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
 			const tree = await this.nodesFor(n.productionId)
 			if (isReady(n, tree)) {
 				const claimed = { ...n, status: "in-progress" as NodeStatus, updatedAt: this.clock.now() }
@@ -329,6 +333,10 @@ export class FakeStore implements Store {
 		return this.interactions.filter((i) => i.productionId === productionId)
 	}
 }
+
+// Production root statuses that retire the whole production — no node under such a root is claimed.
+// Mirrors PgStore's RETIRED_PRODUCTION (cancelled = human stop; skipped/failed = loop terminals).
+const RETIRED_PRODUCTION = new Set<NodeStatus>(["cancelled", "skipped", "failed"])
 
 function isReady(node: Node, tree: Node[]): boolean {
 	if (node.status !== "pending") return false

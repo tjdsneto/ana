@@ -29,6 +29,7 @@ export type NodeStatus =
 	| "approved"
 	| "skipped"
 	| "failed"
+	| "cancelled" // production root only: a human stopped the production; the loop claims no node under it
 
 export type ProductionStatus = "queued" | "producing" | "review" | "done"
 
