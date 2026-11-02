@@ -193,11 +193,11 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 		<>
 			{fv ? (
 				<section className="hero">
+					<div className="hero-info">{head}</div>
 					<div className="hero-media">
 						<video className="hero-video" controls preload="metadata" src={videoUrlByVersion(fv.versionId)} />
 						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status === "approved" ? "" : detail.root.status === "cancelled" ? " (production cancelled)" : awaitingFeedback(detail) ? " (awaiting your feedback)" : " (production still running)"}</span>
 					</div>
-					<div className="hero-info">{head}</div>
 				</section>
 			) : (
 				<div className="phead">{head}</div>

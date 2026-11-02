@@ -341,12 +341,11 @@ code {
 	margin-top: 0;
 }
 
-/* ---- final-cut hero: the finished video, surfaced at the top ---- */
+/* ---- final-cut hero: title on top, the finished video below ---- */
 .hero {
-	display: grid;
-	grid-template-columns: minmax(0, 560px) 1fr;
-	gap: 22px;
-	align-items: center;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
 	background: var(--surface);
 	border: 1px solid var(--line);
 	border-radius: 14px;
@@ -359,6 +358,8 @@ code {
 	flex-direction: column;
 	gap: 7px;
 	min-width: 0;
+	max-width: 560px; /* keep the preview a comfortable size now that it sits full-width under the title */
+	width: 100%;
 }
 
 .hero-video {
@@ -380,12 +381,6 @@ code {
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
-}
-
-@media (max-width: 820px) {
-	.hero {
-		grid-template-columns: 1fr;
-	}
 }
 
 .stat {
