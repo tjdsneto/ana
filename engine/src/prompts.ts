@@ -6,6 +6,7 @@ import type { ReviewSpec, TypeContract } from "./typereg.js"
 export interface UpstreamArtifact {
 	type: string
 	content: string
+	artifactPath?: string // the file this upstream wrote (produces:"file"); a dependent's work dir stages it in by basename, so the skill reads the real file (not the producer's stdout). Absent for a text producer.
 }
 
 export interface ProduceContext {

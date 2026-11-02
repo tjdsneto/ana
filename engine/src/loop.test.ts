@@ -103,6 +103,48 @@ describe("happy path — produce → present → approve, end to end", () => {
 	})
 })
 
+describe("boardDir file producer — the engine captures the written file, not the producer's prose (4b regression)", () => {
+	it("records <board>/<output> as the artifact when the skill writes the file and returns prose", async () => {
+		// The 18bc362 failure: assemble-board was a TEXT producer, so the engine recorded the subagent's
+		// chat reply as the artifact while the real structured film.json it wrote went uncaptured — and a
+		// downstream render then got the prose and refused. produces:"file" + output must capture the FILE.
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "board", type: "assemble-board", deps: [] }] },
+			{ type: "assemble-board", name: "Assemble board", produces: "file", output: "film.json", boardDir: true, skill: "assemble-board" },
+		]
+		const t = TypeRegistry.fromContracts(C)
+		const PROSE = "I've assembled film.json and saved it to the board directory. I didn't render it."
+		const runner: SubagentRunner = {
+			engine: "fake",
+			async run(input: SubagentInput): Promise<SubagentResult> {
+				// Mirror the assemble-board skill: write the structured film.json into the shared board dir,
+				// reply with prose only. The engine must capture the file, never this stdout.
+				const m = /Shared board dir:\s*(\S+)/.exec(input.prompt)
+				if (m?.[1]) {
+					mkdirSync(m[1], { recursive: true })
+					writeFileSync(join(m[1], "film.json"), JSON.stringify({ script: ["one line"], plates: {}, camera: [] }), "utf8")
+				}
+				return { output: PROSE, sessionId: "s1" }
+			},
+		}
+		const engine = new Engine({ store, runner, types: t, config: makeConfig() })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 50; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			for (const o of pending) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && pending.length === 0) break
+		}
+		const board = (await store.nodesFor(root.id)).find((n) => n.type === "assemble-board")!
+		const v = await store.latestVersion(board.id)
+		expect(v?.artifactPath?.endsWith("/board/film.json")).toBe(true) // the FILE, in the board dir
+		const captured = readFileSync(v!.artifactPath!, "utf8")
+		expect(captured).not.toContain("I've assembled") // never the producer's prose
+		expect(JSON.parse(captured).script).toEqual(["one line"]) // the structured spec
+	})
+})
+
 describe("internal review fail → redo cap → escalate (F3)", () => {
 	it("redoes up to maxRedos then presents with a caveat, never spinning", async () => {
 		// every reviewer says revise; producers still return drafts

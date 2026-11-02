@@ -11,17 +11,24 @@ const tmp = () => mkdtempSync(join(tmpdir(), "rl-"))
 const c = (type: string): TypeContract => ({ type, produces: "file" })
 
 describe("buildRenderedPrompt", () => {
-	it("render + assemble keep the film.json wording (unchanged behavior)", () => {
+	it("is domain-blind: the work-dir phrase, no film.json/storyboard literal", () => {
 		for (const t of ["render", "assemble"]) {
 			const p = buildRenderedPrompt(c(t), { brief: "b", workDir: "/wd" })
 			expect(p).toContain("Work dir: /wd")
-			expect(p).toContain("film.json")
+			expect(p).toContain("staged")
+			expect(p).not.toContain("film.json")
+			expect(p).not.toContain("storyboard")
 		}
 	})
-	it("an edit/compose leaf gets the staged-assets wording, not film.json", () => {
+	it("names the shared board dir only when one is passed", () => {
+		const withBoard = buildRenderedPrompt(c("assemble-board"), { brief: "b", workDir: "/wd", boardDir: "/wd/../board" })
+		expect(withBoard).toContain("Shared board dir: /wd/../board")
+		const without = buildRenderedPrompt(c("render"), { brief: "b", workDir: "/wd" })
+		expect(without).not.toContain("Shared board dir")
+	})
+	it("an edit/compose leaf gets the staged-assets wording", () => {
 		const p = buildRenderedPrompt(c("clip"), { brief: "b", workDir: "/wd", assets: ["take.mp4", "vo.wav"] })
 		expect(p).toContain("Work dir: /wd") // the phrase the worker/fake reads
-		expect(p).not.toContain("film.json")
 		expect(p).toContain("take.mp4, vo.wav")
 	})
 })

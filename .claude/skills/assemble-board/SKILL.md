@@ -9,10 +9,10 @@ You assemble the finished board's `film.json` from the **approved cards** (one p
 
 ## Inputs
 
-- The approved **cards** (each a JSON object `{id, vo_line, camera, plate_html}`) — handed to you as the storyboard's fanned-out children (upstream).
+- The approved **cards** (each a JSON object `{id, vo_line, camera, plate_html}`) — **staged as files in the work dir**, one file per card. The prompt lists them under "Upstream artifacts staged in the work dir"; read each card file from there (the cards are no longer inlined in the prompt).
 - The **script** — the VO lines, in order.
 - The **moodboard** — the voice (id/speed), the sourced font, the look.
-- The **board directory** — given in the prompt under "Board files directory" (`<…>/board`). Write the shared files there.
+- The **board directory** — given in the prompt under "Shared board dir" (`<…>/board`). Write the shared files AND your output `film.json` there.
 
 ## Steps
 
@@ -24,7 +24,7 @@ You assemble the finished board's `film.json` from the **approved cards** (one p
    - `camera`: one beat per card, `{plate:"<id>", focus, zoom, at:"<word>"}`, from each card's `camera`, in playback order.
    - `title_card` / `outro` / `tail` per the storyboard plan.
    - Use **absolute** plate paths so the render's site-capture resolves them from any work dir.
-3. Output the `film.json` (valid JSON) as your artifact — the render consumes it.
+3. **Write** the composed `film.json` (valid JSON) to the FILE `<boardDir>/film.json`. That file IS your artifact — the engine captures it directly (not your chat reply), and the render consumes it. Write it to the file; do not only print it.
 
 ## Rules
 
