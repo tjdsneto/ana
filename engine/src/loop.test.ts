@@ -916,6 +916,30 @@ describe("root as capability — a production rooted at any type", () => {
 		expect((await store.getProduction(root.id))?.status).toBe("approved") // a leaf root rolls up to done
 	})
 
+	it("holds the production and asks when a required intake param is missing; proceeds once provided", async () => {
+		const C: TypeContract[] = [{ type: "cap", name: "Capability", produce: "do the thing", rootCapable: true, inputs: [{ name: "topic", required: true, description: "the subject" }], reviews: [{ name: "quality", kind: "craft" }] }]
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+
+		// A — required param absent: the engine asks and HOLDS (never starts producing)
+		const a = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "", sessionId: "s", autonomyLever: "medium", actorKind: "human", type: "cap" })
+		await engine.tick()
+		const qs = (await store.pendingOutputs(a.id)).filter((o) => o.type === "question")
+		expect(qs).toHaveLength(1)
+		expect(qs[0]?.prompt).toContain("topic")
+		expect((await store.getProduction(a.id))?.status).toBe("queued") // held, not producing
+		await engine.tick() // a re-tick must not duplicate the question
+		expect((await store.pendingOutputs(a.id)).filter((o) => o.type === "question")).toHaveLength(1)
+
+		// B — param provided: runs to approved
+		const b = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "", sessionId: "s", autonomyLever: "medium", actorKind: "human", type: "cap", params: { topic: "launch" } })
+		for (let guard = 0; guard < 50; guard++) {
+			await engine.tick()
+			for (const o of await store.pendingOutputs(b.id)) await gateApprove(store, o)
+			if ((await store.getProduction(b.id))?.status === "approved") break
+		}
+		expect((await store.getProduction(b.id))?.status).toBe("approved")
+	})
+
 	it("flags exactly the root-capable capabilities, not the internal plumbing", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		for (const t of ["video-project", "scene", "clip", "card"]) {

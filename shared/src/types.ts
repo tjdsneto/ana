@@ -97,6 +97,7 @@ export interface NewProduction {
 	autonomyLever: AutonomyLever
 	actorKind: ActorKind
 	type?: string // the root node's type — any rootCapable type, not only "video-project" (the default). A production is just a root node of some type; a leaf root produces one artifact and rolls up.
+	params?: Record<string, unknown> // the intake params for the root type (resolved against its `inputs`); the engine asks the user for a missing required one before producing.
 }
 
 export interface NewChildNode {

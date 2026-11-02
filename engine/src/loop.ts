@@ -94,11 +94,30 @@ export class Engine {
 	private async startQueuedProductions(): Promise<boolean> {
 		const queued = (await this.store.listProductions()).filter((r) => r.status === "queued")
 		for (const root of queued) {
+			const contract = this.types.get(root.type)
+			// Intake resolution: a required input with no provided value AND no default must be asked
+			// before the production starts. Emit a question (once) and HOLD — don't produce on incomplete
+			// inputs. The production resumes once the params are supplied (then `missing` is empty).
+			const missing = (contract.inputs ?? []).filter(
+				(i) => i.required && i.default === undefined && (root.params == null || root.params[i.name] === undefined),
+			)
+			if (missing.length > 0) {
+				const pending = await this.store.pendingOutputs(root.id)
+				if (!pending.some((o) => o.type === "question")) {
+					await this.store.emitOutput({
+						productionId: root.id,
+						accountId: root.accountId ?? undefined,
+						userId: root.userId ?? undefined,
+						type: "question",
+						prompt: `To start this ${contract.name ?? root.type}, provide: ${missing.map((m) => (m.description ? `${m.name} (${m.description})` : m.name)).join("; ")}.`,
+					})
+				}
+				continue // held until the required inputs are provided
+			}
 			// A production is a root node of ANY type, not only an expand video-project. Route it by kind:
 			// an expand root fans its checklist; a planner/leaf root (a standalone capability — a scene, a
 			// clip, a one-shot sfx) is dispatched directly, marked in-progress first (the claim a non-root
 			// node would get) so it isn't re-claimed this tick.
-			const contract = this.types.get(root.type)
 			if (contract.checklist && contract.checklist.length > 0) {
 				await this.expandNode(root)
 			} else {

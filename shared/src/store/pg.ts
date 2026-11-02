@@ -94,6 +94,7 @@ export class PgStore implements Store {
 				sessionId: input.sessionId,
 				autonomyLever: input.autonomyLever,
 				actorKind: input.actorKind,
+				params: input.params ?? null,
 				createdAt: now,
 				updatedAt: now,
 			})
