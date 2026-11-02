@@ -113,7 +113,10 @@ async function json<T>(res: Response): Promise<T> {
 	return res.json() as Promise<T>
 }
 
-export async function getProductions(): Promise<Node[]> {
+// A production list row + whether it's blocked on the human, so the sidebar can badge it.
+export type ProductionListItem = Node & { awaitingFeedback: boolean }
+
+export async function getProductions(): Promise<ProductionListItem[]> {
 	return json(await fetch("/api/productions"))
 }
 

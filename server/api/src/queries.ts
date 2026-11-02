@@ -32,8 +32,22 @@ export interface ProductionDetail {
 	usage: UsageSummary
 }
 
-export async function listProductions(store: Store): Promise<Node[]> {
-	return store.listProductions()
+// A production in the dashboard list, plus whether it is blocked on the human — a pending gate item or
+// an unapproved render budget — so the sidebar can badge "awaiting feedback" without fetching each
+// production's full detail. Terminal productions (incl. cancelled) are never awaiting.
+export type ProductionListItem = Node & { awaitingFeedback: boolean }
+
+const TERMINAL_PRODUCTION = new Set(["approved", "done", "failed", "denied", "cancelled"])
+
+export async function listProductions(store: Store): Promise<ProductionListItem[]> {
+	const roots = await store.listProductions()
+	return Promise.all(
+		roots.map(async (root) => {
+			if (TERMINAL_PRODUCTION.has(root.status)) return { ...root, awaitingFeedback: false }
+			const [inbox, budget] = await Promise.all([store.pendingOutputs(root.id), store.getBudget(root.id)])
+			return { ...root, awaitingFeedback: inbox.length > 0 || (!!budget && !budget.approved) }
+		}),
+	)
 }
 
 export async function productionDetail(store: Store, productionId: string): Promise<ProductionDetail> {

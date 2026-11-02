@@ -19,9 +19,9 @@ import {
 	videoUrlByVersion,
 	type ChatOutput,
 	type Interaction,
-	type Node,
 	type NodeView,
 	type ProductionDetail,
+	type ProductionListItem,
 	type Review,
 	sendFeedback,
 	type UsageSummary,
@@ -35,7 +35,7 @@ type Tab = "productions" | "videos"
 
 export function App() {
 	const [tab, setTab] = useState<Tab>("productions")
-	const [productions, setProductions] = useState<Node[]>([])
+	const [productions, setProductions] = useState<ProductionListItem[]>([])
 	// The selected production lives in the URL (?p=<id>) so a view is shareable and survives reload.
 	const [selectedId, setSelectedId] = useState<string | null>(() => productionIdFromUrl())
 	const [detail, setDetail] = useState<ProductionDetail | null>(null)
@@ -129,8 +129,8 @@ export function App() {
 							<button key={p.id} className={`prod ${p.id === selectedId ? "sel" : ""} ${isActive(p.status) ? "active" : ""} ${isPending(p.status) ? "pending" : ""}`} onClick={() => selectProduction(p.id)}>
 								<div className="ptitle">{p.name}</div>
 								<div className="pmeta">
-									<StatusChip status={p.status} />
-									{isActive(p.status) && <Spinner label="running" />}
+									{p.awaitingFeedback ? <StatusChip status="awaiting feedback" /> : <StatusChip status={p.status} />}
+									{isActive(p.status) && !p.awaitingFeedback && <Spinner label="running" />}
 									<span className="muted">{fmtTime(p.createdAt)}</span>
 								</div>
 							</button>
