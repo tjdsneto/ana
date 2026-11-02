@@ -1,7 +1,7 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
 // tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -852,5 +852,46 @@ describe("file-leaf output contract (produces: file)", () => {
 		const v = await store.latestVersion(spec.id)
 		expect(v?.artifactPath?.endsWith(".mp4")).toBeFalsy() // no file was produced
 		expect(readFileSync(v!.artifactPath!, "utf8")).toContain("generate-scene") // the skill's text recorded
+	})
+
+	// The flow-closing wiring: assemble composes the production's approved scene clips. The engine
+	// stages each approved scene's file-artifact into the assemble work dir, in order, so the skill
+	// stitches them. Scenes render via the render-film fake (writes an .mp4); assemble collects them.
+	it("stages each approved scene's clip into the assemble work dir in storyboard order", async () => {
+		const C: TypeContract[] = [
+			{
+				type: "video-project",
+				name: "VP",
+				checklist: [
+					{ id: "storyboard", type: "storyboard", deps: [] },
+					{ id: "build", type: "build", deps: ["storyboard"] },
+					{ id: "assemble", type: "assemble", deps: ["build"] },
+				],
+			},
+			{ type: "storyboard", name: "Storyboard", produce: "board" },
+			{ type: "build", name: "Build", checklist: [{ id: "scenes", type: "build-scenes", deps: [] }] },
+			{ type: "build-scenes", name: "Build scenes", planner: true, childType: "scene", skill: "plan-scenes", produce: "plan" },
+			// scenes render to a real clip (render-film fake writes an .mp4) so assemble has files to collect
+			{ type: "scene", name: "Scene", produces: "file", skill: "render-film", reviews: [{ name: "craft", kind: "craft" }] },
+			{ type: "assemble", name: "Assemble", produces: "file", skill: "assemble-scenes", collectArtifacts: { type: "scene", into: "scenes" } },
+		]
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") return { output: '```json\n[{"name":"Hook","brief":"h","method":"authored-continuous"},{"name":"CTA","brief":"c","method":"authored-composite"}]\n```' }
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `[stub ${input.skill}] draft` }
+		})
+		const config = makeConfig()
+		const engine = new Engine({ store, runner, types: TypeRegistry.fromContracts(C), config })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 300; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const assemble = (await store.nodesFor(root.id)).find((n) => n.type === "assemble")!
+		const scenesDir = join(config.artifactsDir, root.id, `assemble-${assemble.id}-v1`, "scenes")
+		expect(readdirSync(scenesDir).sort()).toEqual(["01-Hook.mp4", "02-CTA.mp4"])
 	})
 })

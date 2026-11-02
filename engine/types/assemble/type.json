@@ -3,5 +3,6 @@
 	"name": "Assemble",
 	"produces": "file",
 	"skill": "assemble-scenes",
+	"collectArtifacts": { "type": "scene", "into": "scenes" },
 	"reviews": [{ "name": "consistency", "kind": "consistency" }]
 }

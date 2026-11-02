@@ -9,7 +9,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
-import { basename, dirname, join } from "node:path"
+import { basename, dirname, extname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
@@ -294,12 +294,27 @@ export class Engine {
 			// not by engine code. Stage the upstream artifacts into a work dir, dispatch the worker from
 			// craftRoot (its .claude/skills), and capture the file it writes. The engine owns no renderer —
 			// the craft skills do. Generic: no video knowledge here (the type names its skill + staging).
-			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-v${n}`)
+			// Include node.id: sibling nodes of the same type (fanned-out scenes) must not share a work dir.
+			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-${node.id}-v${n}`)
 			mkdirSync(workDir, { recursive: true })
 			stageRenderInputs(workDir, upstream)
 			// Also stage any caller-provided assets (b-roll / audio / logo …) so an edit/compose leaf can
 			// use real footage. Harmless for others — extra staged files are simply unused.
 			const stagedAssets = stageAssets(workDir, await this.store.assetsFor(node.productionId))
+			// A compositor leaf (e.g. assemble) stages the production's approved <type> artifacts (e.g. the
+			// scene clips) into <workDir>/<into>/NN-<name>.<ext>, in order, so its skill stitches them.
+			if (contract.collectArtifacts) {
+				const { type: ct, into } = contract.collectArtifacts
+				const sources = (await this.store.nodesFor(node.productionId))
+					.filter((x) => x.type === ct && x.status === "approved")
+					.sort((a, b) => a.position - b.position)
+				const items: { name: string; path: string }[] = []
+				for (const sn of sources) {
+					const sv = await this.store.latestVersion(sn.id)
+					if (sv?.artifactPath) items.push({ name: sn.name ?? sn.id, path: sv.artifactPath })
+				}
+				stageCollectedArtifacts(workDir, into, items)
+			}
 			producerPrompt = buildRenderedPrompt(contract, { brief: root.description ?? "", workDir, feedback, assets: stagedAssets })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
@@ -862,6 +877,24 @@ export function stageAssets(workDir: string, assets: readonly { storagePath: str
 			// skip; the producer surfaces a genuinely-needed input that is absent
 		}
 	}
+	return staged
+}
+
+// Copy a compositor leaf's collected artifacts into <workDir>/<into>/NN-<name>.<ext>, in the order
+// given, so its skill stitches them (e.g. assemble composing the scene clips). Returns the staged
+// relative paths. Missing source files are skipped (a keyless scene that produced a spec, not a clip),
+// so the skill sees exactly the clips that exist and reports the rest as not-yet-generated.
+export function stageCollectedArtifacts(workDir: string, into: string, items: readonly { name: string; path: string }[]): string[] {
+	const dir = join(workDir, into)
+	mkdirSync(dir, { recursive: true })
+	const staged: string[] = []
+	items.forEach((it, i) => {
+		if (!existsSync(it.path)) return
+		const ext = extname(it.path) || ".bin"
+		const rel = `${into}/${String(i + 1).padStart(2, "0")}-${it.name}${ext}`
+		copyFileSync(it.path, join(workDir, rel))
+		staged.push(rel)
+	})
 	return staged
 }
 

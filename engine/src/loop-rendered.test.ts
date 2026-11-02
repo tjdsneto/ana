@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { buildRenderedPrompt, newestMedia, stageAssets } from "./loop.js"
+import { buildRenderedPrompt, newestMedia, stageAssets, stageCollectedArtifacts } from "./loop.js"
 import type { TypeContract } from "./typereg.js"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "rl-"))
@@ -57,5 +57,23 @@ describe("stageAssets", () => {
 		const wd = tmp()
 		expect(stageAssets(wd, [{ storagePath: "/does/not/exist.mp4" }])).toEqual([])
 		expect(readdirSync(wd)).toHaveLength(0)
+	})
+})
+
+describe("stageCollectedArtifacts", () => {
+	it("copies items into <into>/NN-<name>.<ext> in order, skipping missing sources", () => {
+		const src = tmp()
+		const a = join(src, "hook.mp4")
+		writeFileSync(a, "x")
+		const b = join(src, "cta.mp4")
+		writeFileSync(b, "x")
+		const wd = tmp()
+		const staged = stageCollectedArtifacts(wd, "scenes", [
+			{ name: "hook", path: a },
+			{ name: "cta", path: b },
+			{ name: "ghost", path: join(src, "missing.mp4") }, // keyless scene: no clip → skipped
+		])
+		expect(staged).toEqual(["scenes/01-hook.mp4", "scenes/02-cta.mp4"])
+		expect(readdirSync(join(wd, "scenes")).sort()).toEqual(["01-hook.mp4", "02-cta.mp4"])
 	})
 })

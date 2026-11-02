@@ -36,6 +36,7 @@ export interface TypeContract {
 	exposeChildrenToDependents?: boolean // a fanned-out node (planner) whose approved children's artifacts are handed to nodes that depend on it — so a selector/judge sees the produced units, not just the plan. Opt-in: off by default, so a planner like `build` is unaffected.
 	emitsBoard?: boolean // the producer renders a visual board (storyboard): the engine passes a boardOut path; the producer saves the board sheet there so the dashboard can show it per version.
 	boardDir?: boolean // the producer writes the shared board files (plates/, fonts/): the engine passes a stable <prod>/board dir so assemble can materialize plate files + a shared font and reference them by absolute path from film.json.
+	collectArtifacts?: { type: string; into: string } // a file-leaf that composes the production's approved <type> nodes (e.g. assemble composes scenes): the engine copies each approved node-of-that-type's file-artifact into <workDir>/<into>/NN-<name>.<ext>, ordered by position, so the skill stitches them. Generic: the engine names no domain type; the type.json names which.
 }
 
 export class TypeRegistry {
