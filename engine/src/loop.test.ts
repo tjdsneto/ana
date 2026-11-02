@@ -915,4 +915,15 @@ describe("root as capability — a production rooted at any type", () => {
 		}
 		expect((await store.getProduction(root.id))?.status).toBe("approved") // a leaf root rolls up to done
 	})
+
+	it("flags exactly the root-capable capabilities, not the internal plumbing", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		for (const t of ["video-project", "scene", "clip", "card"]) {
+			expect(disk.get(t).rootCapable).toBe(true)
+			expect((disk.get(t).inputs ?? []).some((i) => i.required)).toBe(true) // each declares at least one required param
+		}
+		for (const t of ["briefing", "moodboard", "storyboard", "build", "build-scenes", "assemble", "polish", "final-review"]) {
+			expect(disk.get(t).rootCapable ?? false).toBe(false) // plumbing is never offerable as a standalone root
+		}
+	})
 })

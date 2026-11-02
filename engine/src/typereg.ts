@@ -19,9 +19,18 @@ export interface ReviewSpec {
 	skill?: string // reviewer skill that owns this axis's per-step rubric; omitted → generic kind lens (prompts.ts)
 }
 
+export interface InputSpec {
+	name: string // the param key
+	required?: boolean // a hard requirement: if absent and no default, intake asks the user (R3) rather than guessing
+	default?: unknown // smart default used when the param is absent
+	description?: string // what it is — shown by the MCP capability discovery (R4)
+}
+
 export interface TypeContract {
 	type: string
 	name?: string // human label for the node
+	rootCapable?: boolean // offerable as a standalone production root (a capability a caller can ask for directly). Off by default, so internal plumbing (briefing, moodboard, build, …) is never exposed as a root. See InputSpec + requestProduction.
+	inputs?: InputSpec[] // the intake param schema for a root-capable type: what a caller passes when rooting a production here. Resolution: passed value → default → (if required and absent) ask the user.
 	checklist?: ChecklistEntry[] // static sub-project (expand)
 	planner?: boolean // dynamic sub-project (plan) — v0-flat: not exercised
 	childType?: string

@@ -1,6 +1,8 @@
 {
 	"type": "clip",
 	"name": "Clip",
+	"rootCapable": true,
+	"inputs": [{ "name": "brief", "required": true, "description": "What piece to cut from the provided footage asset — the wanted span/crop and why." }],
 	"produces": "file",
 	"skill": "edit-footage",
 	"reviews": [

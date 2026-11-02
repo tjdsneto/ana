@@ -1,6 +1,8 @@
 {
 	"type": "video-project",
 	"name": "Video project",
+	"rootCapable": true,
+	"inputs": [{ "name": "brief", "required": true, "description": "What the video is about — goal, audience, tone, any must-include messages." }],
 	"checklist": [
 		{ "id": "briefing", "type": "briefing", "deps": [] },
 		{ "id": "research", "type": "research", "deps": ["briefing"] },

@@ -1,6 +1,8 @@
 {
 	"type": "card",
 	"name": "Card",
+	"rootCapable": true,
+	"inputs": [{ "name": "brief", "required": true, "description": "The one card/beat to compose — its VO line, focal element, on-screen text treatment, ground/colour." }],
 	"emitsBoard": true,
 	"skill": "build-card",
 	"produce": "Produce THIS one card from its spec: write its plate HTML file (plates/<id>.html) and its camera params, per the moodboard + the craft bar. Not the whole board — just this beat's card. A reopen re-does only this card; its siblings are untouched.",

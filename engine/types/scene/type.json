@@ -1,6 +1,11 @@
 {
 	"type": "scene",
 	"name": "Scene",
+	"rootCapable": true,
+	"inputs": [
+		{ "name": "brief", "required": true, "description": "The one scene to make — subject, spoken line(s), visual direction, duration." },
+		{ "name": "method", "required": false, "default": "authored-continuous", "description": "Realization method: authored-composite / authored-continuous / whole-clip-generative / edit-footage / motion-graphics." }
+	],
 	"skill": "build-scene",
 	"produces": "file",
 	"produce": "Produce this one scene from its spec, consistent with the storyboard's visual direction. Realize it by the spec's method (authored-composite / authored-continuous / whole-clip-generative / edit-footage / motion-graphics) — render, generate, cut, or animate the clip for exactly this scene, not the whole video.",
