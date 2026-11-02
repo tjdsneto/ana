@@ -195,7 +195,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 				<section className="hero">
 					<div className="hero-media">
 						<video className="hero-video" controls preload="metadata" src={videoUrlByVersion(fv.versionId)} />
-						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status === "approved" ? "" : awaitingFeedback(detail) ? " (awaiting your feedback)" : " (production still running)"}</span>
+						<span className="hero-cap">Final cut · {titleCase(fv.nodeType)} v{fv.n} · {fv.status}{detail.root.status === "approved" ? "" : detail.root.status === "cancelled" ? " (production cancelled)" : awaitingFeedback(detail) ? " (awaiting your feedback)" : " (production still running)"}</span>
 					</div>
 					<div className="hero-info">{head}</div>
 				</section>
@@ -205,7 +205,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 			<div className="phead">
 				<UsageStrip usage={detail.usage} />
 			</div>
-			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} />
+			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} cancelled={detail.root.status === "cancelled"} />
 			<div className="stages">
 				{stages.length === 0 && <p className="muted pad">No stages yet — the worker hasn't expanded this production.</p>}
 				{stages.map((nv) => (
@@ -718,35 +718,38 @@ function Gallery({ videos }: { videos: VideoFile[] }) {
 	)
 }
 
-function Gate({ inbox, productionId, budget, onAction }: { inbox: ChatOutput[]; productionId: string; budget: ProductionDetail["budget"]; onAction: () => void }) {
+function Gate({ inbox, productionId, budget, onAction, cancelled }: { inbox: ChatOutput[]; productionId: string; budget: ProductionDetail["budget"]; onAction: () => void; cancelled?: boolean }) {
 	const act = async (fn: () => Promise<void>) => {
 		await fn()
 		onAction()
 	}
 	if (inbox.length === 0 && !(budget && !budget.approved)) return null
+	// A cancelled production is terminal: its gate items are leftovers, not live asks. Keep them visible
+	// for the record but disable every action — approving/feeding back a cancelled production does nothing.
 	return (
 		<div className="gate">
 			<div className="gate-head">Inbox <span className="badge">{inbox.length}</span></div>
+			{cancelled && <div className="gate-note">Production cancelled — these items are closed; no action can be taken.</div>}
 			{inbox.map((o) => (
 				<div key={o.id} className="out">
 					<div><code>{o.type}</code> {o.prompt && <span>{o.prompt}</span>}</div>
 					{o.type === "present" ? (
 						<div className="controls">
-							<button onClick={() => void act(() => approveOutput(o.id))}>Approve</button>
-							<button className="secondary" onClick={() => {
+							<button disabled={cancelled} onClick={() => void act(() => approveOutput(o.id))}>Approve</button>
+							<button className="secondary" disabled={cancelled} onClick={() => {
 								const body = window.prompt("Feedback for a redo:")
 								if (body) void act(() => sendFeedback(o.id, body))
 							}}>Feedback</button>
 						</div>
 					) : (
-						<div className="controls"><button onClick={() => void act(() => approveOutput(o.id))}>Ack</button></div>
+						<div className="controls"><button disabled={cancelled} onClick={() => void act(() => approveOutput(o.id))}>Ack</button></div>
 					)}
 				</div>
 			))}
 			{budget && !budget.approved && (
 				<div className="out">
 					<div><code>budget</code> render spend not yet approved</div>
-					<div className="controls"><button onClick={() => void act(() => approveBudget(productionId))}>Approve budget</button></div>
+					<div className="controls"><button disabled={cancelled} onClick={() => void act(() => approveBudget(productionId))}>Approve budget</button></div>
 				</div>
 			)}
 		</div>
@@ -774,9 +777,8 @@ function chipVariant(status: string): string {
 		case "escalated":
 		case "revise":
 		case "failed":
-			return "danger"
 		case "cancelled":
-			return "muted"
+			return "danger"
 		case "in-progress":
 		case "producing":
 		case "queued-running":
