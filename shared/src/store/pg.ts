@@ -30,6 +30,7 @@ import type {
 	User,
 	Version,
 } from "../types.js"
+import { seedParams } from "../types.js"
 import { SystemClock, UuidGen } from "../runtime.js"
 
 const { accounts, assets, budget, chatInput, chatOutput, interactions, nodes, reviews, users, versions } = schema
@@ -94,7 +95,7 @@ export class PgStore implements Store {
 				sessionId: input.sessionId,
 				autonomyLever: input.autonomyLever,
 				actorKind: input.actorKind,
-				params: input.params ?? null,
+				params: seedParams(input),
 				createdAt: now,
 				updatedAt: now,
 			})

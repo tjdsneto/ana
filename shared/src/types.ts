@@ -100,6 +100,15 @@ export interface NewProduction {
 	params?: Record<string, unknown> // the intake params for the root type (resolved against its `inputs`); the engine asks the user for a missing required one before producing.
 }
 
+// The root's effective intake params: the caller's params with the first-class `brief` folded in, so
+// a type that declares a required `brief` input (video-project, scene, clip, card) is satisfied by the
+// native brief field rather than the engine asking for it. Explicit params win over the brief.
+export function seedParams(input: { brief: string; params?: Record<string, unknown> }): Record<string, unknown> | null {
+	const params = { ...(input.params ?? {}) }
+	if (input.brief?.trim() && params.brief === undefined) params.brief = input.brief
+	return Object.keys(params).length > 0 ? params : null
+}
+
 export interface NewChildNode {
 	type: string
 	name: string

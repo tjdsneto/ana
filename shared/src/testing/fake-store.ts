@@ -25,6 +25,7 @@ import type {
 	User,
 	Version,
 } from "../types.js"
+import { seedParams } from "../types.js"
 
 export class FixedClock implements Clock {
 	constructor(private current = new Date("2026-01-01T00:00:00.000Z")) {}
@@ -101,7 +102,7 @@ export class FakeStore implements Store {
 			sessionId: input.sessionId,
 			autonomyLever: input.autonomyLever,
 			actorKind: input.actorKind,
-			params: input.params ?? null,
+			params: seedParams(input),
 			createdAt: now,
 			updatedAt: now,
 		}
