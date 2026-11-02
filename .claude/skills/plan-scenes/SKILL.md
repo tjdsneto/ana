@@ -1,6 +1,6 @@
 ---
 name: plan-scenes
-description: Planner for the generative (Family B) build step — read the approved storyboard (film.json) and fan it out into one independent scene per storyboard scene, as the generic {name, brief} list the engine expands. Output ONLY the JSON array.
+description: Planner for the build step — read the approved storyboard and fan it out into one independent scene per storyboard beat, each with its realization method, as the {name, brief, method} list the engine expands. Output ONLY the JSON array.
 ---
 
 # plan-scenes
@@ -27,8 +27,10 @@ The method decides *how* the scene's clip is produced. The pipeline spine (brief
 - **`authored-composite`** — layered elements composited on the authored stage: a real-UI (or composed) plate with overlay elements (a character, a callout, a presenter/avatar **PiP**) via the storyboard's `layers`. Use when the scene mixes things — real-UI **and** a generated character, or a presenter over the product. Rendered by the Family-A craft chain per scene.
 - **`whole-clip-generative`** — the scene is generated as one whole clip (avatar talking-head, cinematic b-roll), not decomposed. Use for a presenter-only scene or a generated mood shot. Kept first-class.
 - **`authored-continuous`** — one real-UI plate under one continuous word-anchored camera move (classic Family-A). Use for a straight product tour beat.
+- **`edit-footage`** — the scene is cut from a **caller-provided** video asset (a screen recording, a take, stock) — a trimmed/cropped sub-clip, optionally with a ken-burns punch-in. Use when the brand supplied footage for this beat; the asset is staged into the scene work dir. (The `edit-footage` craft skill owns the EDL + `edl-apply`/`punch` tools.)
+- **`motion-graphics`** — the scene is a programmatic animated clip (animated title/lower-third/caption/overlay) authored as an HTML/GSAP composition and rendered by the motion-graphics tool. Use for a designed-motion beat with no captured or generated footage.
 
-When unsure, prefer `authored-composite` for mixed/overlay scenes, `authored-continuous` for a pure real-UI beat, and `whole-clip-generative` only when the scene is inherently a generated clip (avatar/cinematic).
+When unsure, prefer `authored-composite` for mixed/overlay scenes, `authored-continuous` for a pure real-UI beat, `whole-clip-generative` only when the scene is inherently a generated clip (avatar/cinematic), `edit-footage` when the beat is cut from a provided video, and `motion-graphics` for a pure designed-motion/title beat.
 
 Example:
 
