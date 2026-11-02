@@ -9,7 +9,7 @@ You assemble the finished board's `film.json` from the **approved cards** (one p
 
 ## Inputs
 
-- The approved **cards** (each a JSON object `{id, vo_line, camera, plate_html}`) — **staged as files in the work dir**, one file per card. The prompt lists them under "Upstream artifacts staged in the work dir"; read each card file from there (the cards are no longer inlined in the prompt).
+- The approved **cards** (each a JSON object `{id, vo_line, camera, plate_html}`) — staged in playback order under `<workDir>/cards/` as `NN-<name>.<ext>` (`01-…`, `02-…`, …). Read them **in that order** — the `NN` prefix IS the beat order. One file per card; they are not inlined in the prompt.
 - The **script** — the VO lines, in order.
 - The **moodboard** — the voice (id/speed), the sourced font, the look.
 - The **board directory** — given in the prompt under "Shared board dir" (`<…>/board`). Write the shared files AND your output `film.json` there.
