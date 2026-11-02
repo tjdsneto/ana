@@ -93,6 +93,7 @@ export class Engine {
 
 	private async startQueuedProductions(): Promise<boolean> {
 		const queued = (await this.store.listProductions()).filter((r) => r.status === "queued")
+		let started = false
 		for (const root of queued) {
 			const contract = this.types.get(root.type)
 			// Intake resolution: a required input with no provided value AND no default must be asked
@@ -112,7 +113,8 @@ export class Engine {
 						prompt: `To start this ${contract.name ?? root.type}, provide: ${missing.map((m) => (m.description ? `${m.name} (${m.description})` : m.name)).join("; ")}.`,
 					})
 				}
-				continue // held until the required inputs are provided
+				continue // held until the required inputs are provided — does NOT count as progress (a held
+				// production must not keep runUntilIdle draining, or the tick safety valve trips every poll)
 			}
 			// A production is a root node of ANY type, not only an expand video-project. Route it by kind:
 			// an expand root fans its checklist; a planner/leaf root (a standalone capability — a scene, a
@@ -124,8 +126,9 @@ export class Engine {
 				await this.store.updateNodeStatus(root.id, "in-progress")
 				await this.dispatch(root)
 			}
+			started = true
 		}
-		return queued.length > 0
+		return started
 	}
 
 	// Expand a node's static checklist into child nodes (the root at startup, or any claimed node whose
@@ -135,6 +138,16 @@ export class Engine {
 		const contract = this.types.get(node.type)
 		if (!contract.checklist || contract.checklist.length === 0) {
 			throw new Error(`expandNode: type "${node.type}" has no checklist to expand`)
+		}
+		// Idempotent: if this node already has children, it was expanded before — a worker restart, a
+		// re-claim, or a critic REOPEN that named a checklist node all route it back through dispatch.
+		// Creating a second child set is the duplicate-stage bug. Just ensure it's in-progress so rollup
+		// resumes over the existing children. (Mirrors the reopen path's own hasChildren guard, line ~594.)
+		const existing = (await this.store.nodesFor(node.productionId)).filter((n) => n.parentId === node.id)
+		if (existing.length > 0) {
+			if (node.status !== "in-progress") await this.store.updateNodeStatus(node.id, "in-progress")
+			this.log.info("node.expand_skip_existing", { productionId: node.productionId, nodeId: node.id, children: existing.length })
+			return
 		}
 		const idByKey = new Map<string, string>() // checklist-local key → created node id
 		let position = 0

@@ -940,6 +940,27 @@ describe("root as capability — a production rooted at any type", () => {
 		expect((await store.getProduction(b.id))?.status).toBe("approved")
 	})
 
+	it("folds the native brief into params so a required brief input is satisfied (no intake question)", async () => {
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", rootCapable: true, inputs: [{ name: "brief", required: true }], checklist: [{ id: "leaf", type: "leaf", deps: [] }] },
+			{ type: "leaf", name: "Leaf", produce: "x" },
+		]
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		const root = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "a real brief", sessionId: "s", autonomyLever: "medium", actorKind: "human" })
+		expect(root.params?.brief).toBe("a real brief") // seedParams folded the first-class brief in
+		await engine.tick()
+		expect((await store.pendingOutputs(root.id)).filter((o) => o.type === "question")).toHaveLength(0) // brief satisfied — not asked
+	})
+
+	it("does not spin runUntilIdle when a production is held for a missing required input", async () => {
+		// Regression: a held-for-intake production must not report progress, or runUntilIdle never idles
+		// and trips the tick safety valve every poll.
+		const C: TypeContract[] = [{ type: "cap", name: "Cap", produce: "x", rootCapable: true, inputs: [{ name: "topic", required: true }] }]
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "", sessionId: "s", autonomyLever: "medium", actorKind: "human", type: "cap" }) // no topic → held
+		await expect(engine.runUntilIdle()).resolves.toBeUndefined() // terminates (idles), never throws the safety valve
+	})
+
 	it("flags exactly the root-capable capabilities, not the internal plumbing", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		for (const t of ["video-project", "scene", "clip", "card"]) {
@@ -949,5 +970,28 @@ describe("root as capability — a production rooted at any type", () => {
 		for (const t of ["briefing", "moodboard", "storyboard", "build", "build-scenes", "assemble", "polish", "final-review"]) {
 			expect(disk.get(t).rootCapable ?? false).toBe(false) // plumbing is never offerable as a standalone root
 		}
+	})
+})
+
+describe("expand is idempotent — a re-routed checklist node does not duplicate its children", () => {
+	it("does not create a second child set when a checklist node is expanded again", async () => {
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig() })
+		const root = await newProduction(store)
+
+		// First tick: startQueuedProductions expands the root into its checklist children.
+		await engine.tick()
+		const vp = CONTRACTS.find((c) => c.type === "video-project")!
+		const checklistLen = vp.checklist!.length
+		const after1 = (await store.nodesFor(root.productionId)).filter((n) => n.parentId === root.id)
+		expect(after1.length).toBe(checklistLen)
+
+		// A worker restart / a critic REOPEN naming the root / a manual orphan reset all route the root
+		// back through dispatch as a claimable node. Re-expanding MUST NOT create a second child set.
+		await store.updateNodeStatus(root.id, "pending")
+		await engine.tick() // claims the root → dispatch → checklist → expandNode
+
+		const after2 = (await store.nodesFor(root.productionId)).filter((n) => n.parentId === root.id)
+		expect(after2.length).toBe(checklistLen) // no duplicates
+		expect((await store.getProduction(root.id))!.status).toBe("in-progress") // re-expand leaves it producing
 	})
 })
