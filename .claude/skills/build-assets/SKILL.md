@@ -17,7 +17,14 @@ You produce the **assets** the scenes will compose from — not the scenes thems
 For each asset the storyboard declares:
 
 - **Plates (real UI).** Run `site-capture.mjs` against the provided site/app. One plate-capture run can yield **several** plate assets (different screens/states/regions) — capture them all here, once; the scenes crop/frame them, they are not re-captured downstream.
-- **Generated assets** (images / characters / 3D). Generate them to match the moodboard, or — while a generator is keyless — specify them precisely (the generator, the prompt, the reference, the dimensions) so they drop in unchanged when keys land.
+- **Generated images.** Generate them to match the moodboard with the `image` craft tool. It owns provider choice, the variation loop and a provenance sidecar the same way `vo.py` owns TTS:
+
+  ```
+  python3 craft/tools/image.py --request "generate:<prompt, matching the moodboard>" --out <workDir>/assets --name <asset-id> [--n N] [--size WxH]
+  ```
+
+  The provider is `$IMAGE_PROVIDER` (`stub` default — a keyless, zero-cost SVG placeholder that names the prompt, so a dry run still produces a carryable file; `openai` / `gemini` when a key is provisioned; `custom` via `$IMAGE_GEN_CMD`). Even on `stub`, write the exact prompt/size/provider so the real still drops in unchanged when a key lands — the placeholder *is* the spec.
+- **Generated characters / 3D.** No generator yet — specify them precisely (the generator, the prompt, the reference, the dimensions) so they drop in unchanged when provisioned.
 - **Stock**, if the storyboard calls for it.
 
 Write each asset into the work dir where the scene producers expect it (the path the storyboard's `assets` entry names).
@@ -26,4 +33,4 @@ Write each asset into the work dir where the scene producers expect it (the path
 
 The produced/updated asset set (paths), or, for keyless generators, the asset specs. Keep it to the assets — do not build or render any scene.
 
-> **Status.** Real-UI plate capture works today. Generated-asset backends (image / character / 3D / video) are keyless until provisioned — specify them rather than fabricating a file.
+> **Status.** Real-UI plate capture works today. Image generation is provisioned (`image.py`: `stub` default, `openai` / `gemini` keyed). Character / 3D / video backends are still keyless — specify them rather than fabricating a file.

@@ -13,7 +13,9 @@
 //   MOTION_GFX_BACKEND=hyperframes node craft/tools/motion-graphics/index.mjs --html comp.html --out clip.mp4 [--fps 30]
 //
 // pickBackend is pure (unit-tested in tests/motion-graphics.test.mjs).
-import { join, dirname } from "node:path"
+import { readFileSync, writeFileSync, mkdtempSync, existsSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, dirname, resolve, extname, isAbsolute } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 export function pickBackend(env, flag) {
@@ -38,12 +40,58 @@ function parseArgs(argv) {
 	return a
 }
 
+// Inline local asset references (src="…" and CSS url(…)) as data URIs so the composition is
+// self-contained before it reaches a backend. HyperFrames copies the HTML into its own temp project
+// dir, so a relative src="assets/x.png" 404s there (media_load_failed); inlining makes local paths
+// work regardless of where the backend serves the file. Remote refs (http/https/data/blob/#) are left
+// untouched. Returns a prepared HTML path (a temp file when anything was inlined, else the original).
+const MIME = {
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+	".gif": "image/gif", ".svg": "image/svg+xml", ".avif": "image/avif",
+	".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+	".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".ogg": "audio/ogg",
+	".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf",
+}
+
+export function isLocalRef(ref) {
+	return ref.trim() !== "" && !/^(data:|https?:|blob:|\/\/|#)/i.test(ref)
+}
+
+export function inlineAssets(htmlPath) {
+	const baseDir = dirname(htmlPath)
+	const html = readFileSync(htmlPath, "utf8")
+	let changed = false
+	const toDataUri = (ref) => {
+		if (!isLocalRef(ref)) return null
+		const abs = isAbsolute(ref) ? ref : resolve(baseDir, ref)
+		if (!existsSync(abs)) return null
+		const mime = MIME[extname(abs).toLowerCase()] || "application/octet-stream"
+		changed = true
+		return `data:${mime};base64,${readFileSync(abs).toString("base64")}`
+	}
+	let out = html.replace(/(\ssrc\s*=\s*)(["'])(.*?)\2/gi, (m, pre, q, ref) => {
+		const d = toDataUri(ref); return d ? `${pre}${q}${d}${q}` : m
+	})
+	out = out.replace(/url\(\s*(["']?)(.*?)\1\s*\)/gi, (m, q, ref) => {
+		const d = toDataUri(ref); return d ? `url(${q}${d}${q})` : m
+	})
+	if (!changed) return htmlPath
+	const prepared = join(mkdtempSync(join(tmpdir(), "mg-prep-")), "composition.html")
+	writeFileSync(prepared, out)
+	return prepared
+}
+
 async function main() {
 	const a = parseArgs(process.argv.slice(2))
 	const backend = pickBackend(process.env.MOTION_GFX_BACKEND, a.backend)
 	const here = dirname(fileURLToPath(import.meta.url))
 	const mod = await import(pathToFileURL(join(here, `${backend}.mjs`)).href)
-	await mod.render({ html: a.html, out: a.out, fps: a.fps })
+	const prepared = inlineAssets(a.html)   // self-contain local assets so both backends load them
+	try {
+		await mod.render({ html: prepared, out: a.out, fps: a.fps })
+	} finally {
+		if (prepared !== a.html) { try { rmSync(dirname(prepared), { recursive: true, force: true }) } catch {} }
+	}
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

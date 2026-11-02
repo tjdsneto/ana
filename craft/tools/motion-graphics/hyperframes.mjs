@@ -12,6 +12,9 @@ import { execFileSync } from "node:child_process"
 import { mkdtempSync, copyFileSync, mkdirSync, readdirSync, statSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const HF_VERSION = "0.8.230"  // pinned; vendored in ./node_modules, the npx fallback uses this exact version
 
 function newestMp4(dir) {
 	let best = null, bestT = -1
@@ -33,8 +36,13 @@ export async function render({ html, out }) {
 	if (!existsSync(html)) throw new Error(`hyperframes: html not found: ${html}`)
 	const proj = mkdtempSync(join(tmpdir(), "hf-"))
 	copyFileSync(html, join(proj, "index.html"))
-	// render in the project dir; npx --yes auto-installs hyperframes if absent
-	execFileSync("npx", ["--yes", "hyperframes", "render"], { cwd: proj, stdio: ["ignore", "inherit", "inherit"] })
+	// Prefer the vendored binary (./node_modules/.bin/hyperframes) — no runtime fetch. Fall back to npx
+	// at the PINNED version so an un-vendored env is still deterministic (never "latest").
+	const localBin = join(dirname(fileURLToPath(import.meta.url)), "node_modules", ".bin", "hyperframes")
+	const [cmd, args] = existsSync(localBin)
+		? [localBin, ["render"]]
+		: ["npx", ["--yes", `hyperframes@${HF_VERSION}`, "render"]]
+	execFileSync(cmd, args, { cwd: proj, stdio: ["ignore", "inherit", "inherit"] })
 	const mp4 = newestMp4(proj)
 	if (!mp4) throw new Error(`hyperframes: render produced no .mp4 under ${proj}`)
 	mkdirSync(dirname(out) || ".", { recursive: true })
