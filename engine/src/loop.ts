@@ -318,7 +318,7 @@ export class Engine {
 			producerPrompt = buildRenderedPrompt(contract, { brief: root.description ?? "", workDir, feedback, assets: stagedAssets })
 			producerResult = await this.runSubagent({
 				prompt: producerPrompt,
-				skill: contract.skill ?? "render-film",
+				skill: contract.skill ?? node.type, // the type names its skill; no video default in the engine
 				cwd: this.config.craftRoot,
 			})
 			// Capture the file the skill wrote (newest media). If it wrote NONE — e.g. a keyless generative
