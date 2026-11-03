@@ -17,6 +17,7 @@ export interface CapabilityInput {
 export interface Capability {
 	type: string
 	name?: string
+	description?: string // one-line summary of what this capability produces (from the type.json)
 	inputs?: CapabilityInput[]
 }
 
@@ -31,8 +32,8 @@ export function loadCapabilities(typesDir: string): Capability[] {
 		const file = join(typesDir, entry.name, "type.json")
 		if (!existsSync(file)) continue
 		try {
-			const c = JSON.parse(readFileSync(file, "utf8")) as { type?: string; name?: string; rootCapable?: boolean; inputs?: CapabilityInput[] }
-			if (c.rootCapable && c.type) out.push({ type: c.type, name: c.name, inputs: c.inputs })
+			const c = JSON.parse(readFileSync(file, "utf8")) as { type?: string; name?: string; description?: string; rootCapable?: boolean; inputs?: CapabilityInput[] }
+			if (c.rootCapable && c.type) out.push({ type: c.type, name: c.name, description: c.description, inputs: c.inputs })
 		} catch {
 			// skip a malformed type.json — it just isn't offered
 		}

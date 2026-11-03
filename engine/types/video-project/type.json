@@ -1,6 +1,7 @@
 {
 	"type": "video-project",
 	"name": "Video project",
+	"description": "Root-capable full-pipeline production: briefing → research → brainstorm → script → moodboard → storyboard → board → build → assemble → polish → final review.",
 	"rootCapable": true,
 	"inputs": [{ "name": "brief", "required": true, "description": "What the video is about — goal, audience, tone, any must-include messages." }],
 	"checklist": [

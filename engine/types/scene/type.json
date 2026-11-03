@@ -1,6 +1,7 @@
 {
 	"type": "scene",
 	"name": "Scene",
+	"description": "Root-capable leaf that produces one scene by its realization method (authored-composite / authored-continuous / whole-clip-generative / edit-footage / motion-graphics).",
 	"rootCapable": true,
 	"inputs": [
 		{ "name": "brief", "required": true, "description": "The one scene to make — subject, spoken line(s), visual direction, duration." },

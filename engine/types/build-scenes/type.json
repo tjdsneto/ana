@@ -1,6 +1,7 @@
 {
 	"type": "build-scenes",
 	"name": "Build scenes",
+	"description": "Planner that breaks the approved storyboard (film.json) into one independent scene per storyboard scene, in playback order, fanned out.",
 	"planner": true,
 	"childType": "scene",
 	"skill": "plan-scenes",

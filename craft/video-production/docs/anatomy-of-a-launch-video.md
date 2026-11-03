@@ -29,7 +29,7 @@ Pick the aspect ratio for the platform first; length follows.
 
 ## Show the real thing (B2B)
 
-Buyers discount claims they can't see. Show at least one real workflow in the actual interface. Stylized/illustrative UI is the exception — justified only for confidential or over-dense screens — and when used it should read as **clearly stylized**, not a fake of the real product.
+Buyers discount claims they can't see. Show at least one real workflow in the actual interface. Stylized/illustrative UI is the exception — justified only for confidential or over-dense screens — and when used it should read as **clearly stylized**, not a fake of the real product. How to put that app on screen well — device framing, directing the eye, interaction as motion, UI sound — is its own craft: see [showing-a-web-app.md](showing-a-web-app.md).
 
 ## Pacing
 

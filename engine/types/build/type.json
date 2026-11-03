@@ -1,6 +1,7 @@
 {
 	"type": "build",
 	"name": "Build",
+	"description": "Checklist step that fans out production of assets, voice, soundtrack, and scenes (scenes depend on assets + voice).",
 	"checklist": [
 		{ "id": "assets", "type": "build-assets", "deps": [] },
 		{ "id": "voice", "type": "build-voice", "deps": [] },

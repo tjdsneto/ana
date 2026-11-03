@@ -1,6 +1,7 @@
 {
 	"type": "idea",
 	"name": "Idea",
+	"description": "Develops one seeded concept into a full treatment — a candidate, not the final storyboard.",
 	"skill": "idea",
 	"produce": "Develop THIS one seeded concept into a full treatment per your idea skill — a candidate, not the final storyboard."
 }

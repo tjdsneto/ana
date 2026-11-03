@@ -63,7 +63,7 @@ Notation: `node` / `version` / `chat_output(type)` / `chat_input(kind)`.
 5. Client `inbox` surfaces the pending output → presents it → user approves. Client writes
    `chat_input(approve, responds_to=output)`; server resolves the output, node `approved`.
 6. Approval unblocks the next node (`script`, deps briefing). Worker produces → reviewer set passes →
-   `present` → approve. Repeat for `moodboard`, `storyboard`, `render`, `polish`, `deliver`. Files the
+   `present` → approve. Repeat for `moodboard`, `storyboard`, `assemble`, `polish`, `final-review`. Files the
    steps generate/gather (logos, b-roll, VO) are written as `asset` rows (+ files on the shared volume).
 7. Root rolls up `approved` when its last child approves → production `done`. `get_status` reflects it;
    `get_deliverable` returns the final artifact **plus its `assets`** (they ship with the deliverable).

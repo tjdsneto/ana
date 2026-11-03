@@ -1,6 +1,7 @@
 {
 	"type": "brainstorm-select",
 	"name": "Pick the winning concept",
+	"description": "Judges the developed concepts and outputs the single winning concept in full — the spec the script is written from.",
 	"skill": "brainstorm-select",
 	"produce": "You are given all the developed concepts (the idea agents' treatments). Judge them per your brainstorm-select skill and output the single winning concept in full — it becomes the spec the script is written from."
 }
