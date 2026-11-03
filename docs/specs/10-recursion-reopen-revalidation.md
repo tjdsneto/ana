@@ -47,10 +47,10 @@ A reopen does **not** blindly rebuild everything downstream. The named targets r
 **Revalidate** (`revalidate`) decides a stale node's fate against the now-current upstream:
 
 1. **upstream hash unchanged** (a no-op reopen reached it) → keep as-is, approve in place, no re-produce, no human re-gate (the bytes the human already approved are unchanged). The cascade stops here — this node's output didn't change, so its own dependents' hashes still match.
-2. **mechanical node** (`rendered`) or **no upstream-sensitive reviewer** → rebuild. It can't cheaply judge the change is harmless (a rendered node embeds its upstream; e.g. render re-renders whenever the storyboard actually changed).
+2. **mechanical node** (`rendered`) or **no upstream-sensitive reviewer** → rebuild. It can't cheaply judge the change is harmless (a rendered node embeds its upstream; e.g. assemble re-renders whenever the storyboard actually changed).
 3. **authoring node** → re-run only its upstream-sensitive reviewers (`coverage` + `consistency`) against the **existing** artifact, in revalidation mode (the reviewer is told the work was approved and to pass unless the change actually breaks its axis). All pass → keep (record it as validated against the new upstream); any revise → rebuild, fed the reviewers' notes.
 
-Quality (`craft`) is never re-checked — an upstream change can't lower intrinsic craft. A node that is kept does not disturb its dependents; a node that rebuilds changes its artifact, so its dependents (already marked stale) detect the change and react in turn. Net effect: a trivial script edit the storyboard still covers keeps storyboard/render/polish; a substantial one propagates.
+Quality (`craft`) is never re-checked — an upstream change can't lower intrinsic craft. A node that is kept does not disturb its dependents; a node that rebuilds changes its artifact, so its dependents (already marked stale) detect the change and react in turn. Net effect: a trivial script edit the storyboard still covers keeps storyboard/assemble/polish; a substantial one propagates.
 
 ## 5. Planner re-plan — reconcile, don't re-fan
 
