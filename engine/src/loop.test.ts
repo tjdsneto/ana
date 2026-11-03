@@ -313,10 +313,11 @@ describe("type registry", () => {
 	it("loads the on-disk pipeline", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
 		expect(disk.has("video-project")).toBe(true)
-		for (const t of ["briefing", "script", "moodboard", "storyboard", "render", "polish", "final-review"]) {
+		for (const t of ["briefing", "script", "moodboard", "storyboard", "polish", "final-review"]) {
 			expect(disk.has(t)).toBe(true)
 		}
-		expect(disk.get("render").produces).toBe("file")
+		// the monolithic render type is removed entirely — assembly is the sole rendered composite step
+		expect(disk.has("render")).toBe(false)
 		expect(disk.get("briefing").agreement).toBe(true)
 		expect(disk.get("final-review").holisticReview).toBe(true)
 		// storyboard is now a PLANNER that fans out one `card` per beat and exposes the cards to its
@@ -339,10 +340,8 @@ describe("type registry", () => {
 		)
 		expect(disk.get("polish").reviews?.[0]?.skill).toBe("review-polish-quality")
 		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
-		// render's consistency gate is an owned pixel-watch (faithful execution of the board)
-		expect(disk.get("render").reviews?.find((r) => r.kind === "consistency")?.skill).toBe("review-render-consistency")
-		// render also carries a deterministic audio/sync gate (VO matches script, no dup/dropped lines, in sync)
-		expect(disk.get("render").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
+		// the whole-film audio/sync gate the retired render node carried now lives on assemble
+		expect(disk.get("assemble").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
 		// the unified video-project ends build → assemble → polish → final-review (the scene fan-out tail;
 		// the monolithic render node is retired from the pipeline)
 		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []

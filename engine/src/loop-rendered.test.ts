@@ -1,5 +1,5 @@
 // Rendered-leaf helpers: asset staging, media-output selection, and the type-aware prompt. These back
-// the clip / motion-graphics leaves and must leave the render/assemble path byte-for-byte unchanged.
+// the clip / motion-graphics leaves and must leave the assemble path byte-for-byte unchanged.
 import { mkdtempSync, writeFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
@@ -12,7 +12,7 @@ const c = (type: string): TypeContract => ({ type, produces: "file" })
 
 describe("buildRenderedPrompt", () => {
 	it("is domain-blind: the work-dir phrase, no film.json/storyboard literal", () => {
-		for (const t of ["render", "assemble"]) {
+		for (const t of ["clip", "assemble"]) {
 			const p = buildRenderedPrompt(c(t), { brief: "b", workDir: "/wd" })
 			expect(p).toContain("Work dir: /wd")
 			expect(p).toContain("staged")
@@ -23,7 +23,7 @@ describe("buildRenderedPrompt", () => {
 	it("names the shared board dir only when one is passed", () => {
 		const withBoard = buildRenderedPrompt(c("assemble-board"), { brief: "b", workDir: "/wd", boardDir: "/wd/../board" })
 		expect(withBoard).toContain("Shared board dir: /wd/../board")
-		const without = buildRenderedPrompt(c("render"), { brief: "b", workDir: "/wd" })
+		const without = buildRenderedPrompt(c("clip"), { brief: "b", workDir: "/wd" })
 		expect(without).not.toContain("Shared board dir")
 	})
 	it("an edit/compose leaf gets the staged-assets wording", () => {
@@ -39,7 +39,7 @@ describe("newestMedia", () => {
 		writeFileSync(join(d, "clip.wav"), "x")
 		expect(newestMedia(d)?.endsWith("clip.wav")).toBe(true)
 	})
-	it("prefers an .mp4 over other media (render unchanged)", () => {
+	it("prefers an .mp4 over other media (assemble unchanged)", () => {
 		const d = tmp()
 		writeFileSync(join(d, "a.wav"), "x")
 		writeFileSync(join(d, "out.mp4"), "x")
