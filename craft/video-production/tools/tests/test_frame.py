@@ -101,12 +101,27 @@ def test_browser_frame_is_baseline():
     assert 'id="device"' not in html, "frame:browser should not wrap a device shell"
 
 
-def test_phone_not_implemented_yet():
-    """phone/tablet are reserved for the portrait slice; they must fail loudly, never mis-render."""
+def test_phone_shell_rendered():
+    """phone wraps the window in a portrait device bezel — a reflowed tall viewport (VW<VH), an
+    island (no laptop deck), captured at a mobile width."""
+    film = dict(BASE, frame="phone", capture={"width": 390})
     with tempfile.TemporaryDirectory() as d:
-        r = _run(dict(BASE, frame="phone"), d)
-    assert r.returncode != 0, "frame:phone should fail until the portrait slice lands"
-    assert "phone" in r.stderr and "not" in r.stderr.lower(), f"error should name phone as unimplemented; got: {r.stderr!r}"
+        html = _build(film, d)
+    assert 'id="device"' in html, "phone film should emit a #device wrapper"
+    assert 'class="device phone"' in html, "device wrapper should carry the phone class"
+    assert 'class="island"' in html, "phone should draw a notch/island"
+    assert 'class="deck"' not in html, "phone has no laptop deck"
+    P = _payload(html)
+    assert P.get("FRAME") == "phone", "payload must carry FRAME=phone"
+    assert P["VW"] < P["VH"], f"phone viewport must be portrait (VW<VH), got {P['VW']}x{P['VH']}"
+
+
+def test_tablet_not_implemented_yet():
+    """tablet is reserved; it must fail loudly rather than mis-render."""
+    with tempfile.TemporaryDirectory() as d:
+        r = _run(dict(BASE, frame="tablet"), d)
+    assert r.returncode != 0, "frame:tablet should fail until implemented"
+    assert "tablet" in r.stderr and "not" in r.stderr.lower(), f"error should name tablet as unimplemented; got: {r.stderr!r}"
 
 
 def test_unknown_frame_rejected():
@@ -118,7 +133,7 @@ def test_unknown_frame_rejected():
 
 if __name__ == "__main__":
     tests = [test_laptop_shell_rendered, test_no_frame_unchanged, test_browser_frame_is_baseline,
-             test_phone_not_implemented_yet, test_unknown_frame_rejected]
+             test_phone_shell_rendered, test_tablet_not_implemented_yet, test_unknown_frame_rejected]
     failed = 0
     for t in tests:
         try:
