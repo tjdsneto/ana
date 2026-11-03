@@ -47,6 +47,9 @@ export interface TypeContract {
 	emitsBoard?: boolean // the producer renders a visual board (storyboard): the engine passes a boardOut path; the producer saves the board sheet there so the dashboard can show it per version.
 	boardDir?: boolean // the producer writes the shared board files (plates/, fonts/): the engine passes a stable <prod>/board dir so assemble can materialize plate files + a shared font and reference them by absolute path from film.json.
 	collectArtifacts?: { type: string; into: string } // a file-leaf that composes the production's approved <type> nodes (e.g. assemble composes scenes): the engine copies each approved node-of-that-type's file-artifact into <workDir>/<into>/NN-<name>.<ext>, ordered by position, so the skill stitches them. Generic: the engine names no domain type; the type.json names which.
+	engine?: string // per-node subagent backend for this type (producer + its reviewers), e.g. "claude" | "codex"; must be a runner registered with the worker. Falls back to SUBAGENT_ENGINE
+	model?: string // per-node subagent model for this type (producer + its reviewers), e.g. "opus" for a brainstorm; falls back to SUBAGENT_MODEL
+	maxBudgetUsd?: number // per-node per-call spend cap for this type's subagents; falls back to SUBAGENT_MAX_BUDGET_USD
 }
 
 export class TypeRegistry {

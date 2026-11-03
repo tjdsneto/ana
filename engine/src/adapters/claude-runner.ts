@@ -45,6 +45,7 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 
 	async run(input: SubagentInput): Promise<SubagentResult> {
 		const model = input.model ?? this.defaultModel
+		const budget = input.maxBudgetUsd ?? this.maxBudgetUsd // per-call override wins; else the runner default (SUBAGENT_MAX_BUDGET_USD)
 		const args = ["-p", "--output-format", "json"]
 		// The craft lives in a skill (spec 09): the worker must be able to invoke the Skill tool and the
 		// tools that skill runs (Bash for video-gen/tts/site-capture, Read/Write for artifacts). So it
@@ -52,7 +53,7 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		// text-only deny it is ALLOWED to use tools. The worker runs in a sandboxed container, so the
 		// default is bypassPermissions; override with SUBAGENT_PERMISSION_MODE.
 		args.push("--permission-mode", process.env.SUBAGENT_PERMISSION_MODE ?? "bypassPermissions")
-		if (this.maxBudgetUsd !== undefined) args.push("--max-budget-usd", String(this.maxBudgetUsd))
+		if (budget !== undefined) args.push("--max-budget-usd", String(budget))
 		if (model) args.push("--model", model)
 		if (input.resumeSessionId) args.push("--resume", input.resumeSessionId)
 		// Direct the worker to the node's skill. Skill names map to slash commands (`review:craft` →

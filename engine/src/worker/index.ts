@@ -27,9 +27,14 @@ const runnerConfig = runnerConfigFromEnv()
 
 async function main(): Promise<void> {
 	const dbPool = makeDbPool()
+	// The default runner (SUBAGENT_ENGINE). A node type may pin a different backend (TypeContract.engine);
+	// register each such backend here by name and the loop routes that node to it. Only the default is
+	// wired for now — a non-default pin throws until its runner is added to this map.
+	const runner = makeRunner(runnerConfig)
 	const engine = new Engine({
 		store: new PgStore(dbPool),
-		runner: makeRunner(runnerConfig),
+		runner,
+		runners: new Map([[runner.engine, runner]]),
 		types: TypeRegistry.load(typesDir),
 		config,
 		logger,

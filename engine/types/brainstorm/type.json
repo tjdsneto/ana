@@ -5,5 +5,6 @@
 	"childType": "idea",
 	"exposeChildrenToDependents": true,
 	"skill": "brainstorm",
+	"model": "claude-opus-5-5",
 	"produce": "Read the briefing + the research dossier and seed the distinct video concepts to explore in parallel (default 3). Output the generic concept list the engine fans out into idea agents."
 }

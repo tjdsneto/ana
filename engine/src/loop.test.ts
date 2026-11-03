@@ -1061,3 +1061,89 @@ describe("the loop never claims work for a cancelled production", () => {
 		expect(await store.claimReadyNode()).toBeNull()
 	})
 })
+
+describe("per-type subagent overrides — model + maxBudgetUsd flow to the node's producer and reviewers", () => {
+	it("passes a type's model/maxBudgetUsd on every subagent call for its node, and leaves them unset for a type that declares none", async () => {
+		// script declares overrides; moodboard declares none. Distinct reviewer kinds so the two nodes'
+		// reviewer calls are tellable apart from the SubagentInput alone (which carries no node id).
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "script", type: "script", deps: [] }, { id: "moodboard", type: "moodboard", deps: [] }] },
+			{ type: "script", name: "Script", produce: "script", model: "opus", maxBudgetUsd: 2, reviews: [{ name: "coverage", kind: "coverage" }] },
+			{ type: "moodboard", name: "Moodboard", produce: "mood", reviews: [{ name: "craft", kind: "craft" }] },
+		]
+		const runner = new FakeSubagentRunner()
+		const engine = new Engine({ store, runner, types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			for (const o of pending) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && pending.length === 0) throw new Error("stuck before done")
+		}
+
+		const call = (skill: string) => runner.calls.find((c) => c.skill === skill)
+		// script's node (producer + its coverage reviewer) carries the type's overrides
+		expect(call("script")).toMatchObject({ model: "opus", maxBudgetUsd: 2 })
+		expect(call("review:coverage")).toMatchObject({ model: "opus", maxBudgetUsd: 2 })
+		// moodboard declares none → the loop leaves them unset (the runner applies the env default)
+		expect(call("moodboard")?.model).toBeUndefined()
+		expect(call("moodboard")?.maxBudgetUsd).toBeUndefined()
+		expect(call("review:craft")?.model).toBeUndefined()
+		expect(call("review:craft")?.maxBudgetUsd).toBeUndefined()
+	})
+})
+
+describe("per-type subagent engine — a type pins a backend; the loop routes its node there", () => {
+	it("routes a node whose type pins an engine to that runner (producer + reviewers), others to the default", async () => {
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "script", type: "script", deps: [] }, { id: "moodboard", type: "moodboard", deps: [] }] },
+			{ type: "script", name: "Script", produce: "script", engine: "alt", reviews: [{ name: "coverage", kind: "coverage" }] },
+			{ type: "moodboard", name: "Moodboard", produce: "mood", reviews: [{ name: "craft", kind: "craft" }] },
+		]
+		const base = new FakeSubagentRunner()
+		const altCalls: SubagentInput[] = []
+		const alt: SubagentRunner = {
+			engine: "alt",
+			async run(input: SubagentInput): Promise<SubagentResult> {
+				altCalls.push(input)
+				const pass = /^review[:-]/.test(input.skill ?? "")
+				return { output: pass ? "VERDICT: pass" : "a draft", sessionId: "alt-1", usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } }
+			},
+		}
+		const engine = new Engine({ store, runner: base, runners: new Map([["alt", alt]]), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			for (const o of pending) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && pending.length === 0) throw new Error("stuck before done")
+		}
+
+		// the script node (producer + its coverage reviewer) ran on the pinned "alt" backend
+		expect(altCalls.map((c) => c.skill).sort()).toEqual(["review:coverage", "script"])
+		// moodboard ran on the default runner; script never touched it
+		expect(base.calls.some((c) => c.skill === "moodboard")).toBe(true)
+		expect(base.calls.some((c) => c.skill === "script")).toBe(false)
+		// the interaction log records the per-node engine, not the default
+		const ints = await store.interactionsFor(root.id)
+		expect(ints.filter((i) => i.engine === "alt").map((i) => i.role).sort()).toEqual(["producer", "review:coverage"])
+	})
+
+	it("throws a clear error when a type pins an engine with no registered runner", async () => {
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "script", type: "script", deps: [] }] },
+			{ type: "script", name: "Script", produce: "script", engine: "nope" },
+		]
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: TypeRegistry.fromContracts(C), config: makeConfig() })
+		await newProduction(store)
+		await expect(
+			(async () => {
+				for (let guard = 0; guard < 10; guard++) await engine.tick()
+			})(),
+		).rejects.toThrow(/pins subagent engine "nope"/)
+	})
+})
