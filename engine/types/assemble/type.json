@@ -1,6 +1,7 @@
 {
 	"type": "assemble",
 	"name": "Assemble",
+	"description": "Composite leaf that stitches the production's approved scene clips into the finished video file; reviewed for consistency and audio.",
 	"produces": "file",
 	"skill": "assemble-scenes",
 	"collectArtifacts": { "type": "scene", "into": "scenes" },

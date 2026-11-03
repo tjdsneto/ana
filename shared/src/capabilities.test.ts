@@ -16,6 +16,8 @@ describe("loadCapabilities", () => {
 		// each capability carries its intake schema (video-project needs a brief)
 		const vp = caps.find((c) => c.type === "video-project")
 		expect(vp?.inputs?.some((i) => i.name === "brief" && i.required)).toBe(true)
+		// the type's description is surfaced in the catalog
+		expect(vp?.description).toMatch(/full-pipeline production/)
 	})
 
 	it("returns [] for a missing types dir", () => {

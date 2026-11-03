@@ -1,6 +1,7 @@
 {
 	"type": "clip",
 	"name": "Clip",
+	"description": "Root-capable leaf that cuts one clip from a provided footage asset (the wanted span/crop).",
 	"rootCapable": true,
 	"inputs": [{ "name": "brief", "required": true, "description": "What piece to cut from the provided footage asset — the wanted span/crop and why." }],
 	"produces": "file",

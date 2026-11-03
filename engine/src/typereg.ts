@@ -29,6 +29,7 @@ export interface InputSpec {
 export interface TypeContract {
 	type: string
 	name?: string // human label for the node
+	description?: string // one-line human/dev summary of what this node does in the pipeline; surfaced in capability discovery (loadCapabilities) for rootCapable types
 	rootCapable?: boolean // offerable as a standalone production root (a capability a caller can ask for directly). Off by default, so internal plumbing (briefing, moodboard, build, …) is never exposed as a root. See InputSpec + requestProduction.
 	inputs?: InputSpec[] // the intake param schema for a root-capable type: what a caller passes when rooting a production here. Resolution: passed value → default → (if required and absent) ask the user.
 	checklist?: ChecklistEntry[] // static sub-project (expand)

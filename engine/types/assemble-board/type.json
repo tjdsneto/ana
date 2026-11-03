@@ -1,6 +1,7 @@
 {
 	"type": "assemble-board",
 	"name": "Assemble board",
+	"description": "Composite leaf that stitches the approved cards into the final film.json (playback order, shared font) the render consumes; reviewed for board consistency.",
 	"produces": "file",
 	"output": "film.json",
 	"boardDir": true,

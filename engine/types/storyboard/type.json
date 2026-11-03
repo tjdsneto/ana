@@ -1,6 +1,7 @@
 {
 	"type": "storyboard",
 	"name": "Storyboard",
+	"description": "Planner that lays out the board beats (one card per beat) from the approved script + moodboard, owning whole-board coherence; fanned out into card nodes.",
 	"planner": true,
 	"childType": "card",
 	"exposeChildrenToDependents": true,

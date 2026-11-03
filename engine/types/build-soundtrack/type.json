@@ -1,6 +1,7 @@
 {
 	"type": "build-soundtrack",
 	"name": "Build soundtrack",
+	"description": "Leaf that produces the music track and declares the audio tracks (voice / music / sfx) the mix will sum.",
 	"skill": "build-soundtrack",
 	"produce": "Produce the music track and declare the audio tracks (voice / music / sfx) the mix will sum. Output the soundtrack asset(s) + the audio plan, not a scene.",
 	"reviews": [{ "name": "quality", "kind": "craft", "skill": "review-build-soundtrack" }]

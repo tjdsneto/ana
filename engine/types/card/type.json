@@ -1,6 +1,7 @@
 {
 	"type": "card",
 	"name": "Card",
+	"description": "Root-capable leaf that composes one card/beat — its plate HTML file (plates/<id>.html) and camera params — per the moodboard + craft bar.",
 	"rootCapable": true,
 	"inputs": [{ "name": "brief", "required": true, "description": "The one card/beat to compose — its VO line, focal element, on-screen text treatment, ground/colour." }],
 	"emitsBoard": true,
