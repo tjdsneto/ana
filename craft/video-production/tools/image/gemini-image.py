@@ -49,11 +49,24 @@ def build_url(model: str, base: str = API_BASE) -> str:
     return f"{base}/{model}:generateContent"
 
 
-def build_payload(prompt: str) -> dict:
-    """The JSON body for generateContent. responseModalities=[IMAGE] asks for an image back rather
-    than text (the model otherwise answers in words)."""
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+
+
+def inline_part(path: str) -> dict:
+    """An inlineData image part for a local file (base64 bytes, mime from the extension) — the input
+    image(s) to EDIT. The only I/O helper; build_payload stays pure so it can take fakes in tests."""
+    p = Path(path)
+    return {"inlineData": {"mimeType": MIME.get(p.suffix.lower(), "image/png"),
+                           "data": base64.b64encode(p.read_bytes()).decode("ascii")}}
+
+
+def build_payload(prompt: str, image_parts: "list[dict] | None" = None) -> dict:
+    """The JSON body for generateContent. Any input image parts come first, then the text — the
+    edit shape the model expects ("here is the screen; do X to it"); with none, it generates from the
+    prompt alone. responseModalities=[IMAGE] asks for an image back rather than text."""
+    parts = list(image_parts or []) + [{"text": prompt}]
     return {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": parts}],
         "generationConfig": {"responseModalities": ["IMAGE"]},
     }
 
@@ -71,7 +84,9 @@ def image_bytes(resp: dict) -> bytes:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="generate one image via the Gemini image API (a provider tool)")
-    p.add_argument("--prompt", required=True, help="text description of the image")
+    p.add_argument("--prompt", required=True, help="text description, or the edit instruction when --input is given")
+    p.add_argument("--input", action="append", default=None, metavar="IMG",
+                   help="input image to EDIT (repeatable); omit to generate from the prompt alone")
     p.add_argument("--out", required=True, help="image file to write")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"model (default {DEFAULT_MODEL})")
     p.add_argument("--size", default=None, help="accepted for parity; Gemini has no size param (put aspect in the prompt)")
@@ -86,7 +101,10 @@ def main() -> None:
     if not key:
         sys.exit("gemini-image: no key (set $GEMINI_API_KEY / $GOOGLE_API_KEY, or pass --api-key-file / --api-key; it is never baked)")
 
-    payload = build_payload(a.prompt)
+    for pth in a.input or []:
+        if not Path(pth).exists():
+            sys.exit(f"gemini-image: --input not found: {pth}")
+    payload = build_payload(a.prompt, [inline_part(p) for p in (a.input or [])])
     req = urllib.request.Request(
         build_url(a.model), data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"x-goog-api-key": key, "Content-Type": "application/json"})
@@ -107,7 +125,8 @@ def main() -> None:
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(img)
-    print(f"gemini-image: {len(img)} bytes ({a.model}) -> {out}")
+    mode = f"edit of {len(a.input)} input(s)" if a.input else "generate"
+    print(f"gemini-image: {len(img)} bytes ({a.model}, {mode}) -> {out}")
 
 
 if __name__ == "__main__":

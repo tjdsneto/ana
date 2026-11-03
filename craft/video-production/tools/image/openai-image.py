@@ -24,11 +24,35 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 API_URL = "https://api.openai.com/v1/images/generations"
+API_EDIT_URL = "https://api.openai.com/v1/images/edits"  # prompt + input image(s) -> edited image
 DEFAULT_MODEL = "gpt-image-1"
 DEFAULT_SIZE = "1024x1024"  # gpt-image-1: 1024x1024 | 1536x1024 | 1024x1536 | auto
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+
+
+def build_multipart(fields: dict, files: list) -> tuple:
+    """Encode a multipart/form-data body (stdlib only). `files` = list of (name, filename, bytes, mime).
+    Returns (body_bytes, content_type). Used for the images/edits endpoint, which takes the input
+    image(s) as file parts rather than JSON. Pure — unit-tested in tests/test_openai_image.py."""
+    boundary = "----craft" + uuid.uuid4().hex
+    bnd = boundary.encode()
+    nl = b"\r\n"
+    buf = bytearray()
+    for k, v in fields.items():
+        buf += b"--" + bnd + nl
+        buf += f'Content-Disposition: form-data; name="{k}"'.encode() + nl + nl
+        buf += str(v).encode() + nl
+    for name, filename, data, mime in files:
+        buf += b"--" + bnd + nl
+        buf += f'Content-Disposition: form-data; name="{name}"; filename="{filename}"'.encode() + nl
+        buf += f"Content-Type: {mime}".encode() + nl + nl
+        buf += data + nl
+    buf += b"--" + bnd + b"--" + nl
+    return bytes(buf), f"multipart/form-data; boundary={boundary}"
 
 
 def resolve_key(value: "str | None", key_file: "str | None", env_name: str) -> "str | None":
@@ -57,7 +81,9 @@ def image_bytes(resp: dict) -> bytes:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="generate one image via the OpenAI Images API (a provider tool)")
-    p.add_argument("--prompt", required=True, help="text description of the image")
+    p.add_argument("--prompt", required=True, help="text description, or the edit instruction when --input is given")
+    p.add_argument("--input", action="append", default=None, metavar="IMG",
+                   help="input image to EDIT (repeatable, via the images/edits endpoint); omit to generate")
     p.add_argument("--out", required=True, help="image file to write")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"model (default {DEFAULT_MODEL})")
     p.add_argument("--size", default=DEFAULT_SIZE, help=f"size WxH (default {DEFAULT_SIZE})")
@@ -72,10 +98,22 @@ def main() -> None:
     if not key:
         sys.exit("openai-image: no key (set $OPENAI_API_KEY, or pass --api-key-file / --api-key; it is never baked)")
 
-    payload = build_payload(a.prompt, a.model, a.size)
-    req = urllib.request.Request(
-        API_URL, data=json.dumps(payload).encode("utf-8"), method="POST",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    if a.input:
+        files = []
+        for pth in a.input:
+            p = Path(pth)
+            if not p.exists():
+                sys.exit(f"openai-image: --input not found: {pth}")
+            files.append(("image[]", p.name, p.read_bytes(), MIME.get(p.suffix.lower(), "image/png")))
+        body, ctype = build_multipart({"model": a.model, "prompt": a.prompt, "size": a.size, "n": 1}, files)
+        req = urllib.request.Request(
+            API_EDIT_URL, data=body, method="POST",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": ctype})
+    else:
+        payload = build_payload(a.prompt, a.model, a.size)
+        req = urllib.request.Request(
+            API_URL, data=json.dumps(payload).encode("utf-8"), method="POST",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=180) as r:
             resp = json.loads(r.read().decode("utf-8"))
@@ -93,7 +131,8 @@ def main() -> None:
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(img)
-    print(f"openai-image: {len(img)} bytes ({a.model}/{a.size}) -> {out}")
+    mode = f"edit of {len(a.input)} input(s)" if a.input else "generate"
+    print(f"openai-image: {len(img)} bytes ({a.model}/{a.size}, {mode}) -> {out}")
 
 
 if __name__ == "__main__":
