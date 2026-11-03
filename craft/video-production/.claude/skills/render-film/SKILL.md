@@ -9,7 +9,7 @@ You render the final video from the storyboard the upstream already produced. Yo
 
 ## Hold to the craft bar
 
-You assemble, you don't author — but the finished render is still held to `craft/video-production/docs/CRAFT-BAR.md`. Read **§A (universal taste)** and the **§B profile** matching this production's type before you build. You don't re-storyboard, but the choices you *do* own land on the bar: the **sound** (§A5 — a music bed under the VO and deliberate SFX, never bare flat TTS with true silence in every gap), **captions** that stay legible (§A4), and **no dead tail** (§A4 — end on the last meaningful beat, not seconds of static hold). If what `film.json` specifies can't clear §A5 — e.g. no music bed resolves at all — flag it rather than quietly shipping a bare render.
+You assemble, you don't author — but the finished render is still held to `craft/video-production/.claude/references/CRAFT-BAR.md`. Read **§A (universal taste)** and the **§B profile** matching this production's type before you build. You don't re-storyboard, but the choices you *do* own land on the bar: the **sound** (§A5 — a music bed under the VO and deliberate SFX, never bare flat TTS with true silence in every gap), **captions** that stay legible (§A4), and **no dead tail** (§A4 — end on the last meaningful beat, not seconds of static hold). If what `film.json` specifies can't clear §A5 — e.g. no music bed resolves at all — flag it rather than quietly shipping a bare render.
 
 ## Inputs
 

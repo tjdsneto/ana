@@ -7,7 +7,7 @@ description: Consistency-axis reviewer for one generated scene — the gate that
 
 You review **one scene** on the **consistency** axis — does it look like it belongs to the same film as its siblings? Generative clips drift: each scene is an independent generation, so palette, lighting, type, motion energy, and framing wander between them. This reviewer is the reason scenes are built and gated separately instead of as one render — catch the drift here, before the whole is assembled.
 
-Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the §B profile) and the **moodboard**; for composed scenes also `craft/video-production/docs/COMPOSED-CARDS.md`.
+Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile) and the **moodboard**; for composed scenes also `craft/video-production/.claude/references/COMPOSED-CARDS.md`.
 
 ## What you compare against
 

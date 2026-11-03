@@ -1,6 +1,6 @@
 # Composed cards — how to build a premium board without a real UI to capture
 
-This is the **HOW** behind `craft/video-production/docs/CRAFT-BAR.md` for the composed/generative path (keyless inline-HTML cards, no site to capture). It exists because "aim higher" is not enough — the producer needs concrete, premium, imitable patterns. Everything here is brand-free and sourced from teardowns of real, high-reach launch videos. Build to it; the storyboard quality reviewer judges the rendered board against it.
+This is the **HOW** behind `craft/video-production/.claude/references/CRAFT-BAR.md` for the composed/generative path (keyless inline-HTML cards, no site to capture). It exists because "aim higher" is not enough — the producer needs concrete, premium, imitable patterns. Everything here is brand-free and sourced from teardowns of real, high-reach launch videos. Build to it; the storyboard quality reviewer judges the rendered board against it.
 
 Hard mechanical fact that shapes everything: **the render screenshots each plate as a single still**, then moves a camera over it. So a composed card is one still frame. In-card CSS animation is NOT captured. **Motion comes from the camera and from SEQUENCING PLATES**, not from animating one card — see §3.
 

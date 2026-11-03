@@ -7,7 +7,7 @@ description: Quality-axis reviewer for a script deliverable — judge the writin
 
 ## Hold to the craft bar
 
-Before reviewing, read `craft/video-production/docs/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
+Before reviewing, read `craft/video-production/.claude/references/CRAFT-BAR.md` and judge the script against its **text-relevant** parts: **§A4** (the hook earns the first 1–5s and is not a logo/brand line; one idea per beat; density ≤ ~2.5 wps) and the **§B profile** for this video's type (its arc + required close). The §A3 visual-slop cluster and `COMPOSED-CARDS.md` are not a script's axis — those belong to the board/card reviewers, not here.
 
 You review a **script** on the **quality** axis — is it well-written craft? You do **not** check brief coverage here (that is the conformance reviewer's axis); judge the writing itself.
 

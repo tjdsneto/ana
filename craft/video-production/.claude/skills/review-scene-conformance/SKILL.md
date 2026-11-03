@@ -7,7 +7,7 @@ description: Conformance-axis reviewer for one generated scene — check the cli
 
 You review **one scene** on the **conformance** axis: does this clip deliver what the storyboard asked for *this* scene? You do **not** judge craft (quality axis) or how it sits against the sibling scenes (consistency axis). Check the clip against **this scene's spec** (in the prompt) and the approved **storyboard**.
 
-Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the §B profile for the video's type); for composed scenes also `craft/video-production/docs/COMPOSED-CARDS.md`.
+Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile for the video's type); for composed scenes also `craft/video-production/.claude/references/COMPOSED-CARDS.md`.
 
 ## Rubric
 

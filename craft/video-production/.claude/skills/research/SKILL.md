@@ -9,7 +9,7 @@ You explore the **subject** of the video and produce a **research dossier** the 
 
 ## Hold to the craft bar
 
-Before researching, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Your dossier must give downstream steps the raw material to meet both.
+Before researching, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Your dossier must give downstream steps the raw material to meet both.
 
 ## What you produce
 

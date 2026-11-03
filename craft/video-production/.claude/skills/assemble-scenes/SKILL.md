@@ -6,7 +6,7 @@ description: Assemble the master video from the approved per-scene clips — con
 # assemble-scenes
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
 
 You assemble the finished video from the **approved scene clips** the upstream `build` step produced — one clip per scene, already reviewed for quality, conformance, and cross-scene consistency. You do **not** generate or re-cut scenes; you stitch what exists, in order.
 

@@ -1,14 +1,14 @@
 ---
 name: review-card-quality
-description: Quality-axis reviewer for ONE composed card — judge its craft against craft/video-production/docs/CRAFT-BAR.md: the focal element dominates WITHIN a safe area (no dead space AND no edge-to-edge overfill / wall of text), flat colour not gradients, the sourced non-default font actually renders, 0-1 AI-slop tells, readable type. Independent of the spec (conformance) and the neighbours (consistency). Emit VERDICT: pass | revise.
+description: Quality-axis reviewer for ONE composed card — judge its craft against craft/video-production/.claude/references/CRAFT-BAR.md: the focal element dominates WITHIN a safe area (no dead space AND no edge-to-edge overfill / wall of text), flat colour not gradients, the sourced non-default font actually renders, 0-1 AI-slop tells, readable type. Independent of the spec (conformance) and the neighbours (consistency). Emit VERDICT: pass | revise.
 ---
 
 # review-card-quality
 
 > ## Hold to the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
 
-You review **one card** (its plate + camera) on the **quality** axis — is this a well-crafted card on its own? Read `craft/video-production/docs/CRAFT-BAR.md` (§A1 frame, §A3 no slop).
+You review **one card** (its plate + camera) on the **quality** axis — is this a well-crafted card on its own? Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A1 frame, §A3 no slop).
 
 **Render the plate — don't judge HTML by eye.** Write the card's `plate_html` to a temp `.html` and screenshot it (a one-plate `film.json` through `node craft/video-production/tools/site-capture.mjs`, or any headless screenshot), then look.
 

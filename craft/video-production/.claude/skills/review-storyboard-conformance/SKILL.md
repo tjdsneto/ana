@@ -7,7 +7,7 @@ description: Conformance-axis reviewer for a storyboard (film.json) — check it
 
 ## Hold to the craft bar
 
-Before reviewing, read `craft/video-production/docs/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
+Before reviewing, read `craft/video-production/.claude/references/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
 
 You review a **storyboard** (the `film.json`) on the **conformance** axis — does it match what was asked and will it actually render? You do **not** judge board craft here (that is the quality reviewer's axis); check the `film.json` against the **brief** and the **approved upstream** (the script), and check the structural invariants the render depends on.
 

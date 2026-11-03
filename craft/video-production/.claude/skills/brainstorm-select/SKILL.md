@@ -9,7 +9,7 @@ You are a **fresh judge**. You did not write any of these concepts and you did n
 
 ## Hold to the craft bar
 
-Before judging, read `craft/video-production/docs/CRAFT-BAR.md`: hold each concept to **§A (universal taste)** in full, plus the **§B profile** matching this video's type. The winner is judged against both.
+Before judging, read `craft/video-production/.claude/references/CRAFT-BAR.md`: hold each concept to **§A (universal taste)** in full, plus the **§B profile** matching this video's type. The winner is judged against both.
 
 ## How to judge
 

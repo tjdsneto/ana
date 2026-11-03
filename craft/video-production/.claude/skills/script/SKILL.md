@@ -7,7 +7,7 @@ description: Write the spoken voiceover for the video — short, payoff-first, g
 
 ## Hold to the craft bar
 
-Before producing, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both.
+Before producing, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both.
 
 **Aim at the bar.** Apply §A as you write: the hook earns the first 1–5s and is never a logo/brand line (§A4); one idea per beat; density ≤ ~2.5 words/sec (§A4); and when the video has one hero number, the proof line lands it specifically (§A2). The **arc and the close are type-dependent — follow the §B profile for this video's type**, not a baked-in launch shape (a teaser withholds; a demo shows one flow; a launch runs hook → reveal → 2–4 heroes → proof → CTA). The reviewer judges your script against §A + the §B profile at the ship test.
 

@@ -6,7 +6,7 @@ description: Consistency-axis reviewer for the ASSEMBLED board film.json — did
 # review-board-consistency
 
 > ## Hold to the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
 
 You review the **assembled `film.json`** — did `assemble-board` stitch the approved cards **faithfully**, without re-designing them? You do **not** re-judge card craft/look (the card reviewers did that per card); you check the assembly.
 

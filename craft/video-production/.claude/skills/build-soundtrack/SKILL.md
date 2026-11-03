@@ -6,7 +6,7 @@ description: Produce the music track and declare the audio tracks (voice / music
 # build-soundtrack
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste — especially §A5 Sound — + the matching §B profile). The soundtrack is judged against it.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste — especially §A5 Sound — + the matching §B profile). The soundtrack is judged against it.
 
 You produce the **music** and declare the **audio tracks** for the whole video. The mix step (`mix.py`) sums the separate voice / music / sfx tracks you declare; it does not choose music or decide levels — that is this step's job (the way `voice-production` owns TTS).
 

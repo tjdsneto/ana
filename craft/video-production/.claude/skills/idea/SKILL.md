@@ -9,7 +9,7 @@ You develop **one** video concept (the seed in this unit's spec) into a full tre
 
 ## Hold to the craft bar
 
-Before developing your concept, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Your treatment is judged against both.
+Before developing your concept, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Your treatment is judged against both.
 
 ## 1. Develop your concept
 

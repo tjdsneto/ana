@@ -6,7 +6,7 @@ description: Reviewer for the build-assets leaf — confirm the asset set covers
 # review-build-assets
 
 > ## Judge against the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the matching §B profile; for composed assets also `craft/video-production/docs/COMPOSED-CARDS.md`). You can open and VIEW the asset images — so on any asset you can actually see, apply the §A3 anti-slop clause (step 4). Only a genuinely un-viewable keyless spec escapes a pixel-level judgment.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the matching §B profile; for composed assets also `craft/video-production/.claude/references/COMPOSED-CARDS.md`). You can open and VIEW the asset images — so on any asset you can actually see, apply the §A3 anti-slop clause (step 4). Only a genuinely un-viewable keyless spec escapes a pixel-level judgment.
 
 You review the **build-assets** leaf: the set of assets the scenes will draw from. Unlike audio, images ARE reviewable — you can open a screenshot and see it — so this gate uses that: it checks coverage (nothing the storyboard needs is missing), that each captured plate is the real screen, not an error/blank/404 page (the failure that silently poisons every downstream scene), and that each asset you can see is not AI slop (§A3).
 

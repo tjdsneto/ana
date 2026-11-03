@@ -7,9 +7,9 @@ description: Plan the video's board and fan it into one card per beat. Owns whol
 
 ## Hold to the craft bar
 
-Before producing, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both.
+Before producing, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both.
 
-You **plan** the board and fan it into one `card` per beat. You do **not** write plate HTML here — each card node does that from the spec you give it. Read the approved **script** + **moodboard**, and `craft/video-production/docs/CRAFT-BAR.md` (§A frame craft + the §B profile for this type) + `craft/video-production/docs/COMPOSED-CARDS.md`.
+You **plan** the board and fan it into one `card` per beat. You do **not** write plate HTML here — each card node does that from the spec you give it. Read the approved **script** + **moodboard**, and `craft/video-production/.claude/references/CRAFT-BAR.md` (§A frame craft + the §B profile for this type) + `craft/video-production/.claude/references/COMPOSED-CARDS.md`.
 
 You own the **whole-board coherence** — the cards only see their own brief, so everything that must agree across cards is decided HERE:
 

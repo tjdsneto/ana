@@ -6,7 +6,7 @@ description: Mechanical reviewer for the build-voice leaf — confirm the voiceo
 # review-build-voice
 
 > ## Judge against the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` §A5 (Sound). You cannot HEAR the audio, but one §A5 item is mechanically checkable from the timing contract: a **dead tail** (trailing silence after the last word) — see step 4.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` §A5 (Sound). You cannot HEAR the audio, but one §A5 item is mechanically checkable from the timing contract: a **dead tail** (trailing silence after the last word) — see step 4.
 
 You review the **build-voice** leaf on the **word-timing** axis. A subagent cannot listen to the waveform, so **do not judge how it sounds** — judge the timing contract the downstream steps depend on: does the spoken narration match the script, in order, once each, and does it not end on a dead tail. This is the check that stops a VO that dropped a line, spoke one twice, drifted out of sync, or trails off into dead silence from reaching the render.
 

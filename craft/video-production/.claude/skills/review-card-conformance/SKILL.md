@@ -6,7 +6,7 @@ description: Coverage-axis reviewer for ONE card — does it deliver its spec: t
 # review-card-conformance
 
 > ## Hold to the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
 
 You review **one card** on the **coverage** axis — does it deliver **its spec** (given in the prompt under "This unit's spec")? You do **not** judge craft (quality) or match-to-neighbours (consistency).
 

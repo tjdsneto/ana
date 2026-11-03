@@ -6,9 +6,9 @@ description: Produce the visual direction for the video — a brand-sourced look
 # moodboard
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/docs/COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Judged against both.
 
-Define the **look** the whole video is built in. This is the brand/look gate — do it well and the composed cards inherit a premium, specific direction; do it lazily and every card reads as AI slop. Read `craft/video-production/docs/CRAFT-BAR.md` §A3 (the tell cluster) and `craft/video-production/docs/COMPOSED-CARDS.md` §1 first.
+Define the **look** the whole video is built in. This is the brand/look gate — do it well and the composed cards inherit a premium, specific direction; do it lazily and every card reads as AI slop. Read `craft/video-production/.claude/references/CRAFT-BAR.md` §A3 (the tell cluster) and `craft/video-production/.claude/references/COMPOSED-CARDS.md` §1 first.
 
 ## The method — source every choice, no defaults
 

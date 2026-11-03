@@ -9,7 +9,7 @@ You review a **briefing** on the **coverage** axis — does it faithfully captur
 
 ## Judge against the craft bar
 
-Read `craft/video-production/docs/CRAFT-BAR.md`; hold the briefing to **§A** + the matching **§B profile**. This stays advisory — you flag craft-bar gaps for the human, you never block.
+Read `craft/video-production/.claude/references/CRAFT-BAR.md`; hold the briefing to **§A** + the matching **§B profile**. This stays advisory — you flag craft-bar gaps for the human, you never block.
 
 ## Rubric
 

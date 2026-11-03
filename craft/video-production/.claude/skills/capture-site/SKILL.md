@@ -6,7 +6,7 @@ description: Access a PROVIDED website or app with a real browser (Playwright) t
 # capture-site
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A — the Camera check below is the §A1 frame-craft bar applied at capture time). Plates are judged against it.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A — the Camera check below is the §A1 frame-craft bar applied at capture time). Plates are judged against it.
 
 Get the **real** screens for a video from the site the brief gives you — the brand's own running site/app. The worker drives a real browser (Playwright, via the `site-capture` tool), logs in if the brief provides credentials, navigates to the state worth showing, and captures it. This is how "real screens / real UI" (the good-video bar) is met.
 

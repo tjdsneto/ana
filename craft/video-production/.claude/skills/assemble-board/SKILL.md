@@ -6,7 +6,7 @@ description: Assemble the final film.json from the approved cards — materializ
 # assemble-board
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/docs/COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Judged against both.
 
 You assemble the finished board's `film.json` from the **approved cards** (one per beat, already reviewed) + the **script** + the **moodboard**. You do **not** create or edit cards — you stitch what the card nodes produced, in playback order.
 

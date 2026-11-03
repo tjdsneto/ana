@@ -2,7 +2,7 @@
 
 The craft layer is the video-specific half of the repo: the skills, reviewer rubrics, and **tools** that actually produce a video. The generic autonomy loop in `engine/` knows nothing about video — it dispatches typed nodes and spawns `claude -p` subagents. Those subagents run **worker skills**, and the skills call the tools below. The engine never calls a craft tool directly; a skill always sits in between (see `../../CLAUDE.md` → "Testing seam": render/voice are worker skills, not engine ports).
 
-Two standards docs govern the output, not the code — in `docs/`: `docs/CRAFT-BAR.md` (the quality bar every video is held to) and `docs/COMPOSED-CARDS.md` (how to build a premium board on the generative path). `docs/` also holds the video-production reference (glossary, launch-video anatomy).
+Two standards govern the output, not the code, and the skills **cite them directly** — so they live in `.claude/references/` (next to the skills that depend on them, not in the human `docs/`): `.claude/references/CRAFT-BAR.md` (the quality bar every video is held to — §A universal taste + §B per-type structure profiles) and `.claude/references/COMPOSED-CARDS.md` (how to build a premium board on the composed path). `docs/` holds the human-facing video-production reference (glossary, launch-video anatomy, showing-a-web-app).
 
 ## How the tools run
 

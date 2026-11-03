@@ -6,7 +6,7 @@ description: Own the voiceover step — pick the best TTS engine (Kokoro / Piper
 # voice-production
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` §A5 (Sound). The voice track is judged against it.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` §A5 (Sound). The voice track is judged against it.
 
 You own the **voice** step of the pipeline: turn the approved script into narration audio plus per-word timing. You do **not** author the script — you speak exactly the lines you are given, and you choose the right TTS tool for the job.
 

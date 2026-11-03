@@ -9,7 +9,7 @@ You review a **render** on the **audio/sync** axis. This is the check no LLM rev
 
 **Do not judge by watching. Run the verifier — it is authoritative.**
 
-This is the **mechanical half of `craft/video-production/docs/CRAFT-BAR.md` §A5 (sound)**: it proves the VO matches the script line-for-line in order, the mp4/vo durations stay in sync, and there is no dead air or blank open. Judge against that — pass only what the verifier passes. You do **not** judge the music bed, SFX taste, or any look axis (the §A3 slop cluster, frame craft); `final-review` owns the rest of §A5 and the full §A/§B bar by eye.
+This is the **mechanical half of `craft/video-production/.claude/references/CRAFT-BAR.md` §A5 (sound)**: it proves the VO matches the script line-for-line in order, the mp4/vo durations stay in sync, and there is no dead air or blank open. Judge against that — pass only what the verifier passes. You do **not** judge the music bed, SFX taste, or any look axis (the §A3 slop cluster, frame craft); `final-review` owns the rest of §A5 and the full §A/§B bar by eye.
 
 ## Steps
 

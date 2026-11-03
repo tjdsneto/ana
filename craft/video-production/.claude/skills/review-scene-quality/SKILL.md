@@ -7,7 +7,7 @@ description: Quality-axis reviewer for one generated scene — judge the clip's 
 
 You review **one scene** (its clip, or — while generation is keyless — its shot spec) on the **quality** axis: is this a well-crafted clip on its own? You do **not** check it against the storyboard spec (conformance) or the sibling scenes (consistency) here — judge this clip's craft.
 
-Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the §B profile for the video's type); for composed scenes also `craft/video-production/docs/COMPOSED-CARDS.md`. **Count the §A3 tell cluster — 2+ = revise.**
+Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile for the video's type); for composed scenes also `craft/video-production/.claude/references/COMPOSED-CARDS.md`. **Count the §A3 tell cluster — 2+ = revise.**
 
 ## Rubric
 

@@ -7,7 +7,7 @@ description: Conformance-axis reviewer for a script deliverable — check the sc
 
 ## Hold to the craft bar
 
-Before reviewing, read `craft/video-production/docs/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
+Before reviewing, read `craft/video-production/.claude/references/CRAFT-BAR.md` for the **§B profile** of this video's type — check the script carries the type's required close (B-launch CTA / B-demo next-step / B-teaser deferred) and matches the brief's asks. The §A3 visual-slop cluster and `COMPOSED-CARDS.md` are not a script's axis; this is a coverage check against the brief + §B, not a visual-craft gate.
 
 You review a **script** on the **conformance** axis — does it match what was asked? You do **not** judge writing quality here (that is the quality reviewer's axis); check the script against the **brief** and the **approved upstream work** you were given.
 

@@ -11,7 +11,7 @@ Your mindset is **creative and anchored on the video's goal** — diverge on *ho
 
 ## Hold to the craft bar
 
-Before seeding concepts, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Every concept you seed is judged against both.
+Before seeding concepts, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Every concept you seed is judged against both.
 
 ## N — the creativity lever
 

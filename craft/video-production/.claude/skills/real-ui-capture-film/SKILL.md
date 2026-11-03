@@ -1,11 +1,10 @@
 ---
-name: family-a-film
+name: real-ui-capture-film
 description: Produce a product/feature demo video in the real-UI-capture style — the real product UI captured as stills under a word-timed Ken-Burns camera. Use when the brief is a product demo showing real screens (not generative/brand footage with no real UI). Orchestrates the craft tools (vo, site-capture, build, mix, render) and self-checks against the craft bar before handing off.
 ---
 
-<!-- TODO(rename): dir family-a-film → real-ui-capture-film; main agent rewires engine/types -->
 
-# family-a-film
+# real-ui-capture-film
 
 Produce a short product/feature demo in the **real-UI-capture** style (spec 09): the real product UI, captured as stills, shown under a cinematic Ken-Burns camera, with every cut / highlight / caption anchored to a spoken word. This is the render_kind that cleared the craft bar the slide-cards failed.
 
@@ -13,7 +12,7 @@ Produce a short product/feature demo in the **real-UI-capture** style (spec 09):
 
 ## Hold to the craft bar
 
-Before you author, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type — **B-demo** for a feature demo (lead with ONE real end-to-end flow, the flow *is* the proof, close on a next step) or **B-launch** for an announcement (2–4 hero features not a list, one legible hero number/receipt framed big, a scored on-screen CTA). Length keys off the §B band **+ aspect**, not a fixed number. Your render is judged against §A + that §B profile — build to it.
+Before you author, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type — **B-demo** for a feature demo (lead with ONE real end-to-end flow, the flow *is* the proof, close on a next step) or **B-launch** for an announcement (2–4 hero features not a list, one legible hero number/receipt framed big, a scored on-screen CTA). Length keys off the §B band **+ aspect**, not a fixed number. Your render is judged against §A + that §B profile — build to it.
 
 ## When this applies
 
@@ -43,7 +42,7 @@ Keys: `title · size [1920,1080] · url (address-bar text) · theme {bg,text,acc
 
 Optional fields the chain acts on automatically (see the tools below): `music` (`"library:<mood>"` / a bed path / `"stock:<mood>"` [licence-clean fetch, e.g. Freesound CC0] / `"generate:<prompt>"` → `music.py`) · `audio` (a real voice clip path → narration via `align.py` instead of TTS) · `captions` (`true` / `"karaoke"` / `"block"` / an overrides object → word-timed caption burn + `.srt` via `captions.py`).
 
-The rules that make it good, not just working (from the craft bar, `craft/video-production/docs/CRAFT-BAR.md` — §A for taste, the matching §B profile for structure):
+The rules that make it good, not just working (from the craft bar, `craft/video-production/.claude/references/CRAFT-BAR.md` — §A for taste, the matching §B profile for structure):
 
 - **Hook + ONE idea.** The first ~3s earn the next. Say the one thing the video is about in a sentence; cut everything that serves a second idea.
 - **Real screens only.** Capture the actual product (`url`) or author a faithful screen. Redact real names/keys/domains via `capture.redact`. Never a generic mockup.
@@ -58,7 +57,7 @@ The rubric demands real screens. They come from the **site the brief provides** 
 
 ## Self-check before handing off (non-negotiable)
 
-**Watch and listen to your own render** and judge it against `craft/video-production/docs/CRAFT-BAR.md` — §A (hook not a logo/title card, one dominant subject per beat, motion that means something, legible capability-proof, 0–1 §A3 slop tells, a music bed with no dead tail) plus the matching §B profile (the demo flow / the launch features + the close its type owes). Extract frames across the timeline and sample the VO — "approved" means you perceived the pixels and audio, not that a file was produced. Do NOT hand off anything that would not pass the ship test. Fix the film.json/script, re-run the affected tools, re-render, re-watch. Iterate (3–5 passes is normal) until it clears the bar. (`final-review` is the engine's own last gate against this same bar — don't lean on it to catch what you can see now.)
+**Watch and listen to your own render** and judge it against `craft/video-production/.claude/references/CRAFT-BAR.md` — §A (hook not a logo/title card, one dominant subject per beat, motion that means something, legible capability-proof, 0–1 §A3 slop tells, a music bed with no dead tail) plus the matching §B profile (the demo flow / the launch features + the close its type owes). Extract frames across the timeline and sample the VO — "approved" means you perceived the pixels and audio, not that a file was produced. Do NOT hand off anything that would not pass the ship test. Fix the film.json/script, re-run the affected tools, re-render, re-watch. Iterate (3–5 passes is normal) until it clears the bar. (`final-review` is the engine's own last gate against this same bar — don't lean on it to catch what you can see now.)
 
 ## Common fixes
 

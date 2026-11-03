@@ -6,7 +6,7 @@ description: Produce one scene from its spec, realized by the scene's method (au
 # build-scene
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
 
 You produce **one scene** of the video — the clip for exactly the scene in this node's spec, not the whole film, realized by the spec's `method`. The engine fanned this scene out from the storyboard; a sibling node owns each other scene.
 

@@ -6,9 +6,9 @@ description: Produce ONE composed card of the board — its plate HTML + camera 
 # build-card
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/docs/COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Judged against both.
 
-You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the §B profile for this video's type) + `craft/video-production/docs/COMPOSED-CARDS.md` + the **moodboard**.
+You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile for this video's type) + `craft/video-production/.claude/references/COMPOSED-CARDS.md` + the **moodboard**.
 
 ## Inputs
 

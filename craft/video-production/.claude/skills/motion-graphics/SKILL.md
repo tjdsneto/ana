@@ -6,7 +6,7 @@ description: Produce programmatic motion graphics as a clip — an animated titl
 # motion-graphics
 
 > ## Hold to the craft bar
-> Read `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the matching §B profile). The clip is judged against it like any render.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the matching §B profile). The clip is judged against it like any render.
 
 You produce a **motion-graphics clip** (animated title/lower-third/caption/overlay) by authoring an **HTML composition** and rendering it with the `motion-graphics` tool. The backend is swappable — `HyperFrames` (default, local OSS) or `Remotion` (reserved) — chosen by `$MOTION_GFX_BACKEND`; your composition and the command are the same either way. This is a craft tool driving a skill, no engine port (spec-09 Decision #5).
 
@@ -44,7 +44,7 @@ node craft/video-production/tools/motion-graphics/index.mjs --html <comp>.html -
 
 ## Output & bar
 
-The rendered `.mp4` (or an overlay clip to composite). Nothing else. Watch it before handing off — it's held to `craft/video-production/docs/CRAFT-BAR.md` like any render: readable text, on-brand look, clean motion, right duration. Fix the HTML and re-render on a problem.
+The rendered `.mp4` (or an overlay clip to composite). Nothing else. Watch it before handing off — it's held to `craft/video-production/.claude/references/CRAFT-BAR.md` like any render: readable text, on-brand look, clean motion, right duration. Fix the HTML and re-render on a problem.
 
 ## Notes
 

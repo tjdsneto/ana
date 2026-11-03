@@ -11,7 +11,7 @@ You review the **derived clip** the `edit-footage` leaf produced from a caller-p
 
 The derived clip (`.mp4` / `.wav`), the EDL that produced it (the cut plan), and the brief. Build a watch package if needed (frame grabs + the audio) the same way the render reviewers do.
 
-## Judge against the bar (`craft/video-production/docs/CRAFT-BAR.md`)
+## Judge against the bar (`craft/video-production/.claude/references/CRAFT-BAR.md`)
 
 - **Right content.** The kept range(s) are the piece the brief asked for — nothing essential dropped, nothing unwanted left in.
 - **Clean cuts.** Joins land on sensible boundaries: no clipped half-word, no black/garbage frame at a concat seam, no audio click. Total duration matches the sum of the intended ranges.

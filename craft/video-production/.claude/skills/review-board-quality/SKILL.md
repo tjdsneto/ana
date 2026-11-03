@@ -3,18 +3,17 @@ name: review-board-quality
 description: Board-level quality reviewer for the composed/card lane — judges the whole-board §A1 properties no per-card reviewer can see: every beat distinct (no slideshow), a signature move present at all, colour-per-beat variety, the hero number allocated its OWN full-frame card, and motion as a sequence of plates (COMPOSED-CARDS §3). Reads CRAFT-BAR + COMPOSED-CARDS, VIEWs the rendered board sheet, counts the §A3 tell cluster. Emit VERDICT: pass | revise.
 ---
 
-<!-- TODO(wire): register this reviewer on the board/assemble-board node in engine/types -->
 
 # review-board-quality
 
 > ## Hold to the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
 
 You review the **whole assembled board** (the composed/card lane's `film.json` + the cards it stitched) on the **quality** axis. Your job is the **board-level craft that no per-card reviewer can see**: a card reviewer judges one card in isolation (its safe area, its font, its one accent) and passes it on its own merits — but it cannot see whether all the cards together read as one varied, signature-bearing film or as a repetitive, flat slideshow. That whole-board view is the structural hole this gate fills. You do **not** re-judge a single card's internal craft (the card quality reviewer did that), and you do **not** check brief/script coverage (conformance) or moodboard match (consistency). Judge the board as a sequence.
 
 ## The bar — read the rubrics first (load-bearing)
 
-Read **`craft/video-production/docs/CRAFT-BAR.md`** (§A universal taste + the §B profile matching this video's type) and **`craft/video-production/docs/COMPOSED-CARDS.md`** (the composed-card HOW, especially §3 motion). Judge the board against the **ship test**: *would the company whose product this is actually ship a video built from this board?* Not "is it acceptable." Your job is not only to grade — it is to **bump the board up**: for every miss, name the beat(s), say what's wrong, and give the concrete change that raises it, then send it back. With the redo budget set high, keep sending weak boards back until they clear the bar. Passing a tidy-but-forgettable board is the exact failure this gate exists to prevent.
+Read **`craft/video-production/.claude/references/CRAFT-BAR.md`** (§A universal taste + the §B profile matching this video's type) and **`craft/video-production/.claude/references/COMPOSED-CARDS.md`** (the composed-card HOW, especially §3 motion). Judge the board against the **ship test**: *would the company whose product this is actually ship a video built from this board?* Not "is it acceptable." Your job is not only to grade — it is to **bump the board up**: for every miss, name the beat(s), say what's wrong, and give the concrete change that raises it, then send it back. With the redo budget set high, keep sending weak boards back until they clear the bar. Passing a tidy-but-forgettable board is the exact failure this gate exists to prevent.
 
 ## Visual review (required) — judge the board, not the JSON
 

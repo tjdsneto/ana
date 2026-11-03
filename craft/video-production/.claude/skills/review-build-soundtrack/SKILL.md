@@ -6,7 +6,7 @@ description: Reviewer for the build-soundtrack leaf — confirm the audio plan i
 # review-build-soundtrack
 
 > ## Judge against the craft bar
-> Judge against `craft/video-production/docs/CRAFT-BAR.md` §A5 (Sound). You cannot HEAR the mix, but the plan + files let you check mechanically that §A5's structure is met: a ducked music bed present, deliberate SFX on the key beats (not bare VO + bed), no dead tail, and the master at −14 LUFS.
+> Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` §A5 (Sound). You cannot HEAR the mix, but the plan + files let you check mechanically that §A5's structure is met: a ducked music bed present, deliberate SFX on the key beats (not bare VO + bed), no dead tail, and the master at −14 LUFS.
 
 You review the **build-soundtrack** leaf. A subagent cannot listen, so **do not judge whether the music sounds good or fits the vibe** — judge the plan the mix depends on: are the tracks declared, does the music resolve, are there SFX on the key beats, is there no dead tail, is the loudness at target. The one near-subjective check allowed is that the plan's intent matches the moodboard's stated tone (text vs text), never the sound itself.
 
