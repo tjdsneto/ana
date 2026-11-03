@@ -81,8 +81,10 @@ services:
       - ./engine/data/claude:/root/.claude
       # Live-mount the craft (skills + tools) so skill/tool edits reflect without an image rebuild
       # (the engine DIST is still baked; only skills + the craft scripts are read at runtime). The
-      # node/python/chromium runtimes they shell out to stay baked in the image.
-      - ./.claude/skills:/repo/.claude/skills
+      # node/python/chromium runtimes they shell out to stay baked in the image. The craft owns its
+      # skills under craft/.claude/skills; the worker cwd stays /repo, so they mount to the project
+      # path the worker resolves (/repo/.claude/skills). Skill tool refs (craft/tools/…) are /repo-relative.
+      - ./craft/.claude/skills:/repo/.claude/skills
       - ./craft/tools:/repo/craft/tools
     depends_on:
       db:
