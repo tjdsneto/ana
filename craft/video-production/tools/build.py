@@ -81,6 +81,38 @@ CARD = {"x": round(W * 0.13, 1), "y": round(H * 0.14, 1), "scale": 0.74, "border
 if FB:
     FULL = CARD = {"x": 0, "y": 0, "scale": 1, "borderRadius": 0}
 
+# ------------------------------------------------------------------ device shell (`frame`)
+# `frame` wraps the product window in a device bezel. Absent / "browser" -> the window path above,
+# unchanged. "laptop" draws a landscape bezel + deck around the whole window, scaled to fit the
+# stage; the camera runs inside the screen untouched (no VW/VH/K change). "phone"/"tablet" need a
+# portrait reflow (next slice) and fail loudly for now rather than mis-render.
+FRAME = film.get("frame")
+if FRAME not in (None, "browser", "laptop", "phone", "tablet"):
+    sys.exit(f'build: unknown frame "{FRAME}" (browser | laptop | phone | tablet)')
+if FRAME in ("phone", "tablet"):
+    sys.exit(f'build: frame "{FRAME}" not implemented yet (portrait slice; laptop only for now)')
+DEVICE = FRAME == "laptop"
+DEVICE_CSS = ""
+if DEVICE:
+    DPAD, DECK_H, DECK_OVER = 34, 72, 150          # screen bezel, base height, deck overhang per side
+    LIDW, LIDH = W + 2 * DPAD, H + 2 * DPAD          # the lid frames the whole W x H window
+    DECKW = LIDW + 2 * DECK_OVER
+    DEVW, DEVH = DECKW, LIDH + DECK_H
+    DSCALE = round(min(W * 0.93 / DEVW, H * 0.9 / DEVH), 4)
+    DLEFT, DTOP = round((W - DEVW * DSCALE) / 2, 1), round((H - DEVH * DSCALE) / 2, 1)
+    LIDX = round((DEVW - LIDW) / 2, 1)               # lid centred over the wider deck
+    DEVICE_CSS = (
+        f"#device{{position:absolute;left:{DLEFT}px;top:{DTOP}px;width:{DEVW}px;height:{DEVH}px;"
+        f"transform-origin:0 0;transform:scale({DSCALE});opacity:0;z-index:2;}}"
+        f"#device .lid{{position:absolute;left:{LIDX}px;top:0;width:{LIDW}px;height:{LIDH}px;"
+        "background:#0a0a0c;border-radius:30px 30px 0 0;box-shadow:0 40px 120px rgba(0,0,0,.6),inset 0 0 0 2px #2b2b31;}"
+        f"#device .win{{left:{DPAD}px;top:{DPAD}px;border-radius:10px;box-shadow:none;}}"
+        f"#device .deck{{position:absolute;left:0;top:{LIDH}px;width:{DECKW}px;height:{DECK_H}px;"
+        "background:#c7c9ce;border-radius:0 0 22px 22px;box-shadow:inset 0 2px 0 #e7e8ea,0 20px 40px rgba(0,0,0,.4);}"
+        f"#device .deck .notch{{position:absolute;left:50%;top:0;width:{round(DECKW * 0.14)}px;height:16px;"
+        "transform:translateX(-50%);background:#a9abb1;border-radius:0 0 12px 12px;}"
+    )
+
 CAMS = film["camera"]
 T_WIN = T(CAMS[0]["at"])
 EXP = T(film.get("expand_at", T_WIN + 0.9))
@@ -252,19 +284,22 @@ def html():
     {f'<div class="sub" id="os">{oc["sub"]}</div>' if oc.get("sub") else ''}{f'<div class="cta" id="oc">{oc["cta"]}</div>' if oc.get("cta") else ''}</div>
   </section>"""
     OMNI = f'<div class="omni"><span class="url">{LOCK}<span>{OMNI_URL}</span></span></div>' if OMNI_URL else ""
+    win = (f'<div class="win{" fb" if FB else ""}" id="win">'
+           f'<div class="bar"><span class="lights"><i></i><i></i><i></i></span>{OMNI}</div>'
+           f'<div class="vp"><div id="cam">{shots}{rings}<div class="cursor" id="cur">{CURSOR}<i class="ripple" id="rip"></i></div></div></div>'
+           f'</div>')
+    win_html = (f'<div id="device" class="device laptop"><div class="lid">{win}</div>'
+                f'<div class="deck"><i class="notch"></i></div></div>') if DEVICE else win
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width={W}, height={H}">
 <title>{film.get("title", "Launch film")}</title>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>{font_css}
-<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=max(8, round(H * inset / 2 - 28)), CHIPSZ=film.get("chip_size", 28))}</style></head>
+<style>{CSS % dict(TH, W=W, H=H, VW=VW, VH=VH, BIG=film.get("title_size", 132), CHIPB=max(8, round(H * inset / 2 - 28)), CHIPSZ=film.get("chip_size", 28))}{DEVICE_CSS}</style></head>
 <body>
 <div id="root">
   <div id="bg"><div class="glow" id="glow"></div><div class="dots"></div></div>{title}
   <section id="product" class="clip">
-    <div class="win{" fb" if FB else ""}" id="win">
-      <div class="bar"><span class="lights"><i></i><i></i><i></i></span>{OMNI}</div>
-      <div class="vp"><div id="cam">{shots}{rings}<div class="cursor" id="cur">{CURSOR}<i class="ripple" id="rip"></i></div></div></div>
-    </div>
+    {win_html}
     {chips}
   </section>{layers_div}{outro}
 </div>
@@ -287,12 +322,17 @@ tl.fromTo("#glow", { x: -60, scale: 1 }, { x: 60, scale: 1.08, duration: P.DUR, 
 tl.fromTo("#tb", { scale: 1.05 }, { scale: 1, duration: Math.max(0.5, P.TWIN - 0.3), ease: "power2.out", immediateRender: true }, 0);
 blurOut("#tcard", P.TWIN + 0.1);
 
-// browser window: floats in as a card, then expands to fill the frame
-if (P.FB) { gsap.set("#win", Object.assign({ opacity: 1 }, P.FULL)); tl.set("#win", Object.assign({ opacity: 1 }, P.FULL), 0); } else {
+// product window reveal. device shell (P.FRAME): the window is static inside the bezel, the whole
+// device fades/rises in. otherwise: floats in as a card, then expands to fill the frame.
+if (P.FRAME) {
+  gsap.set("#win", { opacity: 1, x: 0, y: 0, scale: 1, borderRadius: 10 });
+  gsap.set("#device", { opacity: 0 }); tl.set("#device", { opacity: 0 }, 0);
+  tl.fromTo("#device", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "expo.out", immediateRender: false }, P.TWIN);
+} else if (P.FB) { gsap.set("#win", Object.assign({ opacity: 1 }, P.FULL)); tl.set("#win", Object.assign({ opacity: 1 }, P.FULL), 0); } else {
 gsap.set("#win", Object.assign({ opacity: 0 }, P.CARD)); tl.set("#win", Object.assign({ opacity: 0 }, P.CARD), 0);
 tl.fromTo("#win", { opacity: 0, y: P.CARD.y + 80 }, { opacity: 1, y: P.CARD.y, duration: 0.6, ease: "expo.out", immediateRender: false }, P.TWIN);
 tl.to("#win", Object.assign({ duration: 0.75, ease: "expo.inOut" }, P.FULL), P.EXP); }
-if (P.OUT < P.DUR) blurOut("#win", P.OUT + 0.1);
+if (P.OUT < P.DUR) blurOut(P.FRAME ? "#device" : "#win", P.OUT + 0.1);
 
 // camera
 const FIRST = "s_" + P.CAM[0].shot.replace(/-/g, "_");
@@ -364,7 +404,7 @@ window.__timelines["main"] = tl;
 window.__duration = P.DUR;
 """
 
-PAYLOAD = {"FB": FB, "DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
+PAYLOAD = {"FB": FB, "FRAME": FRAME, "DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
            "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS],
            "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move", "kind")} for L in LAYERS]}
 
