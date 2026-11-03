@@ -99,6 +99,7 @@ export interface SubagentInput {
 	systemPrompt?: string
 	cwd?: string
 	model?: string // per-call model override (else the runner's configured default)
+	maxBudgetUsd?: number // per-call spend cap (else the runner's configured default, SUBAGENT_MAX_BUDGET_USD)
 	resumeSessionId?: string // continue a prior provider session (e.g. claude --resume) across redo rounds
 }
 
@@ -115,6 +116,7 @@ export interface SubagentUsage {
 export interface SubagentResult {
 	output: string // the subagent's text output (producer draft, or `VERDICT: …` for a reviewer)
 	sessionId?: string // provider session id (claude session_id); undefined for engines without one
+	engine?: string // the backend that ran it — stamped by the loop from the runner it resolved for the node
 	model?: string // the resolved model the engine actually used
 	usage?: SubagentUsage // tokens + cost for this interaction, when the engine reports it
 	raw?: unknown // transport-level detail, if the adapter wants to surface it

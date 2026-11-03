@@ -20,7 +20,8 @@ const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work we
 
 export interface EngineDeps {
 	store: Store
-	runner: SubagentRunner
+	runner: SubagentRunner // the default backend — used for any node that declares no engine (or names this one)
+	runners?: Map<string, SubagentRunner> // extra backends by engine name, for nodes that pin a non-default engine (TypeContract.engine)
 	types: TypeRegistry
 	config: EngineConfig
 	logger?: Logger // default: quiet (NoopLogger). Entrypoints inject a JsonLogger.
@@ -29,6 +30,7 @@ export interface EngineDeps {
 export class Engine {
 	private readonly store: Store
 	private readonly runner: SubagentRunner
+	private readonly runners: Map<string, SubagentRunner>
 	private readonly types: TypeRegistry
 	private readonly config: EngineConfig
 	private readonly log: Logger
@@ -40,6 +42,7 @@ export class Engine {
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
 		this.runner = deps.runner
+		this.runners = deps.runners ?? new Map()
 		this.types = deps.types
 		this.config = deps.config
 		this.log = deps.logger ?? new NoopLogger()
@@ -74,10 +77,32 @@ export class Engine {
 
 	// Single seam for every subagent call, so the real-spend counter can never be bypassed. fake is
 	// free, so it does not count against the budget.
-	private async runSubagent(input: SubagentInput): Promise<SubagentResult> {
-		const result = await this.runner.run(input)
-		if (this.runner.engine !== "fake") this.realCalls++
-		return result
+	// The backend a node runs on: the type may pin one (TypeContract.engine); otherwise the default
+	// runner. A pinned engine that names the default is just the default; any other must be registered
+	// in the runners map (the worker wires it), else it is a config error we surface loudly.
+	private runnerFor(contract?: TypeContract): SubagentRunner {
+		const name = contract?.engine
+		if (!name || name === this.runner.engine) return this.runner
+		const runner = this.runners.get(name)
+		if (!runner) throw new Error(`node type "${contract?.type}" pins subagent engine "${name}", but no runner is registered for it (wire it into the worker's runners map)`)
+		return runner
+	}
+
+	private async runSubagent(input: SubagentInput, contract?: TypeContract): Promise<SubagentResult> {
+		// Per-node overrides declared on the type contract. Each falls back to the runner's configured
+		// default (engine → SUBAGENT_ENGINE, model → SUBAGENT_MODEL, budget → SUBAGENT_MAX_BUDGET_USD)
+		// when the type declares none, and an override already set on `input` still wins over the contract.
+		const runner = this.runnerFor(contract)
+		const merged: SubagentInput = {
+			...input,
+			model: input.model ?? contract?.model,
+			maxBudgetUsd: input.maxBudgetUsd ?? contract?.maxBudgetUsd,
+		}
+		const result = await runner.run(merged)
+		if (runner.engine !== "fake") this.realCalls++
+		// Stamp which backend actually ran, so the interaction log + node metadata record the per-node
+		// engine rather than always the default. The runner may also report it on the result itself.
+		return { ...result, engine: result.engine ?? runner.engine }
 	}
 
 	// Drain all currently-actionable work (stops when idle). The live worker calls this each wake-up;
@@ -248,12 +273,15 @@ export class Engine {
 
 		const t0 = Date.now()
 		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream })
-		const result = await this.runSubagent({
-			prompt: plannerPrompt,
-			skill: contract.skill ?? node.type,
-			cwd: this.config.craftRoot,
-			resumeSessionId: latest?.subagent?.sessionId,
-		})
+		const result = await this.runSubagent(
+			{
+				prompt: plannerPrompt,
+				skill: contract.skill ?? node.type,
+				cwd: this.config.craftRoot,
+				resumeSessionId: latest?.subagent?.sessionId,
+			},
+			contract,
+		)
 		const planned = parsePlan(result.output)
 		if (planned.length === 0) throw new Error(`dispatchPlan: planner "${node.type}" returned no children — ${result.output.slice(0, 200)}`)
 
@@ -267,7 +295,7 @@ export class Engine {
 			status: "approved",
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
-			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
 		})
 		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, plannerPrompt)
 
@@ -369,11 +397,14 @@ export class Engine {
 				stageCollectedArtifacts(workDir, into, items)
 			}
 			producerPrompt = buildRenderedPrompt(contract, { brief: root.description ?? "", workDir, feedback, assets: stagedAssets, boardDir, upstreamFiles: stagedUpstream })
-			producerResult = await this.runSubagent({
-				prompt: producerPrompt,
-				skill: contract.skill ?? node.type, // the type names its skill; no video default in the engine
-				cwd: this.config.craftRoot,
-			})
+			producerResult = await this.runSubagent(
+				{
+					prompt: producerPrompt,
+					skill: contract.skill ?? node.type, // the type names its skill; no video default in the engine
+					cwd: this.config.craftRoot,
+				},
+				contract,
+			)
 			// Capture the file the skill wrote. A type that declares `output` names the exact file (looked up
 			// in the board dir when boardDir is set, else the work dir) — so a non-media file, e.g. a composed
 			// film.json, is captured AT THE SOURCE and a downstream dependent stages the real structured file,
@@ -409,11 +440,14 @@ export class Engine {
 				mkdirSync(join(boardDir, "fonts"), { recursive: true })
 			}
 			producerPrompt = buildProducerPrompt(contract, { brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined, priorContent, feedback, boardOut, boardDir })
-			producerResult = await this.runSubagent({
-				prompt: producerPrompt,
-				skill: contract.skill ?? node.type,
-				cwd: this.config.craftRoot,
-			})
+			producerResult = await this.runSubagent(
+				{
+					prompt: producerPrompt,
+					skill: contract.skill ?? node.type,
+					cwd: this.config.craftRoot,
+				},
+				contract,
+			)
 			draft = producerResult.output
 			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
 		}
@@ -428,7 +462,7 @@ export class Engine {
 			subagent: {
 				runId: randomUUID(),
 				status: "done",
-				...(producerResult ? { sessionId: producerResult.sessionId, engine: this.runner.engine, model: producerResult.model } : {}),
+				...(producerResult ? { sessionId: producerResult.sessionId, engine: producerResult.engine ?? this.runner.engine, model: producerResult.model } : {}),
 			},
 		})
 		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs, producerPrompt)
@@ -439,11 +473,14 @@ export class Engine {
 		for (const rv of contract.reviews ?? []) {
 			const rt0 = Date.now()
 			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream })
-			const rres = await this.runSubagent({
-				prompt: reviewPrompt,
-				skill: rv.skill ?? `review:${rv.kind}`, // a reviewer skill (per-step rubric) if declared, else the kind label (generic lens, no directive)
-				cwd: this.config.craftRoot,
-			})
+			const rres = await this.runSubagent(
+				{
+					prompt: reviewPrompt,
+					skill: rv.skill ?? `review:${rv.kind}`, // a reviewer skill (per-step rubric) if declared, else the kind label (generic lens, no directive)
+					cwd: this.config.craftRoot,
+				},
+				contract,
+			)
 			await this.logInteraction(node, version.id, `review:${rv.kind}`, rres, Date.now() - rt0, reviewPrompt)
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
@@ -509,12 +546,15 @@ export class Engine {
 
 		const t0 = Date.now()
 		const holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream })
-		const result = await this.runSubagent({
-			prompt: holisticPrompt,
-			skill: contract.skill ?? "final-review",
-			cwd: this.config.craftRoot,
-			resumeSessionId: latest?.subagent?.sessionId,
-		})
+		const result = await this.runSubagent(
+			{
+				prompt: holisticPrompt,
+				skill: contract.skill ?? "final-review",
+				cwd: this.config.craftRoot,
+				resumeSessionId: latest?.subagent?.sessionId,
+			},
+			contract,
+		)
 		const draft = result.output
 		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
 		const version = await this.store.createVersion({
@@ -524,7 +564,7 @@ export class Engine {
 			status: "producing",
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
-			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
 		})
 		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, holisticPrompt)
 
@@ -673,7 +713,7 @@ export class Engine {
 			versionId,
 			role,
 			prompt,
-			engine: this.runner.engine,
+			engine: result.engine ?? this.runner.engine,
 			model: result.model,
 			sessionId: result.sessionId,
 			inputTokens: result.usage?.inputTokens,
@@ -786,11 +826,14 @@ export class Engine {
 		for (const rv of sensitive) {
 			const rt0 = Date.now()
 			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, revalidation: true })
-			const rres = await this.runSubagent({
-				prompt: reviewPrompt,
-				skill: rv.skill ?? `review:${rv.kind}`,
-				cwd: this.config.craftRoot,
-			})
+			const rres = await this.runSubagent(
+				{
+					prompt: reviewPrompt,
+					skill: rv.skill ?? `review:${rv.kind}`,
+					cwd: this.config.craftRoot,
+				},
+				contract,
+			)
 			await this.logInteraction(node, latest.id, `review:${rv.kind}`, rres, Date.now() - rt0, reviewPrompt)
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: latest.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
@@ -820,12 +863,15 @@ export class Engine {
 		const upstream = await this.collectUpstream(node)
 		const t0 = Date.now()
 		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream })
-		const result = await this.runSubagent({
-			prompt: plannerPrompt,
-			skill: contract.skill ?? node.type,
-			cwd: this.config.craftRoot,
-			resumeSessionId: latest.subagent?.sessionId,
-		})
+		const result = await this.runSubagent(
+			{
+				prompt: plannerPrompt,
+				skill: contract.skill ?? node.type,
+				cwd: this.config.craftRoot,
+				resumeSessionId: latest.subagent?.sessionId,
+			},
+			contract,
+		)
 		const planned = parsePlan(result.output)
 		if (planned.length === 0) throw new Error(`replan: planner "${node.type}" returned no children — ${result.output.slice(0, 200)}`)
 
@@ -855,7 +901,7 @@ export class Engine {
 			status: "approved",
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
-			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: this.runner.engine, model: result.model },
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
 		})
 		await this.store.updateVersion(latest.id, { status: "superseded" })
 		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, plannerPrompt)
