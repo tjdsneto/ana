@@ -30,7 +30,7 @@ SUBAGENT_ENGINE=fake
 # RENDER_FONT=                 # override the baked drawtext TTF
 # VOICE_MODEL=                 # override the baked piper .onnx voice
 
-# Image generation (the asset / moodboard lane — craft/tools/image.py). Default: stub (keyless SVG
+# Image generation (the asset / moodboard lane — craft/video-production/tools/image.py). Default: stub (keyless SVG
 # placeholder, zero cost), matching the render/voice stub defaults. Keyed providers are BYO-key, never
 # baked: the adapter reads $OPENAI_API_KEY / $GEMINI_API_KEY (or an --api-key-file the skill passes).
 # IMAGE_PROVIDER=stub          # stub | openai | gemini | custom

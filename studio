@@ -15,7 +15,7 @@
 #   ./studio play FILE                                     open in the default player (macOS)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-TOOLS="$HERE/craft/tools"
+TOOLS="$HERE/craft/video-production/tools"
 KOKORO_PY="${KOKORO_PY:-$HOME/.local/share/kokoro-onnx/venv/bin/python}"
 MUSICGEN_PY="${MUSICGEN_PY:-$HOME/.local/share/musicgen/venv/bin/python}"
 

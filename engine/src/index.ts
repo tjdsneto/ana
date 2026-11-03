@@ -7,7 +7,7 @@
 //                       drives the human gate unattended, so a full production runs with no operator.
 //
 // Rendering is not here: a render leaf runs the render-film skill, which drives the craft tools in
-// craft/tools (vo / build / mix / render). The engine has no render/voice client.
+// craft/video-production/tools (vo / build / mix / render). The engine has no render/voice client.
 //
 // The logic lives in loop.ts (Engine): produce → review internally → mark the data. Read that to
 // understand the engine. config.ts / typereg.ts / prompts.ts feed it; worker/index.ts just wires it up.

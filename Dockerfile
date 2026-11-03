@@ -78,7 +78,7 @@ RUN set -eux; \
 	mkdir -p /opt/piper-voices; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"; \
 	curl -fsSL -o /opt/piper-voices/en_US-amy-medium.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
-# python3 + the voice/compose toolchain the render shells out to (craft/tools/vo.py, mix.py, build.py).
+# python3 + the voice/compose toolchain the render shells out to (craft/video-production/tools/vo.py, mix.py, build.py).
 # build.py is stdlib python3; vo.py/mix.py need numpy + soundfile, and vo.py's word timing uses the
 # `whisper` CLI (openai-whisper). A venv at /opt/voenv holds those; make-film.sh runs vo.py/mix.py under
 # $KOKORO_PY (pointed at the venv), build.py under system python3. The whisper base model is baked so
@@ -115,7 +115,7 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 FROM engine-tools AS engine
 WORKDIR /repo
 COPY --from=base /repo /repo
-# Playwright + chromium for the composed render (craft/tools/site-capture.mjs screenshots each plate).
+# Playwright + chromium for the composed render (craft/video-production/tools/site-capture.mjs screenshots each plate).
 # Installed in the IMAGE only — not the shared repo package.json, which would shadow the host's own
 # playwright. npm 12 blocks the browser-download postinstall, so fetch chromium + its apt deps explicitly.
 RUN npm i --no-save playwright@1.48.2 \

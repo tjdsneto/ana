@@ -82,10 +82,11 @@ services:
       # Live-mount the craft (skills + tools) so skill/tool edits reflect without an image rebuild
       # (the engine DIST is still baked; only skills + the craft scripts are read at runtime). The
       # node/python/chromium runtimes they shell out to stay baked in the image. The craft owns its
-      # skills under craft/.claude/skills; the worker cwd stays /repo, so they mount to the project
-      # path the worker resolves (/repo/.claude/skills). Skill tool refs (craft/tools/…) are /repo-relative.
-      - ./craft/.claude/skills:/repo/.claude/skills
-      - ./craft/tools:/repo/craft/tools
+      # skills under craft/video-production/.claude/skills; the worker cwd stays /repo, so they mount
+      # to the project path the worker resolves (/repo/.claude/skills). Skill tool refs
+      # (craft/video-production/tools/…) are /repo-relative.
+      - ./craft/video-production/.claude/skills:/repo/.claude/skills
+      - ./craft/video-production/tools:/repo/craft/video-production/tools
     depends_on:
       db:
         condition: service_healthy
@@ -148,8 +149,8 @@ services:
   toolbox:
     # Same image as engine-worker (target: engine) so ./x IS the engine container — it has the baked
     # chromium + ffmpeg + python3 + voice venvs the craft tools shell out to, not just node/npm. A plain
-    # `./x npm ci|test|build` still works; `./x node craft/tools/motion-graphics/index.mjs …` and
-    # `./x python3 craft/tools/image.py …` now render + generate here, keyed from .engine_env.
+    # `./x npm ci|test|build` still works; `./x node craft/video-production/tools/motion-graphics/index.mjs …` and
+    # `./x python3 craft/video-production/tools/image.py …` now render + generate here, keyed from .engine_env.
     build:
       context: .
       dockerfile: Dockerfile

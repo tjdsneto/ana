@@ -83,7 +83,8 @@ engine        generic autonomy loop — knows nothing about video
 | `server/data/` | gitignored runtime state: produced `artifacts/` (the Postgres data lives in the `db` container volume) |
 | `client/agent/` | thin client template a brand installs (MCP config only; no craft) — the product client |
 | `app/` | `@app/web` — the React + Vite SPA: dev/observability UI + the v0 human gate (approve/feedback). Reads `server/api`, renders productions/nodes live. **Not** the product client |
-| `craft/.claude/skills/` | the craft production + review skills a `claude -p` worker runs (storyboard, build-card, render-film, review-*…). They live under `craft/` because they are the video specialization, not engine code; the worker cwd stays `/repo`, so Compose mounts them to the project path it resolves (`/repo/.claude/skills`). Tool refs inside them are `/repo`-relative (`craft/tools/…`). |
+| `craft/video-production/` | the whole video specialization in one home: `tools/`, `.claude/skills/`, `assets/`, `docs/` (incl. the `CRAFT-BAR.md` / `COMPOSED-CARDS.md` rubrics + the video-production reference), and a `README.md` catalog. Not engine code. |
+| `craft/video-production/.claude/skills/` | the craft production + review skills a `claude -p` worker runs (storyboard, build-card, render-film, review-*…). The worker cwd stays `/repo`, so Compose mounts them to the project path it resolves (`/repo/.claude/skills`). Tool refs inside them are `/repo`-relative (`craft/video-production/tools/…`). |
 
 ## Running commands — use `./x` (host-free toolbox)
 

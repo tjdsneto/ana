@@ -33,7 +33,7 @@ engine/data/
 tmp/
 
 # host craft tools (playwright browsers / node_modules — not committed)
-craft/tools/node_modules/
+craft/video-production/tools/node_modules/
 
 # Python bytecode
 __pycache__/

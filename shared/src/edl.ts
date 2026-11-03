@@ -1,5 +1,5 @@
 // EDL (Edit Decision List) — the cut plan for the clip / edit-footage leaf, executed by
-// craft/tools/edl-apply.mjs. The editor-mode analogue of the storyboard: a control artifact Claude
+// craft/video-production/tools/edl-apply.mjs. The editor-mode analogue of the storyboard: a control artifact Claude
 // writes and a tool applies, turning a caller-provided asset into a derived asset. Kept on the
 // contract surface so every TS consumer (and the tool's docs) share one shape.
 
