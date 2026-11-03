@@ -10,6 +10,7 @@ The engine produces videos; the people and agents steering it need a shared, cor
 
 - **[glossary.md](glossary.md)** — the vocabulary: timeline, track, clip, asset, scene, shot, cut, transition, plate, compositing, layer, PiP, voiceover, soundtrack, SFX, VFX, render, and the rest. Start here.
 - **[anatomy-of-a-launch-video.md](anatomy-of-a-launch-video.md)** — how a software launch video is structured: the arc, length by placement, hooks, proof, the CTA.
+- **[showing-a-web-app.md](showing-a-web-app.md)** — how to portray a web or mobile app on screen: device framing (bare / browser / device shell), real vs stylized fidelity, directing the eye, interaction as motion, and the sound of the interface.
 
 ## Roadmap (topics to add)
 
