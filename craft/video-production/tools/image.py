@@ -99,37 +99,49 @@ def pick_image(manifest: "list[dict]", query: str) -> "dict | None":
     return None
 
 
-def stub_svg(prompt: str, size: str) -> str:
+def stub_svg(prompt: str, size: str, inputs: "list[str] | None" = None) -> str:
     """A keyless, deterministic SVG placeholder that names the prompt. The zero-cost default: a dry run
-    produces a real file the pipeline can carry, visibly a STUB so no one ships it by accident."""
+    produces a real file the pipeline can carry, visibly a STUB so no one ships it by accident. With
+    `inputs`, it is an EDIT stub and names the source image(s) so a dry-run makeup is still traceable."""
     w, h = (size.split("x") + ["1024"])[:2] if "x" in size else (size, size)
     try:
         w, h = int(w), int(h)
     except ValueError:
         w = h = 1024
     label = saxutils.escape(prompt[:120] + ("…" if len(prompt) > 120 else ""))
+    heading = "IMAGE STUB (EDIT)" if inputs else "IMAGE STUB"
+    edit_line = ""
+    if inputs:
+        names = saxutils.escape(", ".join(Path(p).name for p in inputs))
+        edit_line = (f'<text x="{w // 2}" y="{h // 2 + 48}" fill="#9a9ab0" font-family="monospace" '
+                     f'font-size="{max(10, w // 60)}" text-anchor="middle">edit of {names}</text>')
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
         f'<rect width="{w}" height="{h}" fill="#1a1a22"/>'
         f'<rect x="8" y="8" width="{w - 16}" height="{h - 16}" fill="none" stroke="#C04BFF" '
         f'stroke-width="3" stroke-dasharray="12 10"/>'
         f'<text x="{w // 2}" y="{h // 2 - 20}" fill="#C04BFF" font-family="monospace" '
-        f'font-size="{max(14, w // 28)}" text-anchor="middle">IMAGE STUB</text>'
+        f'font-size="{max(14, w // 28)}" text-anchor="middle">{heading}</text>'
         f'<text x="{w // 2}" y="{h // 2 + 20}" fill="#cfcfe0" font-family="monospace" '
         f'font-size="{max(11, w // 48)}" text-anchor="middle">{label}</text>'
+        f'{edit_line}'
         f'</svg>'
     )
 
 
-def provenance(provider: str, model: "str | None", prompt: str, size: str) -> dict:
-    """The <file>.json sidecar recorded next to a generated image."""
-    return {
+def provenance(provider: str, model: "str | None", prompt: str, size: str, inputs: "list[str] | None" = None) -> dict:
+    """The <file>.json sidecar recorded next to a generated image. `inputs` records the source image(s)
+    when the image was an EDIT (makeup) of a real capture, not a from-scratch generation."""
+    rec = {
         "provider": provider,
         "model": model,
         "prompt": prompt,
         "size": size,
         "created": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     }
+    if inputs:
+        rec["inputs"] = list(inputs)
+    return rec
 
 
 # ---------- I/O ----------
@@ -146,6 +158,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n", type=int, default=1, help="how many variations to generate (default 1)")
     p.add_argument("--out", default=None, help="dir to write generated image(s) into (default: cwd)")
     p.add_argument("--name", default="image", help="basename stem for generated files (default: image)")
+    p.add_argument("--input", action="append", default=None, metavar="IMG",
+                   help="input image(s) to EDIT instead of generating from scratch (repeatable) — forwarded to the "
+                        "provider adapter and recorded in provenance. The custom template gets it as {input}.")
     p.add_argument("--library", default=None, help="image library dir (default: craft/video-production/assets/images next to this tool)")
     p.add_argument("--api-key-file", default=None,
                    help="for a keyed provider: a file holding its API key, forwarded to the adapter (BYO-key; a "
@@ -154,18 +169,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def _generate_one(provider: str, model: "str | None", prompt: str, size: str, out: Path,
-                  api_key_file: "str | None") -> None:
-    """Produce ONE image at `out` with the chosen provider. Raises SystemExit on failure."""
+                  api_key_file: "str | None", inputs: "list[str] | None" = None) -> None:
+    """Produce ONE image at `out` with the chosen provider. With `inputs`, EDIT those image(s) rather
+    than generating from scratch (makeup). Raises SystemExit on failure."""
     out.parent.mkdir(parents=True, exist_ok=True)
 
     if provider == "stub":
-        out.write_text(stub_svg(prompt, size))
+        out.write_text(stub_svg(prompt, size, inputs))
     elif provider == "custom":
         tmpl = os.environ.get("IMAGE_GEN_CMD")
         if not tmpl:
             sys.exit("image: provider 'custom' but no generator wired — set $IMAGE_GEN_CMD "
-                     "(template with {prompt} {out} {model} {size})")
-        cmd = tmpl.format(prompt=prompt, out=str(out), model=model or "", size=size)
+                     "(template with {prompt} {out} {model} {size} {input})")
+        cmd = tmpl.format(prompt=prompt, out=str(out), model=model or "", size=size,
+                          input=(inputs[0] if inputs else ""))
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if r.returncode != 0 or not out.exists():
             sys.exit(f"image: custom generator failed — {r.stderr.strip()[:300]}")
@@ -178,6 +195,8 @@ def _generate_one(provider: str, model: "str | None", prompt: str, size: str, ou
         cmd = [sys.executable, str(tool), "--prompt", prompt, "--out", str(out), "--size", size]
         if model:
             cmd += ["--model", model]
+        for ip in inputs or []:  # edit mode: the adapter sends these as input image(s)
+            cmd += ["--input", str(ip)]
         if api_key_file:  # forward a BYO-key path; the adapter reads it (never the value on the command line)
             cmd += ["--api-key-file", str(api_key_file)]
         r = subprocess.run(cmd, capture_output=True, text=True)
@@ -185,7 +204,7 @@ def _generate_one(provider: str, model: "str | None", prompt: str, size: str, ou
             sys.exit(f"image: {provider} generate failed — {r.stderr.strip()[:300]}")
 
     sidecar = out.with_suffix(out.suffix + ".json")
-    sidecar.write_text(json.dumps(provenance(provider, model, prompt, size), indent=2))
+    sidecar.write_text(json.dumps(provenance(provider, model, prompt, size, inputs), indent=2))
 
 
 def main() -> None:
@@ -227,7 +246,7 @@ def main() -> None:
     for i in range(n):
         stem = a.name if n == 1 else f"{a.name}-{i + 1}"
         out = out_dir / f"{stem}{ext}"
-        _generate_one(provider, model, value, size, out, a.api_key_file)
+        _generate_one(provider, model, value, size, out, a.api_key_file, a.input)
         print(str(out.resolve()))
 
 

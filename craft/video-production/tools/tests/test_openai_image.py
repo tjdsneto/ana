@@ -46,6 +46,20 @@ def test_image_bytes():
             pass
 
 
+def test_build_multipart():
+    m = _load()
+    body, ctype = m.build_multipart(
+        {"model": "gpt-image-1", "prompt": "clean it", "size": "1024x1024", "n": 1},
+        [("image[]", "shot.png", b"\x89PNGdata", "image/png")])
+    assert ctype.startswith("multipart/form-data; boundary=")
+    boundary = ctype.split("boundary=")[1]
+    assert boundary.encode() in body, "boundary must appear in the body"
+    assert b'name="prompt"' in body and b"clean it" in body
+    assert b'name="model"' in body and b"gpt-image-1" in body
+    assert b'name="image[]"; filename="shot.png"' in body, "the input image is a named file part"
+    assert b"Content-Type: image/png" in body and b"\x89PNGdata" in body
+
+
 def test_resolve_key():
     m = _load()
     assert m.resolve_key("v", None, "OAI_IMG_UNSET") == "v"
@@ -64,9 +78,10 @@ def test_resolve_key():
 if __name__ == "__main__":
     try:
         test_build_payload()
+        test_build_multipart()
         test_image_bytes()
         test_resolve_key()
     except AssertionError as e:
         print(f"OPENAI-IMAGE FAIL: {e}")
         sys.exit(1)
-    print("OPENAI-IMAGE OK (build_payload / image_bytes / resolve_key)")
+    print("OPENAI-IMAGE OK (build_payload / build_multipart / image_bytes / resolve_key)")

@@ -31,6 +31,21 @@ def test_build_payload():
     p = m.build_payload("a glossy icon")
     assert p["contents"][0]["parts"][0]["text"] == "a glossy icon"
     assert p["generationConfig"]["responseModalities"] == ["IMAGE"]
+    # with input image parts: images come first, the edit instruction last
+    parts = m.build_payload("remove the popup", [{"inlineData": {"mimeType": "image/png", "data": "ZZ"}}])["contents"][0]["parts"]
+    assert parts[0]["inlineData"]["data"] == "ZZ", "input image part should lead"
+    assert parts[-1]["text"] == "remove the popup", "the prompt should be the trailing text part"
+
+
+def test_inline_part():
+    m = _load()
+    with tempfile.TemporaryDirectory() as td:
+        png = Path(td) / "shot.png"; png.write_bytes(b"\x89PNG\r\n\x1a\n data")
+        part = m.inline_part(str(png))
+        assert part["inlineData"]["mimeType"] == "image/png"
+        assert base64.b64decode(part["inlineData"]["data"]) == b"\x89PNG\r\n\x1a\n data"
+        jpg = Path(td) / "shot.jpg"; jpg.write_bytes(b"\xff\xd8\xff data")
+        assert m.inline_part(str(jpg))["inlineData"]["mimeType"] == "image/jpeg"
 
 
 def test_image_bytes():
@@ -74,9 +89,10 @@ if __name__ == "__main__":
     try:
         test_build_url()
         test_build_payload()
+        test_inline_part()
         test_image_bytes()
         test_resolve_key()
     except AssertionError as e:
         print(f"GEMINI-IMAGE FAIL: {e}")
         sys.exit(1)
-    print("GEMINI-IMAGE OK (build_url / build_payload / image_bytes / resolve_key)")
+    print("GEMINI-IMAGE OK (build_url / build_payload / inline_part / image_bytes / resolve_key)")

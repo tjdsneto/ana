@@ -67,6 +67,9 @@ def test_stub_svg():
     sq = m.stub_svg("a & b <tag>", "512")
     assert 'width="512"' in sq and 'height="512"' in sq
     assert "&amp;" in sq and "&lt;tag&gt;" in sq and "<tag>" not in sq.replace("<svg", "").replace("</svg>", "")
+    # edit stub names its source image(s) and marks itself an EDIT
+    ed = m.stub_svg("remove the popup", "512", ["/x/shot.png"])
+    assert "IMAGE STUB (EDIT)" in ed and "edit of shot.png" in ed
 
 
 def test_provenance():
@@ -75,6 +78,10 @@ def test_provenance():
     assert p["provider"] == "gemini" and p["model"] == "gemini-2.5-flash-image"
     assert p["prompt"] == "a prompt" and p["size"] == "1024x1024"
     assert "T" in p["created"]  # ISO-8601 timestamp
+    assert "inputs" not in p  # absent on a from-scratch generation
+    # an edit records its source image(s)
+    pe = m.provenance("gemini", "m", "clean it", "1024x1024", ["/x/shot.png"])
+    assert pe["inputs"] == ["/x/shot.png"]
 
 
 if __name__ == "__main__":
