@@ -16,7 +16,7 @@ You produce the **assets** the scenes will compose from — not the scenes thems
 
 For each asset the storyboard declares:
 
-- **Plates (real UI).** Run `site-capture.mjs` against the provided site/app. One plate-capture run can yield **several** plate assets (different screens/states/regions) — capture them all here, once; the scenes crop/frame them, they are not re-captured downstream.
+- **Plates (real UI).** Run `site-capture.mjs` against the provided site/app. One plate-capture run can yield **several** plate assets (different screens/states/regions) — capture them all here, once; the scenes crop/frame them, they are not re-captured downstream. A real screen is rarely shot-perfect: clean the ephemeral noise and apply **shot makeup** (declutter, pause motion, emphasize the subject, restyle — or a gen-AI pass only when the DOM can't reach it) so each plate focuses on its message while staying truthful to what the product does. Pick the method by the goal; full guidance in the `capture-site` skill's **Shot makeup** and **Camera check**.
 - **Generated images.** Generate them to match the moodboard with the `image` craft tool. It owns provider choice, the variation loop and a provenance sidecar the same way `vo.py` owns TTS:
 
   ```

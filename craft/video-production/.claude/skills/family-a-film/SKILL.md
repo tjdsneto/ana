@@ -19,7 +19,7 @@ Produce a short product/feature demo in the **Family-A** style (spec 09): the re
 All tools live at `craft/video-production/tools/`. Run Python tools under the Kokoro venv python (`"$KOKORO_HOME/venv/bin/python"`); the `.mjs` tools under node with `craft/video-production/tools` as cwd (Playwright is installed there). Work in one film directory `<F>`.
 
 1. **Author `<F>/film.json` + `<F>/script.txt`** — the storyboard. This is the craft; see "Authoring" below.
-2. **Capture the real UI** — `node craft/video-production/tools/site-capture.mjs --spec <F>/film.json --out <F>`. Writes `<F>/assets/shots/<plate>.jpg` + `<F>/src/shots.json`. A plate is a live `url` or a saved/authored HTML `file`.
+2. **Capture the real UI** — `node craft/video-production/tools/site-capture.mjs --spec <F>/film.json --out <F>`. Writes `<F>/assets/shots/<plate>.jpg` + `<F>/src/shots.json`. A plate is a live `url` or a saved/authored HTML `file`. A real screen is rarely shot-perfect: clean the noise and apply **shot makeup** to focus each plate on its beat's message — truthful to what the product does, method chosen by the goal (CSS/DOM first, gen-AI only when it can't). See the `capture-site` skill's **Shot makeup** + **Camera check**, and VIEW each plate before you build.
 3. **Voice + word timing** — `vo.py --script <F>/script.txt --out <F>/media`. Writes `<F>/media/vo.wav` + `<F>/media/words.json` (every word timed — the timeline spine).
 4. **Build the composition** — `build.py --root <F>`. Resolves word anchors → `<F>/index.html` (a seekable GSAP timeline) + `<F>/src/sfx-cues.json`.
 5. **Mix** — `mix.py --root <F> [--music track.mp3 --start 18]`. VO + synthesized SFX (+ optional ducked music) → `<F>/media/mix.wav`, mastered to −14 LUFS.
