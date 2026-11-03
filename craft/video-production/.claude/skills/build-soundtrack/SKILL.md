@@ -12,10 +12,10 @@ You produce the **music** and declare the **audio tracks** for the whole video. 
 
 ## The craft bar for sound (§A5)
 
-Bare voiceover is a fail. The bar requires **both** of these, not optionally:
+Bare voiceover over silence is a fail. Sound is never zero — the floor:
 
-- **A low music bed under the voice** — ducked so it supports and never competes. VO over true silence with flat dynamics is an immediate AI tell.
-- **Deliberate SFX on the key beats** — the cuts, reveals, the hero number landing, the CTA. This is a requirement, not a nicety; a mix of VO + bed with no SFX on the beats that matter gets sent back.
+- **A low music bed under the voice** — ducked so it supports and never competes. VO over true silence with flat dynamics is an immediate AI tell; a supporting bed is the minimum, not an option. This floor is universal — every production-quality video carries sound (at least a clean VO or a bed).
+- **SFX scaled to the concept, not a fixed quota.** A sound-forward idea earns rich per-beat SFX (the cuts, reveals, the hero number landing, the CTA); a spare or kinetic piece may carry only a few deliberate hits on the beats that matter. Judge the weight against the concept — a flat VO + bed with no cue on *any* signature beat reads as under-produced, but a fixed SFX quota forced onto a quiet piece is wrong too. Never zero sound overall.
 - **No dead tail.** The soundtrack ends on the last meaningful beat. Do not leave several seconds of bed (or silence) running under a frozen end card — trim the music stop to the last beat.
 
 Wire these with the tools (do not hand-fake audio):
