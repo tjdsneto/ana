@@ -18,7 +18,8 @@
 		"db:migrate": "npm -w @core/shared run migrate",
 		"db:seed": "npm -w @core/shared run seed",
 		"dev:api": "npm -w @server/api run dev",
-		"dev:web": "npm -w @app/web run dev"
+		"dev:web": "npm -w @app/web run dev",
+		"smoke": "node scripts/smoke/full-loop.mjs"
 	},
 	"engines": {
 		"node": ">=24",
