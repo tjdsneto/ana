@@ -33,7 +33,7 @@ if (!specPath || !outDir) {
 }
 
 const film = JSON.parse(readFileSync(specPath, "utf8"))
-const cap = { width: 1440, base: "", redact: [], remove: [], hide: [], maxHeight: 2400, ...(film.capture || {}) }
+const cap = { width: 1440, base: "", redact: [], remove: [], hide: [], maxHeight: 2400, clean: true, keep: [], hero: null, ...(film.capture || {}) }
 const base = cap.base || "https://capture.local/"
 const specDir = dirname(resolve(specPath))
 
@@ -50,8 +50,10 @@ const browser = await chromium
 const ctx = await browser.newContext({ viewport: { width: cap.width, height: Math.round((cap.width * 9) / 16) }, deviceScaleFactor: 2 })
 
 // Page-side cleanup shared by both modes: redact [from,to] pairs in text/inputs/attrs, remove/hide
-// selectors, then run the plate's optional mutation JS (to show a different UI state).
-const cleanup = async ({ cap, js }) => {
+// selectors, auto-strip the live site's ephemeral overlay noise (popups, chat/mascot launchers,
+// cookie/promo bars) so the frame shows only what we want, then run the plate's optional mutation JS.
+// Returns {removed, heroVisible} so the capture can be rejected if the clean pass blanked the page.
+const cleanup = async ({ cap, js, live }) => {
 	const walk = (fn) => {
 		const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
 		let n
@@ -67,7 +69,40 @@ const cleanup = async ({ cap, js }) => {
 	}
 	cap.remove.forEach((s) => document.querySelectorAll(s).forEach((e) => e.remove()))
 	cap.hide.forEach((s) => document.querySelectorAll(s).forEach((e) => (e.style.visibility = "hidden")))
+	// Auto-clean (live sites only; authored HTML plates are already clean). Remove ONLY fixed/sticky
+	// overlay-shaped nodes — a centered modal, a corner widget, or an edge bar — never an ancestor of
+	// the hero (cap.hero, else the first h1/main) and never anything matching cap.keep. The keyword
+	// list is a tie-breaker WITHIN fixed/sticky nodes, never a match on static page wrappers (that is
+	// what over-removed and blanked the page before).
+	let removed = 0
+	const heroSel = cap.hero ? document.querySelector(cap.hero) : null
+	const hero = heroSel || document.querySelector("h1") || document.querySelector("main") || document.body
+	if (live && cap.clean) {
+		const keep = new Set()
+		;(cap.keep || []).forEach((s) => document.querySelectorAll(s).forEach((e) => { for (let n = e; n; n = n.parentElement) keep.add(n) }))
+		const protect = new Set(); for (let n = hero; n; n = n.parentElement) protect.add(n)
+		const vw = innerWidth, vh = innerHeight
+		const rm = []
+		document.querySelectorAll("body *").forEach((el) => {
+			if (protect.has(el) || keep.has(el) || el.contains(hero)) return
+			const s = getComputedStyle(el)
+			if (s.position !== "fixed" && s.position !== "sticky") return
+			const r = el.getBoundingClientRect()
+			if (r.width < 4 || r.height < 4) return
+			const z = parseInt(s.zIndex) || 0
+			const area = (r.width * r.height) / (vw * vh)
+			const sig = (el.id + " " + el.className).toString()
+			const isModal = area > 0.3 && z >= 20
+			const isWidget = r.width < 520 && r.height < 680 && (z >= 20 || /chat|widget|launcher|intercom|drift|crisp|tawk|hubspot|messenger|popup|modal|cookie|consent|gdpr|newsletter|subscribe|notif|toast|banner|sticky|fab/i.test(sig))
+			const isBar = (r.top < 6 || Math.abs(r.bottom - vh) < 6) && r.height < 240
+			if (isModal || isWidget || isBar) rm.push(el)
+		})
+		document.querySelectorAll("iframe").forEach((f) => { const s = getComputedStyle(f); if (s.position === "fixed" || s.position === "sticky") rm.push(f) })
+		rm.forEach((e) => { try { e.remove() } catch (_) {} })
+		removed = rm.length
+	}
 	if (js) await new Function("return (async()=>{" + js + "\n})()")()
+	return { removed, heroVisible: !(live && cap.clean) || !!(hero && hero.offsetParent !== null) }
 }
 
 const measure = ({ marks, maxH, vh }) => {
@@ -130,7 +165,9 @@ for (const [name, p] of Object.entries(film.plates)) {
 		await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; setTimeout(r, 5000) })))
 		scrollTo(0, 0)
 	})
-	await page.evaluate(cleanup, { cap, js: spec.js || "" })
+	const clean = await page.evaluate(cleanup, { cap, js: spec.js || "", live: !!spec.url })
+	if (clean.removed) console.log(`  cleaned ${clean.removed} overlay node(s)`)
+	if (!clean.heroVisible) console.log(`  WARNING ${name}: hero not visible after clean — plate may be blank; set capture.hero or capture.clean=false`)
 	await page.waitForTimeout(300)
 	const rects = await page.evaluate(measure, { marks: { ...(film.marks || {}), ...(spec.marks || {}) }, maxH: cap.maxHeight, vh })
 	await page.screenshot({ path: join(outDir, `assets/shots/${name}.jpg`), type: "jpeg", quality: 90, fullPage: true, clip: { x: 0, y: 0, width: cap.width, height: rects._h } })

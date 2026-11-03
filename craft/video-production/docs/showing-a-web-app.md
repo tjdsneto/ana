@@ -22,6 +22,8 @@ An app can appear at three levels of fidelity; pick one consciously:
 
 The one hard rule: **never a fake that reads as real.** A sloppy mock that looks like a screenshot but isn't is the worst option — it reads as deceptive, and as AI slop. Real, or honestly stylized; nothing in the uncanny middle. This is the same bar as the capability-proof rule in [anatomy-of-a-launch-video.md](anatomy-of-a-launch-video.md).
 
+**And never noisy.** A real capture arrives carrying the live site's ephemeral UI — an exit-intent popup, a chat or mascot launcher in the corner, a cookie bar, a sticky promo. None of it belongs in the frame; it reads as unpolished and pulls the eye off the message. Strip it before the capture is used, and keep only what the beat is about. The one thing to protect while stripping is the hero itself — clean the chrome, not the content.
+
 ## Direct the eye — one focus at a time
 
 A full app screen is busy; the viewer looks where you point. The toolkit, strongest first:
@@ -62,6 +64,7 @@ Rules: a few **deliberate** sounds on the key beats, not a sound on every pixel 
 - Device context (bare / browser / device shell) chosen on purpose; dropped once demonstrating.
 - Orientation and aspect follow the app (desktop landscape, mobile portrait).
 - UI is real, a faithful rebuild, or clearly stylized — never a fake that reads real.
+- Frame is clean — no popup, chat/mascot launcher, cookie bar, or sticky promo in shot; hero intact.
 - At least one real workflow shown (B2B).
 - One focus per beat, landed on the naming word; scale first, decorate second.
 - The app is *used* — real clicks/types/scrolls/swipes/state-changes, not a drift over a still.

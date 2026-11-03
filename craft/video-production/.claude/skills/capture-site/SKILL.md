@@ -26,6 +26,21 @@ Get the **real** screens for a video from the site the brief gives you — the b
 
 Outputs: `assets/shots/<plate>.jpg` + `src/shots.json` (mark rects for the Ken-Burns camera) for stills; `assets/clips/<plate>.mp4` for a recorded flow. Both feed the storyboard/render.
 
+## Clean the frame — show only what we want
+
+A raw capture of a live site carries **ephemeral noise** that never belongs in a product video: a popup/modal (exit-intent, newsletter, promo), a chat or mascot launcher pinned in a corner, a cookie/consent bar, a sticky promo/notification strip, a floating "back to top" button. The frame must communicate the one thing the beat is about — noise reads as unpolished and off-message.
+
+`site-capture` **auto-cleans live captures by default**: before the screenshot it removes only **fixed/sticky, overlay-shaped** nodes (a centered modal, a corner widget, an edge bar), and it **never removes an ancestor of the hero** (so the real content survives). It is deliberately conservative — it strips chrome, not content.
+
+Controls (all under `capture`):
+
+- **`clean`** (default `true`) — the auto-clean pass. Set `false` only when the overlay *is* the subject (e.g. you are demoing the popup itself).
+- **`hero`** — a CSS selector for the element that must survive the clean (what the beat is about). Set it when the page has no clear `<h1>`/`<main>`, so the guard protects the right thing. If a clean pass hides the hero, the tool logs `WARNING … hero not visible` and you must fix it, not ship a blank plate.
+- **`keep`** — selectors the clean pass must never remove (a deliberately-fixed hero element, a product nav you want shown).
+- **`remove` / `hide`** + a `steps` `{click}` on the overlay's own close button — the **escape hatch** for site-specific cruft the heuristic misses (dismissing via the real close button is the most faithful; removing is the fallback).
+
+The clean pass is a **gate, not a nicety**: after capture, LOOK at the plate. It must show the intended content, with no floating widget, no half-popup, no cookie bar — and it must not be blank. If it is noisy, add a `remove`/`keep`/`hero`; if it is blank, set `capture.hero` (or `clean: false`) and re-capture.
+
 ## When in the loop — two phases
 
 - **Discovery (briefing / script).** Before the brief or script is settled, use `capture-site` to explore the real product — log in if it's inside the app, click around, see what features and screens actually exist and are demonstrable. Feed that back: the script may only feature what discovery **confirmed is real** ("we have that → put it in"). This is what keeps the video grounded in the product instead of scripting fiction.
@@ -55,6 +70,7 @@ The brief carries them (e.g. a login URL + user + a secret). Inject at call time
 ## Checks before handing the capture upstream
 
 - Right screen, fully loaded (not a spinner / login wall / cookie bar).
+- **Frame is clean** — no popup, chat/mascot launcher, cookie bar, or sticky promo left in shot; and the auto-clean did not blank the hero (no `WARNING … hero not visible`). Fix with `capture.remove`/`keep`/`hero` and re-capture.
 - Marks found (the tool prints which), so the camera has targets.
 - No leaked PII/keys on screen (redacted).
 - For a flow clip: the task actually completes on camera.
