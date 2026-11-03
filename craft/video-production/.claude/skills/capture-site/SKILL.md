@@ -55,7 +55,7 @@ A capture is raw material, not a constraint. You may deliberately alter the shot
 - **Calm it** — pause carousels/animations/spinners so you don't catch a mid-transition; force the brand font to load; fix a broken-image slot.
 - **Emphasize** — enlarge the feature in focus, dim or blur the rest, set a clean scroll position, open the panel the beat is about.
 - **Restyle / swap content** — recolor toward the brand ground, replace lorem/placeholder or a messy real row with clean representative content, simplify a dense dashboard to the subset you are narrating.
-- **Gen-AI edit** — regenerate a cleaner version of the screen, de-noise, upscale, or compose a simplified UI when CSS/DOM can't get there.
+- **Gen-AI generate** — when CSS/DOM can't reach it, the skill writes a makeup **prompt** and runs the **existing** image tool (`craft/video-production/tools/image/gemini-image.py`) to produce a cleaner or simplified screen. No dedicated makeup tool — makeup is just a different prompt. Note: that tool is **generate-only** (text→image), so it makes a *fresh* screen, it does not edit the real capture; editing the actual plate (retouch / de-noise / upscale) would need an input-image (img2img) path added to the same tool.
 
 ### Pick the method by the goal — gen-AI is one option, not the default
 
@@ -63,7 +63,7 @@ Decide by *what the change is*, and reach for the lightest, most repeatable meth
 
 - **Already a state the product can reach** → drive the real app there with `steps` (click / scroll / fill). Most faithful; no edit at all.
 - **A DOM-expressible change** (hide or remove an element, restyle, recolor, set a font, pause an animation, swap text or placeholder, reposition, set the scroll) → **CSS/DOM** via `capture.hide` + a per-plate **`js`** string, run in the page before the screenshot (the same place the clean pass lives). Deterministic, exact, cheap, re-runs identically — prefer it whenever the change lives in the DOM.
-- **Something the DOM can't reach** (a messy embedded image or illustration, a texture, an artifact, or a cleaner composed screen that would be fiddly to hand-build) → a **gen-AI post-capture pass** on the saved plate (`craft/video-production/tools/image/gemini-image.py`). Powerful, but non-deterministic — drift, AI-slop risk, varies per run — so use it when CSS/DOM would be harder or can't express the goal, never by default.
+- **Something the DOM can't reach** (a texture, or a cleaner composed screen fiddly to hand-build) → the skill writes a makeup prompt and runs the **existing** image tool (`craft/video-production/tools/image/gemini-image.py`) — makeup is just a different prompt, no dedicated tool. Non-deterministic (drift, AI-slop risk, varies per run), so use it only when CSS/DOM would be harder or can't express the goal, never by default. And note it **generates** a screen, it does not **edit** the saved plate (that needs an img2img input added to the same tool) — so prefer CSS/DOM whenever you're touching up what's genuinely on the real screen.
 
 Often the CSS tweak is the easy win; sometimes the gen-AI pass is the straightforward one. Let the goal pick the method, not habit.
 
