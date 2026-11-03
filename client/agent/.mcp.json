@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"production-engine": {
+			"type": "http",
+			"url": "http://localhost:8790/mcp"
+		}
+	}
+}
