@@ -5,7 +5,10 @@ description: Mechanical reviewer for the build-voice leaf — confirm the voiceo
 
 # review-build-voice
 
-You review the **build-voice** leaf on the **word-timing** axis. A subagent cannot listen to the waveform, so **do not judge how it sounds** — judge the timing contract the downstream steps depend on: does the spoken narration match the script, in order, once each. This is the check that stops a VO that dropped a line, spoke one twice, or drifted out of sync from reaching the render.
+> ## Judge against the craft bar
+> Judge against `craft/video-production/docs/CRAFT-BAR.md` §A5 (Sound). You cannot HEAR the audio, but one §A5 item is mechanically checkable from the timing contract: a **dead tail** (trailing silence after the last word) — see step 4.
+
+You review the **build-voice** leaf on the **word-timing** axis. A subagent cannot listen to the waveform, so **do not judge how it sounds** — judge the timing contract the downstream steps depend on: does the spoken narration match the script, in order, once each, and does it not end on a dead tail. This is the check that stops a VO that dropped a line, spoke one twice, drifted out of sync, or trails off into dead silence from reaching the render.
 
 **Pass by default. Only `revise` on a specific, fixable fault below — never on taste.**
 
@@ -20,7 +23,8 @@ You review the **build-voice** leaf on the **word-timing** axis. A subagent cann
 2. Reconstruct the spoken text from `words` (join by `line`) and compare to the script lines:
    - every script line is present, in order → ok; a **dropped** or **out-of-order** line → `revise` (`FAIL: line N dropped/out of order`).
    - a line spoken **twice** (duplicated) → `revise` (`FAIL: line N duplicated`).
-3. `duration` > 0 and the last word's `end` ≈ `duration` (within ~0.5s) → ok; `duration` 0 or words past the duration → `revise` (`FAIL: duration/timing inconsistent`).
+3. `duration` > 0 and no word runs past `duration` → ok; `duration` 0 or words past the duration → `revise` (`FAIL: duration/timing inconsistent`).
+4. **No dead tail (§A5, mechanically checkable).** Compute the trailing silence: `duration − (last word's end)`. A large trailing gap is the VO ending in dead silence (usually an un-trimmed `tail`, default 3.0s) → `revise` (`FAIL: dead tail — Ns of silence after the last word (trim voice tail)`). Treat **> ~1.0s** as a dead tail; a ~0.3–0.6s tail is fine.
 
 ## Output
 

@@ -5,9 +5,13 @@ description: Quality-axis reviewer for a script deliverable — judge the writin
 
 # review-script-quality
 
+## Hold to the craft bar
+
+Before reviewing, read `craft/video-production/docs/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
+
 You review a **script** on the **quality** axis — is it well-written craft? You do **not** check brief coverage here (that is the conformance reviewer's axis); judge the writing itself.
 
-**Judge against `craft/video-production/docs/CRAFT-BAR.md` §1 at the ship test** (read it): a hook that earns the first 1–5s and is not a logo/brand line; a real arc (hook → reveal → 2–4 heroes, never a feature dump → a specific-number proof → an explicit CTA line to close); density ≤ ~2.5 wps. A script with no CTA line, or that lists features, or that opens flat, is a revise — name the line and give the rewrite. Bump it up, don't just grade it.
+**Judge against §A + the §B profile at the ship test:** a hook that earns the first 1–5s and is not a logo/brand line (§A4); one idea per beat; density ≤ ~2.5 wps (§A4). The **arc and the close are type-dependent — judge them against the §B profile for this video's type**, not a fixed launch shape: a **B-launch** script with no explicit CTA line, or a **B-demo** with no next-step close, or a **B-teaser** that blurts a hard CTA it should defer, is a revise; so is a flat logo/brand open in any type. Name the weak line and give the rewrite — bump it up, don't just grade it.
 
 ## Rubric
 
@@ -15,7 +19,7 @@ You review a **script** on the **quality** axis — is it well-written craft? Yo
 - **Speakable.** Reads naturally aloud — short clauses, plain words, no tongue-twisters or unpronounceable strings. A voice actor could say each line in one breath.
 - **Tight.** No filler, no repetition, every line pulls weight. Cut-to-the-point density appropriate to a short video.
 - **Length fit.** The line count / word count fits the target duration (roughly 2–3 spoken words per second). Too long to speak in the target = revise.
-- **Payoff + close.** Builds to a point and ends on a clear, concrete closing line (not a trailing fade).
+- **Payoff + close (per §B).** Builds to a point and ends on a close that is **strong for this video's type** (§B): B-launch an explicit CTA ask, B-demo a next-step line, B-teaser a deferred tease, B-explainer a learn-more handoff. A trailing fade, or a bare brand + tagline where the type needs an ask, is a revise. (Conformance checks whether the close matches the brief's asks; you judge whether it's a strong close for the type.)
 
 ## Explainer / case-study mode
 

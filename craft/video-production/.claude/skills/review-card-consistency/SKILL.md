@@ -5,6 +5,9 @@ description: Consistency-axis reviewer for ONE card — does it match the moodbo
 
 # review-card-consistency
 
+> ## Hold to the craft bar
+> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+
 You review **one card** on the **consistency** axis — does it match the **moodboard** and its **sibling cards**? The whole board must read as one designed system; a drifting card breaks it.
 
 Check:

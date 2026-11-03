@@ -5,7 +5,10 @@ description: Quality-axis reviewer for ONE composed card — judge its craft aga
 
 # review-card-quality
 
-You review **one card** (its plate + camera) on the **quality** axis — is this a well-crafted card on its own? Read `craft/video-production/docs/CRAFT-BAR.md` (§2 frame, §3 no slop).
+> ## Hold to the craft bar
+> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+
+You review **one card** (its plate + camera) on the **quality** axis — is this a well-crafted card on its own? Read `craft/video-production/docs/CRAFT-BAR.md` (§A1 frame, §A3 no slop).
 
 **Render the plate — don't judge HTML by eye.** Write the card's `plate_html` to a temp `.html` and screenshot it (a one-plate `film.json` through `node craft/video-production/tools/site-capture.mjs`, or any headless screenshot), then look.
 
@@ -13,8 +16,8 @@ Check:
 - **Safe area + breathing room — both failure directions are a revise.** Content must sit inside a safe-area margin (~8–10% all sides) and dominate WITHIN it. (a) **Dead space** — a big empty ring/band/gradient with the real content tiny in a corner → revise (scale the subject up / raise zoom). (b) **Overfill** — text/subject jammed edge to edge, a fixed-huge type wrapping to a wall of 4–5 lines touching the frame with no margin → revise (scale the type DOWN / shorten to the focal phrase so it fits the safe area with room to breathe). A cramped wall of text reads as amateur; it is a reject, not a pass.
 - **On-screen text matches the intended treatment.** If the card should show a short focal phrase but dumps the whole VO sentence (or shows a bare phrase where the full line was meant to be read), that's a **revise** — name the intended treatment.
 - **Flat** ground, not gradients; one accent at most.
-- The **sourced non-default font actually renders** — if it fell back to Helvetica/Arial/Inter/a default, that's a tell → revise (fix the `@font-face`/shared font).
-- Type readable; the §3 tell cluster at **0–1**.
+- The **sourced non-default font actually renders AND is not itself a default.** Two failures, both a revise: (a) it fell back to a tier-1 default (Helvetica / Arial / Inter) — fix the `@font-face`/shared font; (b) it renders cleanly but in an **unspecified default** — tier-1 (Inter, Roboto, Open Sans, Lato, Arial, Helvetica, Montserrat, Poppins, system-ui) **or, just as much a tell now, tier-2: Space Grotesk, Geist, DM Sans, Plus Jakarta, Manrope, Outfit, Syne, Instrument, Fraunces, Playfair** (CRAFT-BAR §A3). A card set in, e.g., **Outfit** that renders perfectly is **NOT** a pass — call it and name a face sourced to the brand. Do not wave a card through just because its type is legible.
+- Type readable; the §A3 tell cluster at **0–1**.
 
 ## Output
 

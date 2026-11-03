@@ -5,7 +5,10 @@ description: Produce ONE composed card of the board — its plate HTML + camera 
 
 # build-card
 
-You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/docs/CRAFT-BAR.md` + `craft/video-production/docs/COMPOSED-CARDS.md` + the **moodboard**.
+> ## Hold to the craft bar
+> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/docs/COMPOSED-CARDS.md`. Judged against both.
+
+You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste + the §B profile for this video's type) + `craft/video-production/docs/COMPOSED-CARDS.md` + the **moodboard**.
 
 ## Inputs
 
@@ -21,7 +24,7 @@ You produce **one card** — exactly the beat in this node's spec, not the whole
    - the focal element **dominates the safe area** — clearly the largest thing, read instantly — but dominant, not overflowing (no big empty ring/band with content tiny; and no crammed, edge-touching block either);
    - **flat** colour ground (not gradients), one accent, readable type;
    - the sourced font via a shared `@font-face` that references `fonts/<name>.woff2` — **do NOT embed the font base64**; reference the shared file (assemble places it). This keeps the card small + editable;
-   - keep the §3 AI-slop tell cluster at 0–1.
+   - keep the §A3 AI-slop tell cluster at 0–1.
 2. **Camera** — `{focus:[x,y], zoom, at:"<the word in the VO line this card lands on>"}`.
 
 ## Output — one JSON object, no prose

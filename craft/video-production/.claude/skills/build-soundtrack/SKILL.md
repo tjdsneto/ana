@@ -5,7 +5,23 @@ description: Produce the music track and declare the audio tracks (voice / music
 
 # build-soundtrack
 
+> ## Hold to the craft bar
+> Read `craft/video-production/docs/CRAFT-BAR.md` (§A universal taste — especially §A5 Sound — + the matching §B profile). The soundtrack is judged against it.
+
 You produce the **music** and declare the **audio tracks** for the whole video. The mix step (`mix.py`) sums the separate voice / music / sfx tracks you declare; it does not choose music or decide levels — that is this step's job (the way `voice-production` owns TTS).
+
+## The craft bar for sound (§A5)
+
+Bare voiceover is a fail. The bar requires **both** of these, not optionally:
+
+- **A low music bed under the voice** — ducked so it supports and never competes. VO over true silence with flat dynamics is an immediate AI tell.
+- **Deliberate SFX on the key beats** — the cuts, reveals, the hero number landing, the CTA. This is a requirement, not a nicety; a mix of VO + bed with no SFX on the beats that matter gets sent back.
+- **No dead tail.** The soundtrack ends on the last meaningful beat. Do not leave several seconds of bed (or silence) running under a frozen end card — trim the music stop to the last beat.
+
+Wire these with the tools (do not hand-fake audio):
+
+- **Music bed** → `music.py`. Its request field takes a `PATH` (bring-your-own file), `library:<mood>` (local library), `stock:<mood>` (a licence-clean fetch, CC0 via freesound), or `generate:<prompt>` (the `$MUSIC_GEN_CMD` seam). Declare it as the `music` track, ducked under the voice.
+- **SFX** → the palette in `sfxgen.py`, surfaced standalone by `sfx.py`: **click · tick · pop · hit · whoosh · swish**. `mix.py` auto-derives some cues from the timeline; add explicit `sfx` entries for the key beats the timeline would miss so every signature beat is scored.
 
 ## Inputs
 
@@ -17,9 +33,9 @@ You produce the **music** and declare the **audio tracks** for the whole video. 
 - **Music.** Choose/produce a music bed that fits the tone (free/licence-clear sources; a produced or provided file). Write it into the work dir.
 - **The audio plan.** Declare the separate tracks in the storyboard's `audio` block so `build.py` resolves them into `src/audio-plan.json` and `mix.py` sums them:
   - `voice` — the narration track(s) (from `build-voice`).
-  - `music` — the bed(s): `src`, `at` (word or seconds), `gain` (dB), `duck` (under the voice), optional `start` offset.
-  - `sfx` — explicit cue sounds beyond the ones `build.py` derives from the timeline, if any.
-- Keep levels sane: music sits under the voice (duck true), the mix masters to the target loudness in `mix.py`.
+  - `music` — the bed(s): `src`, `at` (word or seconds), `gain` (dB), `duck` (under the voice), optional `start` offset. Stop it at the last beat — do not let it run under a dead end card.
+  - `sfx` — explicit cue sounds on the key beats (from the `click · tick · pop · hit · whoosh · swish` palette), beyond the ones `build.py`/`mix.py` derive from the timeline. These are expected on the signature beats, not "if any".
+- Keep levels sane: music sits under the voice (duck true); `mix.py` masters the whole mix to **−14 LUFS** (its `--lufs` default). No dead tail — the soundtrack ends on the last meaningful beat.
 
 ## Output
 

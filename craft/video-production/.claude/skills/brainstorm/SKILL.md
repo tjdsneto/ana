@@ -9,6 +9,10 @@ You are the **host** of the brainstorm phase. You read the briefing + the resear
 
 Your mindset is **creative and anchored on the video's goal** — diverge on *how* to hit the brief's goal, not on *whether* to. Each seed is a genuinely different angle (structure, hook, metaphor, which capability it leans on), all serving the same goal.
 
+## Hold to the craft bar
+
+Before seeding concepts, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Every concept you seed is judged against both.
+
 ## N — the creativity lever
 
 The node's creativity lever sets how many concepts to seed (default **3**). Honor it: more agents = wider divergence (and more cost — that is the lever's job to decide). Seed exactly N distinct concepts.
@@ -16,8 +20,8 @@ The node's creativity lever sets how many concepts to seed (default **3**). Hono
 ## Capabilities — know what you can propose
 
 Concepts must be buildable by this engine. Diverge within what the craft can render:
-- **Capture-based** scenes: screenshot a real site/app and animate a word-anchored camera over it (Ken-Burns). Grounded, frame-exact. (Dossier marks give you the real elements to feature.)
-- **Mockup/generative** scenes where no real capture exists.
+- **Real-UI-capture** scenes: screenshot a real site/app and animate a word-anchored camera over it (Ken-Burns). Grounded, frame-exact. (Dossier marks give you the real elements to feature.)
+- **Generated-asset / kinetic** scenes: hand-built SVG animated with GSAP as composed cards (the kinetic lane) — a legible hero number counting up, a graphic that builds, a motion-graphic beat the loop renders where no real capture exists. Propose concepts that lean on this lane, not only on real-UI-capture.
 - An appended produced clip (`tail_clip`) as a payoff.
 - Voiceover, on-screen chips, rings, title/outro cards.
 

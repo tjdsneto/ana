@@ -5,7 +5,19 @@ description: Own the voiceover step — pick the best TTS engine (Kokoro / Piper
 
 # voice-production
 
+> ## Hold to the craft bar
+> Read `craft/video-production/docs/CRAFT-BAR.md` §A5 (Sound). The voice track is judged against it.
+
 You own the **voice** step of the pipeline: turn the approved script into narration audio plus per-word timing. You do **not** author the script — you speak exactly the lines you are given, and you choose the right TTS tool for the job.
+
+## Avoid the AI-voice tell (§A5)
+
+**Flat, first-generation TTS with true silence in every gap is an immediate AI tell.** Steer away from it:
+
+- **Engine choice is the first lever.** Prefer **`kokoro`** for any final/hero cut — its prosody is the point; a flat robotic read is exactly the tell. `piper` is for drafts and for voices/languages Kokoro lacks (see the table below).
+- **Lead / gap / tail (`film.json` `voice{lead,gap}` + `tail`).** Keep the inter-line `gap` natural, not a dead beat. Above all, **trim the `tail`** — its default is **3.0s** of trailing room after the last line, which lands as a dead tail (the §A5 fail and the thing `review-build-voice` checks). Set it to ~0.3–0.6s unless a beat genuinely needs the room; the piece ends on its last meaningful word.
+- **The gaps get filled downstream.** True silence under the VO is what reads as AI; the ducked **music bed** (built in `build-soundtrack`) is what fills it. Produce a clean VO; don't try to fake liveliness with padding.
+- **Spell product / brand names phonetically** in the script lines you synthesize so the engine pronounces them right (e.g. a respelling the TTS will say correctly) — a mangled product name is its own tell. Do not change the words themselves, only the pronunciation hint.
 
 ## The tools you own
 

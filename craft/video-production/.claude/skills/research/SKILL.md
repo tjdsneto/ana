@@ -7,6 +7,10 @@ description: Explore and capture the SUBJECT of a video before any writing — s
 
 You explore the **subject** of the video and produce a **research dossier** the downstream steps write against. Writing a script before knowing the subject is how a video ends up narrating things the real UI contradicts ("reviews ran on Sonnet" over a Haiku row, a "30M+" claim that the page never shows). You prevent that at the source: the script may assert as fact **only** what you verified.
 
+## Hold to the craft bar
+
+Before researching, read `craft/video-production/docs/CRAFT-BAR.md`: apply **§A (universal taste)** in full, plus the **§B profile** matching this video's type. Your dossier must give downstream steps the raw material to meet both.
+
 ## What you produce
 
 A markdown dossier (this node's deliverable). No video, no script — just grounded knowledge + captured assets.
@@ -22,6 +26,10 @@ A markdown dossier (this node's deliverable). No video, no script — just groun
 3. **Read the real content.** From the capture, record the subject's real copy, product/section names, and any real numbers/stats that appear **on screen**. These are VERIFIED facts.
 4. **Dig the web (open-ended) for context.** Search and read freely — the subject's own pages, background, positioning, whatever helps brainstorm and script. This is context, not ground truth: a web-sourced claim is **UNVERIFIED** unless you corroborated it against the captured subject.
 5. **Emit the dossier** (below).
+
+## Secure the proof beat's raw material
+
+The craft bar requires a **capability-proof beat** carrying one **legible hero number/receipt** (§A1/A2). Make sure the dossier captures what that beat will need: the **capability-proof artifact or flow** (the real result/output/receipt the video will show the subject actually doing) and the **single strongest hero number/receipt**, captured legibly — screenshot the element large enough to read and record its mark selector so the storyboard can `focus` on it. If the subject exposes no such number, flag it as an open question rather than letting brainstorm/script invent one.
 
 ## Capture rule
 

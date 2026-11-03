@@ -5,15 +5,19 @@ description: Quality-axis reviewer for a storyboard (film.json) — judge the bo
 
 # review-storyboard-quality
 
+## Hold to the craft bar
+
+Before reviewing, read `craft/video-production/docs/CRAFT-BAR.md`: judge against **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both. Count the §A3 tell cluster explicitly — 2+ = revise.
+
 You review a **storyboard** (the `film.json`) on the **quality** axis — is it a well-crafted board? You do **not** check that it covers the brief/script here (that is the conformance reviewer's axis), and you do **not** check it matches the moodboard (that is consistency). Judge the board's own craft, reading the `film.json` params AND the rendered board (below).
 
 ## The bar — read `craft/video-production/docs/CRAFT-BAR.md` first (load-bearing)
 
 Before judging, read **`craft/video-production/docs/CRAFT-BAR.md`** (from the repo root) — the premium standard distilled from real launch-video teardowns + the anti-AI-slop checklist. Judge this board against it at the **ship test**: *would the company whose product this is actually ship a video built from this board as their launch?* Not "is it acceptable." Your job is not only to grade — it is to **bump the board up**: for every miss, name the beat, say what's wrong, and give the concrete change that raises it, then send it back. With the redo budget set high, keep sending weak boards back until they clear the bar. Passing mediocrity is the exact failure this gate exists to prevent.
 
-In particular, enforce from the bar: the hook is not a logo/title card (§1); an explicit on-screen CTA beat exists and is readable to the end (§1); each beat has one dominant subject filling the frame, no dead-space ring/band (§2); no near-duplicate slideshow beats, no sparse frozen close (§2); motion means something (§2); and **count the §3 AI-slop tell cluster explicitly** — gradients-everywhere + card-for-everything + one-bright-accent + an unspecified-default font (Inter/Outfit/Geist/… ) is already 4 tells = revise; name the specific sourced swaps. The checks below are the mechanics of this bar.
+In particular, enforce from the bar: the hook is not a logo/title card (§A4); **one signature move is present and lands on a specific card** (§A1) — the planner names it in the brief, but you are the gate: a board with no signature device is a revise; **the single strongest number/receipt, when the video has one, owns its own full-frame card** (§A1/§A2), not a footnote on a busy frame; each beat has one dominant subject filling ≥~50% of the frame, no dead-space ring/band (§A1); no near-duplicate slideshow beats, no sparse frozen close (§A1); motion means something (§A1); the **close matches the §B profile** for this type (B-launch an explicit on-screen CTA readable to the end, B-demo a next step, B-teaser a deferred tease — don't demand a hard CTA of a teaser); and **count the §A3 AI-slop tell cluster explicitly** — gradients-everywhere + card-for-everything + one-bright-accent + an unspecified-default font (Inter/Outfit/Geist/…) is already 4 tells = revise; name the specific sourced swaps. The checks below are the mechanics of this bar.
 
-Family A (real-UI): the board is a word-anchored Ken-Burns tour of a captured page. `camera` beats set `focus` ([x,y] in 1440-wide capture pixels) and `zoom`; `title_card`/`title_size` set the opening card; `chips` label what's on screen; `outro` closes.
+**Two board dialects — decide which this is FIRST (see "Board medium" below), then read every check against it.** A board is either **real-UI-capture** — a word-anchored Ken-Burns tour of a captured real page (`camera` beats set `focus` [x,y] in 1440-wide capture pixels and `zoom`; `title_card`/`title_size` open; `chips` label what's on screen; `outro` closes) — or **composed / generated-asset** — a sequence of self-contained inline-HTML plates the camera cuts between (colour-per-beat, focal phrases, no live site). Both are **first-class** and render the same way; the checks below apply to both.
 
 ## Rubric
 
@@ -32,7 +36,10 @@ The costliest failure is subtler than raw empty margins: the beat shows its subj
 6. **The end card is not a sparse frozen hold.** An `outro` whose brand mark sits tiny in a vast near-black field, held for seconds, is dead space at the worst moment. The brand mark should occupy a real share of the frame, the entrance should move, and the hold should be tight (`tail` short) — call an outro that is small, static, and long.
 
 - **Pacing.** Beats are spread sensibly across the script (no two cuts stacked on one word, no 6-second hold on a static frame). Short wins.
-- **One clear close.** `outro` carries the brand + one CTA; it is not where the hook lives.
+- **Close matches the type (§B).** The final beat carries the close the §B profile requires — B-launch an explicit on-screen CTA held readable to the end, B-demo a next-step, B-teaser a deferred tease (a hard CTA is often wrong for it). It is never where the hook lives and never a sparse frozen hold. A launch board whose `outro` is a bare brand + tagline with no on-screen ask is a revise.
+- **Signature move present and placed (§A1).** The board has one unmistakable signature device and it lands on a specific card. The planner's brief names it; confirm it is actually in the rendered board. No signature = forgettable, however clean = revise.
+- **Hero number / receipt owns a card (§A1/§A2).** If the video has one strongest number or a proof receipt, it gets its own full-frame beat, framed big — not a caption on a busy card. Not every type has one (§B) — don't invent one for a teaser.
+- **Sound is planned at the board (§A5).** Each beat's brief should carry a `SOUND/SFX` note — a music-bed feel plus deliberate SFX on key beats. A board that plans pure silence / VO-only is a revise: flat first-gen TTS over true silence is an immediate AI tell. You check the *plan* exists here; the render-audio reviewer verifies the actual mix.
 
 ## Explainer / case-study mode
 
@@ -42,8 +49,8 @@ If the brief marks the video an explainer / case-study / walkthrough, relax the 
 
 Look at `plates` in the `film.json`. There are two media, and they are reviewed differently:
 
-- **Capture (Family A):** a plate carries a `url` to a real site or our app dashboard. The board is a Ken-Burns tour of a captured page.
-- **Composed / generative:** each plate's `url` is a self-contained inline `data:text/html;...` card (shapes/type/gradients). `site-capture.mjs` loads a data-URL in a browser exactly like any other URL and screenshots it, so **composed boards render too** — `storyboard-board.py` crops the shots into `board/sheet.jpg` the same way.
+- **Real-UI-capture:** a plate carries a `url` to a real site or our app dashboard. The board is a Ken-Burns tour of a captured page.
+- **Composed / generated-asset:** each plate's `url` is a self-contained inline `data:text/html;...` card (shapes/type/flat grounds). `site-capture.mjs` loads a data-URL in a browser exactly like any other URL and screenshots it, so **composed boards render too** — `storyboard-board.py` crops the shots into `board/sheet.jpg` the same way. This path is **first-class, not a fallback** — judge it on the same bar, never mark it down for not being a captured site.
 
 **Either way you MUST render and READ the pixel board (next section). Do not judge a composed board from the `film.json` alone — that is how dead-space, tiny-focal, and repetitive boards passed before. Look at the cards.**
 

@@ -7,6 +7,10 @@ description: Assemble the finished video from an approved storyboard (film.json)
 
 You render the final video from the storyboard the upstream already produced. You do **not** invent content — you assemble exactly what `film.json` specifies.
 
+## Hold to the craft bar
+
+You assemble, you don't author — but the finished render is still held to `craft/video-production/docs/CRAFT-BAR.md`. Read **§A (universal taste)** and the **§B profile** matching this production's type before you build. You don't re-storyboard, but the choices you *do* own land on the bar: the **sound** (§A5 — a music bed under the VO and deliberate SFX, never bare flat TTS with true silence in every gap), **captions** that stay legible (§A4), and **no dead tail** (§A4 — end on the last meaningful beat, not seconds of static hold). If what `film.json` specifies can't clear §A5 — e.g. no music bed resolves at all — flag it rather than quietly shipping a bare render.
+
 ## Inputs
 
 The task prompt gives a **work dir** that already contains `film.json` (the approved storyboard: title, theme, voice, the `script` lines, the plates = the brand's provided site URLs, camera, chips, outro). You run from the repo root (the craft root).

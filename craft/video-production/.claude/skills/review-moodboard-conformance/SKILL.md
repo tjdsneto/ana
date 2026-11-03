@@ -5,6 +5,9 @@ description: Conformance-axis reviewer for a moodboard — check the visual dire
 
 # review-moodboard-conformance
 
+> ## Hold to the craft bar
+> Judge against `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile for this video's type) and `craft/video-production/docs/COMPOSED-CARDS.md`. Count the §A3 tell cluster — 2+ = revise.
+
 You review a **moodboard** on the **conformance** axis — does the visual direction match what was asked? You do **not** judge craft here (that is the quality reviewer's axis); check the direction against the **brief** and the approved **briefing**.
 
 ## Rubric

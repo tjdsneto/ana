@@ -5,7 +5,10 @@ description: Produce the visual direction for the video — a brand-sourced look
 
 # moodboard
 
-Define the **look** the whole video is built in. This is the brand/look gate — do it well and the composed cards inherit a premium, specific direction; do it lazily and every card reads as AI slop. Read `craft/video-production/docs/CRAFT-BAR.md` §3 and `craft/video-production/docs/COMPOSED-CARDS.md` §1 first.
+> ## Hold to the craft bar
+> Read `craft/video-production/docs/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/docs/COMPOSED-CARDS.md`. Judged against both.
+
+Define the **look** the whole video is built in. This is the brand/look gate — do it well and the composed cards inherit a premium, specific direction; do it lazily and every card reads as AI slop. Read `craft/video-production/docs/CRAFT-BAR.md` §A3 (the tell cluster) and `craft/video-production/docs/COMPOSED-CARDS.md` §1 first.
 
 ## The method — source every choice, no defaults
 
@@ -21,7 +24,7 @@ Decide six fields; each MUST trace to THIS brand's own material (its real produc
 ## Tests before you output
 
 - **Swap test:** put a different product's name on this look — if it still fits, it's generic. Redo it.
-- **Tell count (CRAFT-BAR §3):** gradients-everywhere + card-for-everything + one-bright-accent + a default font = a 4-tell slop cluster. Keep to **0–1 tells**. If you're over, name the specific sourced swap.
+- **Tell count (CRAFT-BAR §A3):** gradients-everywhere + card-for-everything + one-bright-accent + a default font = a 4-tell slop cluster. Keep to **0–1 tells**. If you're over, name the specific sourced swap.
 - **No house style:** do not repeat a palette/type/signature from an earlier video for this brand.
 
 ## Output
