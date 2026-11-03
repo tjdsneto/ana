@@ -42,6 +42,35 @@ Controls (all under `capture`):
 
 The clean pass is a **gate, not a nicety**: after capture, LOOK at the plate. It must show the intended content, with no floating widget, no half-popup, no cookie bar — and it must not be blank. If it is noisy, add a `remove`/`keep`/`hero`; if it is blank, set `capture.hero` (or `clean: false`) and re-capture.
 
+## Shot makeup — change the UI to focus the message
+
+A capture is raw material, not a constraint. You may deliberately alter the shot to sharpen what the beat is about — that is craft, not cheating. The clean pass is only the automatic floor of this. Makeup runs a spectrum, all legitimate:
+
+- **Declutter** — remove/hide anything off-message (a link-heavy nav, a second CTA, a busy sidebar) so the one thing the beat shows dominates.
+- **Calm it** — pause carousels/animations/spinners so you don't catch a mid-transition; force the brand font to load; fix a broken-image slot.
+- **Emphasize** — enlarge the feature in focus, dim or blur the rest, set a clean scroll position, open the panel the beat is about.
+- **Restyle / swap content** — recolor toward the brand ground, replace lorem/placeholder or a messy real row with clean representative content, simplify a dense dashboard to the subset you are narrating.
+- **Gen-AI edit** — regenerate a cleaner version of the screen, de-noise, upscale, or compose a simplified UI when CSS/DOM can't get there.
+
+### Pick the method by the goal — gen-AI is one option, not the default
+
+Decide by *what the change is*, and reach for the lightest, most repeatable method that achieves it:
+
+- **Already a state the product can reach** → drive the real app there with `steps` (click / scroll / fill). Most faithful; no edit at all.
+- **A DOM-expressible change** (hide or remove an element, restyle, recolor, set a font, pause an animation, swap text or placeholder, reposition, set the scroll) → **CSS/DOM** via `capture.hide` + a per-plate **`js`** string, run in the page before the screenshot (the same place the clean pass lives). Deterministic, exact, cheap, re-runs identically — prefer it whenever the change lives in the DOM.
+- **Something the DOM can't reach** (a messy embedded image or illustration, a texture, an artifact, or a cleaner composed screen that would be fiddly to hand-build) → a **gen-AI post-capture pass** on the saved plate (`craft/video-production/tools/image/gemini-image.py`). Powerful, but non-deterministic — drift, AI-slop risk, varies per run — so use it when CSS/DOM would be harder or can't express the goal, never by default.
+
+Often the CSS tweak is the easy win; sometimes the gen-AI pass is the straightforward one. Let the goal pick the method, not habit.
+
+**The limit — be truthful to the product, not to the pixels.** Makeup must sharpen the real message, never fake the claim:
+
+- Show only what the product **actually does** — don't add a feature, button, or flow it doesn't have.
+- A **real result / number / receipt stays real** — never edit a metric into a better one; representative or placeholder data must be plausible and not a specific false claim.
+- Stay **on-brand and consistent** with the other shots — a gen-AI edit that drifts into generic AI-slop, or clashes with sibling scenes, is a revise.
+- Keep it **believable** — seamless enough not to read as a botched fake; if a shot is openly simplified, let it read as **clearly stylized** (the craft-bar rule), not a counterfeit of the literal product.
+
+Rule of thumb: **you can make the true thing clearer; you can't make a false thing look true.**
+
 ## Camera check — VIEW every plate and judge it for the frame
 
 Cleaning is mechanical; **camera-readiness is a judgment call, and it is yours to make.** You can see images — so after each capture, **open the plate (and the mobile plate especially) and look at it as it will appear on camera.** The auto-clean removing noise is necessary, not sufficient; a clean capture can still be wrong for the frame. Walk this rubric, and if any point fails, **remedy and re-view** — do not hand a weak plate upstream and hope the reviewer catches it.
