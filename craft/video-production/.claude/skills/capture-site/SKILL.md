@@ -23,6 +23,7 @@ Get the **real** screens for a video from the site the brief gives you — the b
 - `{ "click": "<selector>" }`, `{ "wait": <ms> }` — navigate / open a panel / dismiss onboarding.
 - `{ "remove": ["<selector>"] }` + `capture.remove` — strip cookie bars, chat widgets, promos.
 - A plate with `"record": true` records the whole session to `assets/clips/<name>.mp4` — use it for a **flow clip** ("play around": click through a real task on camera).
+- **`capture.mobile: true`** captures in a real phone context (mobile UA + touch + a tall portrait viewport) so the site serves its **mobile layout**, and the plate comes out tall. Use it for a `frame:"phone"` film: a tall plate lets the phone frame fit it to width without slicing it sideways. Set `capture.width` to the device's CSS width (e.g. `390`).
 
 Outputs: `assets/shots/<plate>.jpg` + `src/shots.json` (mark rects for the Ken-Burns camera) for stills; `assets/clips/<plate>.mp4` for a recorded flow. Both feed the storyboard/render.
 

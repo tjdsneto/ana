@@ -33,7 +33,14 @@ if (!specPath || !outDir) {
 }
 
 const film = JSON.parse(readFileSync(specPath, "utf8"))
-const cap = { width: 1440, base: "", redact: [], remove: [], hide: [], maxHeight: 2400, clean: true, keep: [], hero: null, ...(film.capture || {}) }
+const cap = { width: 1440, base: "", redact: [], remove: [], hide: [], maxHeight: 2400, clean: true, keep: [], hero: null, mobile: false, ua: null, ...(film.capture || {}) }
+// Mobile capture: a real phone context (mobile UA + isMobile + touch + a tall portrait viewport) so
+// the site serves its mobile layout and the plate is tall — a phone `frame` then fits it to width
+// without slicing it sideways. Width stays cap.width (the device's CSS width, e.g. 390).
+const MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+const ctxOpts = cap.mobile
+	? { viewport: { width: cap.width, height: Math.round(cap.width * 1.9) }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: cap.ua || MOBILE_UA }
+	: { viewport: { width: cap.width, height: Math.round((cap.width * 9) / 16) }, deviceScaleFactor: 2 }
 const base = cap.base || "https://capture.local/"
 const specDir = dirname(resolve(specPath))
 
@@ -47,7 +54,7 @@ const browser = await chromium
 		console.error(`site-capture: no browser for Playwright — ${e.message}`)
 		process.exit(3)
 	})
-const ctx = await browser.newContext({ viewport: { width: cap.width, height: Math.round((cap.width * 9) / 16) }, deviceScaleFactor: 2 })
+const ctx = await browser.newContext(ctxOpts)
 
 // Page-side cleanup shared by both modes: redact [from,to] pairs in text/inputs/attrs, remove/hide
 // selectors, auto-strip the live site's ephemeral overlay noise (popups, chat/mascot launchers,
@@ -120,7 +127,7 @@ const measure = ({ marks, maxH, vh }) => {
 	return r
 }
 
-const vh = Math.round((cap.width * 9) / 16)
+const vh = ctxOpts.viewport.height
 const out = {}
 for (const [name, p] of Object.entries(film.plates)) {
 	const spec = typeof p === "string" ? { file: p } : p
@@ -128,7 +135,7 @@ for (const [name, p] of Object.entries(film.plates)) {
 	// around on the real site" flow clip), converted to mp4. Otherwise the shared context.
 	const recording = !!spec.record
 	const pctx = recording
-		? await browser.newContext({ viewport: { width: cap.width, height: vh }, deviceScaleFactor: 1, recordVideo: { dir: join(outDir, "assets/clips"), size: { width: cap.width, height: vh } } })
+		? await browser.newContext({ ...ctxOpts, deviceScaleFactor: 1, recordVideo: { dir: join(outDir, "assets/clips"), size: { width: cap.width, height: vh } } })
 		: ctx
 	if (recording) mkdirSync(join(outDir, "assets/clips"), { recursive: true })
 	const page = await pctx.newPage()
