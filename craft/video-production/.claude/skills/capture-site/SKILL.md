@@ -47,6 +47,8 @@ The clean pass is a **gate, not a nicety**: after capture, LOOK at the plate. It
 
 ## Shot makeup — change the UI to focus the message
 
+**This skill owns the whole loop** — capture (the tool) → camera-check (evaluate what came back) → decide whether it needs makeup → apply it → re-check. Deciding and applying makeup is the capture skill's job because it is already the one looking at the plate; the producer self-decides, and a downstream reviewer can still reopen a plate. Makeup belongs here as *instructions*, but the *work* runs through **focused tools** — the in-page `js`/`hide`, or a separate `gemini-image` pass — it is never bolted into `site-capture.mjs`, which stays focused on capturing. (Tools do narrow, repeatable work; the skill holds the broad judgment.)
+
 A capture is raw material, not a constraint. You may deliberately alter the shot to sharpen what the beat is about — that is craft, not cheating. The clean pass is only the automatic floor of this. Makeup runs a spectrum, all legitimate:
 
 - **Declutter** — remove/hide anything off-message (a link-heavy nav, a second CTA, a busy sidebar) so the one thing the beat shows dominates.
