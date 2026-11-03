@@ -69,31 +69,38 @@ def T(ref):
 
 # ------------------------------------------------------------------ layout
 FB = bool(film.get("fullbleed", not film.get("url")))  # composed boards (no url) are full-frame cards, no browser window; a film with a url keeps the browser frame
-CHROME = 0 if FB else 56
-VW, VH = W, H - CHROME
+# `frame` wraps the product window in a device bezel: "laptop" (landscape; screen = the whole W×H
+# window) or "phone" (portrait; the viewport reflows to a tall screen sized to the phone). Absent /
+# "browser" = the plain window path. "tablet" is reserved and fails loudly. Parsed here because phone
+# changes VW/VH/K below.
+FRAME = film.get("frame")
+if FRAME not in (None, "browser", "laptop", "phone", "tablet"):
+    sys.exit(f'build: unknown frame "{FRAME}" (browser | laptop | phone | tablet)')
+if FRAME == "tablet":
+    sys.exit('build: frame "tablet" not implemented yet (phone/laptop only for now)')
+DEVICE = FRAME in ("laptop", "phone")
+PORTRAIT = FRAME == "phone"
+if PORTRAIT:
+    CHROME = 0                                        # no desktop browser bar on a phone
+    PH_ASPECT = film.get("phone_aspect", 19.5 / 9)    # screen height / width (tall)
+    VH = round(H * 0.82)
+    VW = round(VH / PH_ASPECT)
+else:
+    CHROME = 0 if FB else 56
+    VW, VH = W, H - CHROME
 K = VW / CAPW
 FY = 0.5
 inset = film.get("window_inset", 0.07)
-# no url -> no address pill (an empty omnibox reads as a defect on a brand film)
-OMNI_URL = film.get("url")
+# no url, and never on a phone -> no address pill (an empty omnibox reads as a defect)
+OMNI_URL = None if PORTRAIT else film.get("url")
 FULL = {"x": round(W * inset, 1), "y": round(H * inset, 1), "scale": round(1 - 2 * inset, 4), "borderRadius": 14}
 CARD = {"x": round(W * 0.13, 1), "y": round(H * 0.14, 1), "scale": 0.74, "borderRadius": 18}
 if FB:
     FULL = CARD = {"x": 0, "y": 0, "scale": 1, "borderRadius": 0}
 
-# ------------------------------------------------------------------ device shell (`frame`)
-# `frame` wraps the product window in a device bezel. Absent / "browser" -> the window path above,
-# unchanged. "laptop" draws a landscape bezel + deck around the whole window, scaled to fit the
-# stage; the camera runs inside the screen untouched (no VW/VH/K change). "phone"/"tablet" need a
-# portrait reflow (next slice) and fail loudly for now rather than mis-render.
-FRAME = film.get("frame")
-if FRAME not in (None, "browser", "laptop", "phone", "tablet"):
-    sys.exit(f'build: unknown frame "{FRAME}" (browser | laptop | phone | tablet)')
-if FRAME in ("phone", "tablet"):
-    sys.exit(f'build: frame "{FRAME}" not implemented yet (portrait slice; laptop only for now)')
-DEVICE = FRAME == "laptop"
+# ------------------------------------------------------------------ device shell CSS (`frame`)
 DEVICE_CSS = ""
-if DEVICE:
+if FRAME == "laptop":
     DPAD, DECK_H, DECK_OVER = 34, 72, 150          # screen bezel, base height, deck overhang per side
     LIDW, LIDH = W + 2 * DPAD, H + 2 * DPAD          # the lid frames the whole W x H window
     DECKW = LIDW + 2 * DECK_OVER
@@ -111,6 +118,20 @@ if DEVICE:
         "background:#c7c9ce;border-radius:0 0 22px 22px;box-shadow:inset 0 2px 0 #e7e8ea,0 20px 40px rgba(0,0,0,.4);}"
         f"#device .deck .notch{{position:absolute;left:50%;top:0;width:{round(DECKW * 0.14)}px;height:16px;"
         "transform:translateX(-50%);background:#a9abb1;border-radius:0 0 12px 12px;}"
+    )
+elif FRAME == "phone":
+    PPAD = 16                                        # phone bezel thickness
+    DEVW, DEVH = VW + 2 * PPAD, VH + 2 * PPAD         # VW/VH are the portrait screen (already fit to stage)
+    DLEFT, DTOP = round((W - DEVW) / 2, 1), round((H - DEVH) / 2, 1)
+    ISLE_W = round(VW * 0.34)
+    DEVICE_CSS = (
+        f"#device{{position:absolute;left:{DLEFT}px;top:{DTOP}px;width:{DEVW}px;height:{DEVH}px;"
+        "background:#0a0a0c;border-radius:52px;box-shadow:inset 0 0 0 2px #26262b,0 50px 90px rgba(0,0,0,.6);opacity:0;z-index:2;}"
+        f"#device .win{{left:{PPAD}px;top:{PPAD}px;width:{VW}px;height:{VH}px;border-radius:40px;box-shadow:none;background:#fff;}}"
+        "#device .win .bar{display:none;}"
+        f"#device .vp{{top:0;left:0;width:{VW}px;height:{VH}px;}}"
+        f"#device .island{{position:absolute;left:50%;top:{PPAD + 10}px;width:{ISLE_W}px;height:26px;"
+        "transform:translateX(-50%);background:#000;border-radius:16px;z-index:6;}"
     )
 
 CAMS = film["camera"]
@@ -288,8 +309,13 @@ def html():
            f'<div class="bar"><span class="lights"><i></i><i></i><i></i></span>{OMNI}</div>'
            f'<div class="vp"><div id="cam">{shots}{rings}<div class="cursor" id="cur">{CURSOR}<i class="ripple" id="rip"></i></div></div></div>'
            f'</div>')
-    win_html = (f'<div id="device" class="device laptop"><div class="lid">{win}</div>'
-                f'<div class="deck"><i class="notch"></i></div></div>') if DEVICE else win
+    if FRAME == "laptop":
+        win_html = (f'<div id="device" class="device laptop"><div class="lid">{win}</div>'
+                    f'<div class="deck"><i class="notch"></i></div></div>')
+    elif FRAME == "phone":
+        win_html = f'<div id="device" class="device phone">{win}<i class="island"></i></div>'
+    else:
+        win_html = win
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width={W}, height={H}">
 <title>{film.get("title", "Launch film")}</title>
@@ -325,7 +351,7 @@ blurOut("#tcard", P.TWIN + 0.1);
 // product window reveal. device shell (P.FRAME): the window is static inside the bezel, the whole
 // device fades/rises in. otherwise: floats in as a card, then expands to fill the frame.
 if (P.FRAME) {
-  gsap.set("#win", { opacity: 1, x: 0, y: 0, scale: 1, borderRadius: 10 });
+  gsap.set("#win", { opacity: 1, x: 0, y: 0, scale: 1 });
   gsap.set("#device", { opacity: 0 }); tl.set("#device", { opacity: 0 }, 0);
   tl.fromTo("#device", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "expo.out", immediateRender: false }, P.TWIN);
 } else if (P.FB) { gsap.set("#win", Object.assign({ opacity: 1 }, P.FULL)); tl.set("#win", Object.assign({ opacity: 1 }, P.FULL), 0); } else {
@@ -404,7 +430,7 @@ window.__timelines["main"] = tl;
 window.__duration = P.DUR;
 """
 
-PAYLOAD = {"FB": FB, "FRAME": FRAME, "DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
+PAYLOAD = {"FB": FB, "FRAME": FRAME, "VW": VW, "VH": VH, "DUR": DUR, "K": K, "TWIN": T_WIN, "EXP": EXP, "OUT": OUT, "CARD": CARD, "FULL": FULL, "CAM": CAM,
            "CLICKS": CLICKS, "RINGS": [r[:3] for r in RINGS], "CHIPS": [c[:3] for c in CHIPS],
            "LAYERS": [{k: v for k, v in L.items() if k in ("id", "in", "out", "move", "kind")} for L in LAYERS]}
 
