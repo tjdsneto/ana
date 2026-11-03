@@ -45,9 +45,9 @@ services:
     env_file:
       - .common_env
     environment:
-      MCP_HTTP_PORT: ${MCP_HTTP_PORT:-8787}   # container bind + the host port mapping below
+      MCP_HTTP_PORT: 8787                      # container bind (fixed inside the container)
     ports:
-      - "${MCP_HTTP_PORT:-8787}:8787"
+      - "${MCP_HTTP_PORT:-8790}:8787"          # host 8790 by default (8787 is taken by chrome-bridge locally)
     volumes:
       - ./server/data/artifacts:/data/artifacts
     depends_on:

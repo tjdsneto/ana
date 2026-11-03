@@ -1,7 +1,7 @@
 // Streamable-HTTP entrypoint (the Compose target). Stateless: a fresh server + transport per POST
 // (sessionIdGenerator: undefined). The Store is shared — it is stateless over its pool. Verified
 // shape against @modelcontextprotocol/sdk 1.32.2. Register with:
-//   claude mcp add --transport http production-engine http://localhost:8787/mcp
+//   claude mcp add --transport http production-engine http://localhost:8790/mcp
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { JsonLogger } from "@core/shared"
@@ -11,7 +11,7 @@ import { makeStore } from "./store-factory.js"
 
 const store = makeStore()
 const logger = new JsonLogger({ bound: { svc: "mcp", transport: "http" } })
-const port = Number(process.env.MCP_HTTP_PORT ?? 8787)
+const port = Number(process.env.MCP_HTTP_PORT ?? 8790)
 
 const app = express()
 app.use(express.json())
