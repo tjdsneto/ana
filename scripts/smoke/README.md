@@ -11,7 +11,7 @@ Drives a production end to end over the client-facing MCP tools — `request_vid
 - `mcp-server` up: `docker compose up -d mcp-server` (host port `MCP_HTTP_PORT`, default `8790`).
 - A worker up:
   - **Real:** the default `engine-worker` — real `claude` producers + render/voice. Real spend (up to `SUBAGENT_MAX_BUDGET_USD`), slow.
-  - **Fake/$0:** a worker with `SUBAGENT_ENGINE=fake RENDER_PROVIDER=stub VOICE_PROVIDER=silent IMAGE_PROVIDER=stub`. Deterministic and free, but can't complete a full `video-project` yet — it strands at the first planner node (`brainstorm`). See `issues/0002` and `issues/0001`.
+  - **Fake/$0:** a worker with `SUBAGENT_ENGINE=fake RENDER_PROVIDER=stub VOICE_PROVIDER=silent IMAGE_PROVIDER=stub`. Deterministic and free, but can't complete a full `video-project` yet — it strands at the first planner node (`brainstorm`). See the project issue log (0001 + 0002), kept at the am-videos project root.
 
 ### Run
 

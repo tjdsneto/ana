@@ -20,7 +20,8 @@
 //
 // Needs the stack up: the mcp-server (docker compose up -d mcp-server) and a worker. Real worker =
 // real craft + spend; SUBAGENT_ENGINE=fake + stub providers = $0 but can't drive planner nodes yet
-// (see issues/0002). The client's produce-video skill is the human-facing counterpart to this driver.
+// (see the project issue log, 0001 + 0002). The client's produce-video skill is the human-facing
+// counterpart to this driver.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
