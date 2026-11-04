@@ -1,7 +1,7 @@
 {
 	"type": "video-project",
 	"name": "Video project",
-	"description": "Root-capable full-pipeline production: briefing → research → brainstorm → script → moodboard → storyboard → board → build → assemble → polish → final review.",
+	"description": "Root-capable two-phase production: briefing → research → WHAT brainstorm (brainstorm → brainstorm-select) → HOW brainstorm (brainstorm-how → brainstorm-how-select). The HOW winner (brainstorm-how-select, plansProduction) materializes the rest of the spine — script → moodboard → storyboard → board → build → assemble → polish → final review — as siblings; the chosen approach defines it, so it is no longer a static checklist.",
 	"rootCapable": true,
 	"inputs": [
 		{ "name": "brief", "required": true, "description": "What the video is about — goal, audience, tone, must-include messages." },
@@ -21,13 +21,7 @@
 		{ "id": "research", "type": "research", "deps": ["briefing"] },
 		{ "id": "brainstorm", "type": "brainstorm", "deps": ["briefing", "research"] },
 		{ "id": "brainstorm-select", "type": "brainstorm-select", "deps": ["brainstorm"] },
-		{ "id": "script", "type": "script", "deps": ["brainstorm-select", "research"] },
-		{ "id": "moodboard", "type": "moodboard", "deps": ["brainstorm-select", "research"] },
-		{ "id": "storyboard", "type": "storyboard", "deps": ["script", "moodboard"] },
-		{ "id": "assemble-board", "type": "assemble-board", "deps": ["storyboard", "moodboard"] },
-		{ "id": "build", "type": "build", "deps": ["assemble-board"] },
-		{ "id": "assemble", "type": "assemble", "deps": ["build"] },
-		{ "id": "polish", "type": "polish", "deps": ["assemble"] },
-		{ "id": "final-review", "type": "final-review", "deps": ["polish"] }
+		{ "id": "brainstorm-how", "type": "brainstorm-how", "deps": ["brainstorm-select"] },
+		{ "id": "brainstorm-how-select", "type": "brainstorm-how-select", "deps": ["brainstorm-how"] }
 	]
 }

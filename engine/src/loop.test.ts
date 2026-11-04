@@ -328,11 +328,11 @@ describe("type registry", () => {
 		expect(disk.get("card").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-card-quality", "review-card-conformance", "review-card-consistency"]),
 		)
-		// the composed board fan-out: storyboard(planner) → card[] → assemble-board, then build realizes
-		const cb = disk.get("video-project").checklist?.map((e) => e.type) ?? []
-		expect(cb).toEqual(expect.arrayContaining(["storyboard", "assemble-board", "build"]))
-		expect(disk.get("video-project").checklist?.find((e) => e.type === "assemble-board")?.deps).toContain("storyboard")
-		expect(disk.get("video-project").checklist?.find((e) => e.type === "build")?.deps).toEqual(["assemble-board"])
+		// the composed board fan-out: storyboard(planner) → card[] → assemble-board, then build realizes.
+		// These are no longer STATIC checklist steps — brainstorm-how-select (plansProduction) materializes
+		// them as siblings — but the types still load and keep their structure (fan-out + deps now ride in
+		// the materialized DAG, asserted by the two-phase + production-plan tests).
+		for (const t of ["storyboard", "assemble-board", "build"]) expect(disk.has(t)).toBe(true)
 		// every step owns its reviewer rubric (no generic lenses): moodboard gets the pair, polish +
 		// briefing their single axis. moodboard's conformance axis is what lets revalidation keep it.
 		expect(disk.get("moodboard").reviews?.map((r) => r.skill)).toEqual(
@@ -342,12 +342,12 @@ describe("type registry", () => {
 		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
 		// the whole-film audio/sync gate the retired render node carried now lives on assemble
 		expect(disk.get("assemble").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
-		// the unified video-project ends build → assemble → polish → final-review (the scene fan-out tail;
-		// the monolithic render node is retired from the pipeline)
+		// the monolithic render node stays retired — in neither the static checklist nor the type set
 		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
 		expect(vp).not.toContain("render")
-		expect(vp.slice(-4)).toEqual(["build", "assemble", "polish", "final-review"])
-		expect(disk.get("video-project").checklist?.find((e) => e.type === "final-review")?.deps).toEqual(["polish"])
+		// the spine tail (build → assemble → polish → final-review) is materialized by the HOW winner now,
+		// not static — but the types still load (final-review's holistic flag is asserted above)
+		for (const t of ["build", "assemble", "polish", "final-review"]) expect(disk.has(t)).toBe(true)
 	})
 
 	it("wires research + brainstorm as real chain steps before the script", async () => {
@@ -357,23 +357,26 @@ describe("type registry", () => {
 		expect(disk.get("brainstorm").planner).toBe(true)
 		expect(disk.get("brainstorm").childType).toBe("idea")
 		expect(disk.get("brainstorm").exposeChildrenToDependents).toBe(true)
-		// the chain: briefing → research → brainstorm → brainstorm-select → script, and script no longer
-		// hangs straight off briefing (it writes from the winning concept + the dossier)
+		// the chain: briefing → research → brainstorm → brainstorm-select, then the winning concept flows
+		// into the HOW brainstorm (brainstorm-how → brainstorm-how-select) rather than straight into a
+		// static script — the script is materialized by the HOW winner now, not a checklist step.
 		const chain = disk.get("video-project").checklist ?? []
 		const byId = new Map(chain.map((e) => [e.id, e]))
-		expect(chain.map((e) => e.type).slice(0, 5)).toEqual(["briefing", "research", "brainstorm", "brainstorm-select", "script"])
+		expect(chain.map((e) => e.type).slice(0, 6)).toEqual(["briefing", "research", "brainstorm", "brainstorm-select", "brainstorm-how", "brainstorm-how-select"])
 		expect(byId.get("research")?.deps).toEqual(["briefing"])
 		expect(byId.get("brainstorm")?.deps).toEqual(["briefing", "research"])
 		expect(byId.get("brainstorm-select")?.deps).toEqual(["brainstorm"])
-		expect(byId.get("script")?.deps).toEqual(["brainstorm-select", "research"])
+		expect(byId.get("brainstorm-how")?.deps).toEqual(["brainstorm-select"])
+		expect(byId.get("brainstorm-how-select")?.deps).toEqual(["brainstorm-how"])
 	})
 
 	it("loads the unified scene pipeline (build → scene → assemble)", async () => {
 		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
-		// the scene fan-out is now video-project's own tail — the separate generative project type is gone
+		// the scene fan-out is video-project's tail — the separate generative project type is gone. These
+		// spine stages are materialized by the HOW winner now, not static checklist steps, but the types
+		// still load with their structure intact (asserted below).
 		expect(disk.has("video-project-generative")).toBe(false)
-		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
-		expect(vp).toEqual(expect.arrayContaining(["storyboard", "build", "assemble"]))
+		for (const t of ["storyboard", "build", "assemble"]) expect(disk.has(t)).toBe(true)
 		// build is a sub-project: it expands into asset/voice/soundtrack leaves + the scene planner
 		const buildSub = disk.get("build").checklist?.map((e) => e.type) ?? []
 		expect(buildSub).toEqual(expect.arrayContaining(["build-assets", "build-voice", "build-soundtrack", "build-scenes"]))
@@ -393,6 +396,18 @@ describe("type registry", () => {
 		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
 			expect.arrayContaining(["review-scene-quality", "review-scene-conformance", "review-scene-consistency"]),
 		)
+	})
+
+	it("video-project is briefing → WHAT brainstorm → HOW brainstorm (spine materialized by the HOW winner)", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
+		// the static checklist stops at the two brainstorms; the spine stages (script/moodboard/storyboard/
+		// assemble-board/build/assemble/polish/final-review) are NO LONGER static — brainstorm-how-select
+		// (plansProduction) materializes them as siblings under the root.
+		expect(vp).toEqual(["briefing", "research", "brainstorm", "brainstorm-select", "brainstorm-how", "brainstorm-how-select"])
+		expect(disk.get("brainstorm-how").planner).toBe(true)
+		expect(disk.get("brainstorm-how").childType).toBe("how-idea")
+		expect(disk.get("brainstorm-how-select").plansProduction).toBe(true)
 	})
 })
 
