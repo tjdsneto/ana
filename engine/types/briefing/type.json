@@ -2,7 +2,7 @@
 	"type": "briefing",
 	"name": "Briefing",
 	"description": "Agreement step that extracts and confirms the request's key points (goal, audience, tone, length, must-include messages); client approval is the gate.",
-	"produce": "Extract and confirm the key points of the request: goal, audience, tone, length, and must-include messages. If the brief is thin, state your assumptions explicitly so the user can correct them.",
+	"produce": "Extract and confirm the request as an explicit property set, emitting one value for each: goal (teach | convert | announce | tour), one-message (the single thing the video must land), audience, structure (single-message | sequential/steps), length (target seconds), aspect (9:16 | 1:1 | 16:9), placement (where it runs), cta-intent, proof-intent (capability proof | social proof | none), and tone — making structure and goal explicit even when you must infer them. Keep the free-text brief alongside the properties so downstream stages can read either the discrete properties or the prose. If the brief is thin, state your assumptions explicitly so the user can correct them.",
 	"agreement": true,
 	"advisoryReview": true,
 	"reviews": [
