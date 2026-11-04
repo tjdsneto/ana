@@ -9,6 +9,7 @@ import { makeRunner, runnerConfigFromEnv } from "../adapters/runner-factory.js"
 import { configFromEnv } from "../config.js"
 import { Engine } from "../loop.js"
 import { TypeRegistry } from "../typereg.js"
+import { missingSkills, skillsDirFor } from "./skills-check.js"
 
 const config = configFromEnv()
 // This module lives at dist/worker/index.js; the bundled types/ sits at the engine root, two levels up.
@@ -31,16 +32,35 @@ async function main(): Promise<void> {
 	// register each such backend here by name and the loop routes that node to it. Only the default is
 	// wired for now — a non-default pin throws until its runner is added to this map.
 	const runner = makeRunner(runnerConfig)
+	const types = TypeRegistry.load(typesDir)
+
+	// 0008: a real `claude -p` subagent resolves craft skills from <craftRoot>/.claude/skills. A stale or
+	// empty bind mount serves an empty dir, so a skill-required node (e.g. brainstorm) would fail three
+	// layers down with "Unknown skill" and strand the production. Assert every referenced skill resolves
+	// and fail loud at boot instead. The fake engine runs no skills, so the check is real-engine only.
+	if (runnerConfig.engine !== "fake") {
+		const skillsDir = skillsDirFor(config.craftRoot)
+		const missing = missingSkills(types, skillsDir)
+		if (missing.length > 0) {
+			logger.error("worker.skills_missing", { skillsDir, missing })
+			throw new Error(
+				`craft skills unresolvable at ${skillsDir} — ${missing.length} missing: ${missing.join(", ")}. ` +
+					"Usual cause: a stale/empty bind mount on a not-recreated container. Recreate the worker: docker compose up -d --force-recreate engine-worker",
+			)
+		}
+	}
+
 	const engine = new Engine({
 		store: new PgStore(dbPool),
 		runner,
 		runners: new Map([[runner.engine, runner]]),
-		types: TypeRegistry.load(typesDir),
+		types,
 		config,
 		logger,
 	})
 	logger.info("worker.up", {
 		typesDir,
+		skillsDir: skillsDirFor(config.craftRoot),
 		pollIntervalMs: config.pollIntervalMs,
 		engine: runnerConfig.engine,
 		model: runnerConfig.model ?? null,

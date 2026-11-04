@@ -91,4 +91,9 @@ export class TypeRegistry {
 	has(type: string): boolean {
 		return this.byType.has(type)
 	}
+
+	// Every loaded contract — for whole-registry checks (e.g. the worker's boot skills self-check).
+	all(): TypeContract[] {
+		return [...this.byType.values()]
+	}
 }
