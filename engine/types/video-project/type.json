@@ -3,7 +3,19 @@
 	"name": "Video project",
 	"description": "Root-capable full-pipeline production: briefing → research → brainstorm → script → moodboard → storyboard → board → build → assemble → polish → final review.",
 	"rootCapable": true,
-	"inputs": [{ "name": "brief", "required": true, "description": "What the video is about — goal, audience, tone, any must-include messages." }],
+	"inputs": [
+		{ "name": "brief", "required": true, "description": "What the video is about — goal, audience, tone, must-include messages." },
+		{ "name": "goal", "description": "teach | convert | announce | tour" },
+		{ "name": "one-message", "description": "the single thing the video must land" },
+		{ "name": "audience", "description": "who it's for" },
+		{ "name": "structure", "description": "single-message | sequential/steps" },
+		{ "name": "length", "description": "target seconds" },
+		{ "name": "aspect", "description": "9:16 | 1:1 | 16:9" },
+		{ "name": "placement", "description": "where it runs (social feed, hero, email, …)" },
+		{ "name": "cta-intent", "description": "the call to action, if any" },
+		{ "name": "proof-intent", "description": "capability proof | social proof | none" },
+		{ "name": "tone", "description": "tone / brand feel" }
+	],
 	"checklist": [
 		{ "id": "briefing", "type": "briefing", "deps": [] },
 		{ "id": "research", "type": "research", "deps": ["briefing"] },

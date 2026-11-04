@@ -1012,6 +1012,15 @@ describe("root as capability — a production rooted at any type", () => {
 			expect(disk.get(t).rootCapable ?? false).toBe(false) // plumbing is never offerable as a standalone root
 		}
 	})
+
+	it("video-project declares the Phase-1 brief property set as inputs", async () => {
+		const disk = TypeRegistry.load(new URL("../types", import.meta.url).pathname)
+		const names = (disk.get("video-project").inputs ?? []).map((i) => i.name)
+		for (const p of ["brief", "goal", "audience", "structure", "aspect", "cta-intent", "proof-intent"]) {
+			expect(names).toContain(p)
+		}
+		expect(disk.get("video-project").inputs?.find((i) => i.name === "brief")?.required).toBe(true)
+	})
 })
 
 describe("expand is idempotent — a re-routed checklist node does not duplicate its children", () => {
