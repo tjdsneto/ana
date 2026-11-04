@@ -1305,3 +1305,38 @@ describe("per-type subagent engine — a type pins a backend; the loop routes it
 		).rejects.toThrow(/pins subagent engine "nope"/)
 	})
 })
+
+describe("0001 — a dispatch that throws must not strand the node", () => {
+	class ThrowingRunner implements SubagentRunner {
+		engine = "fake"
+		async run(): Promise<SubagentResult> {
+			throw new Error("boom: producer crashed")
+		}
+	}
+
+	it("retries a throwing dispatch then fails the production instead of hanging in-progress", async () => {
+		const engine = new Engine({ store, runner: new ThrowingRunner(), types, config: makeConfig() })
+		const root = await newProduction(store)
+
+		// tick must never throw, and the production must reach a terminal state (not spin forever).
+		let reachedTerminal = false
+		for (let guard = 0; guard < 30; guard++) {
+			await engine.tick() // must NOT throw out of the loop
+			const r = await store.getProduction(root.id)
+			if (r?.status === "failed") {
+				reachedTerminal = true
+				break
+			}
+		}
+
+		expect(reachedTerminal).toBe(true)
+		// the production is retired, not stuck
+		expect((await store.getProduction(root.id))?.status).toBe("failed")
+		// the node that kept throwing is marked failed, never left in-progress
+		const briefing = (await store.nodesFor(root.id)).find((n) => n.type === "briefing")
+		expect(briefing?.status).toBe("failed")
+		// the client is told the production died (not a silent hang)
+		const outs = await store.pendingOutputs(root.id)
+		expect(outs.some((o) => o.type === "notify")).toBe(true)
+	})
+})

@@ -18,6 +18,12 @@ import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProd
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
 const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work well below this
+const DISPATCH_MAX_ATTEMPTS = 3 // 0001: a throwing dispatch is retried up to this many times, then the production fails
+
+// 0001: a config/contract violation (a wiring bug, a planner that broke its own contract) is fatal — it
+// must surface loudly and stop the worker, NOT be retried-then-failed like a transient produce crash.
+// onDispatchError rethrows these; everything else is treated as a retryable runtime failure.
+export class FatalDispatchError extends Error {}
 
 export interface EngineDeps {
 	store: Store
@@ -39,6 +45,7 @@ export class Engine {
 	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
 	private readonly globalRevisions = new Map<string, number>() // productionId → holistic-reopen passes used (per-process; v0 single worker)
 	private readonly nearPassStreak = new Map<string, number>() // nodeId → consecutive rounds a version passed all-but-one reviewer (convergence; per-process)
+	private readonly dispatchFailures = new Map<string, number>() // nodeId → consecutive dispatch throws (0001; per-process retry counter)
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -66,10 +73,47 @@ export class Engine {
 		const rolled = await this.rollupNodes()
 		const node = await this.store.claimReadyNode()
 		if (node) {
-			await this.dispatch(node)
+			// A claimed node is already `in-progress`. If dispatch throws, nothing else would reset it and
+			// claimReadyNode only picks `pending`, so the node — and the whole production — would hang
+			// forever with no signal (0001). Catch, retry a few times, then fail the production loudly.
+			try {
+				await this.dispatch(node)
+			} catch (err) {
+				await this.onDispatchError(node, err)
+			}
 			return true
 		}
 		return started || rolled
+	}
+
+	// 0001: a dispatch threw (a producer crashed, a planner returned unparseable children, a skill was
+	// unresolved, …). Retry the node up to DISPATCH_MAX_ATTEMPTS by resetting it to `pending`; once the
+	// cap is hit, mark the node `failed`, retire the production (root → `failed`, so claimReadyNode stops
+	// claiming its descendants), and emit a `notify` so the client learns the production died.
+	private async onDispatchError(node: Node, err: unknown): Promise<void> {
+		if (err instanceof FatalDispatchError) throw err // config/contract violation — surface loudly, never retry
+		const message = err instanceof Error ? err.message : String(err)
+		const attempts = (this.dispatchFailures.get(node.id) ?? 0) + 1
+		this.dispatchFailures.set(node.id, attempts)
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		if (attempts < DISPATCH_MAX_ATTEMPTS) {
+			log.warn("node.dispatch_error_retry", { attempt: attempts, max: DISPATCH_MAX_ATTEMPTS, message })
+			await this.store.updateNodeStatus(node.id, "pending") // retried next tick
+			return
+		}
+		this.dispatchFailures.delete(node.id)
+		log.error("node.dispatch_failed", { attempts, message })
+		await this.store.updateNodeStatus(node.id, "failed")
+		if (node.parentId !== null) await this.store.updateNodeStatus(node.productionId, "failed")
+		const root = await this.store.getProduction(node.productionId)
+		await this.store.emitOutput({
+			productionId: node.productionId,
+			nodeId: node.id,
+			accountId: root?.accountId ?? undefined,
+			userId: root?.userId ?? undefined,
+			type: "notify",
+			prompt: `${node.name ?? node.type} failed after ${attempts} attempts; the production was stopped. Last error: ${message}`,
+		})
 	}
 
 	private callBudgetSpent(): boolean {
@@ -85,7 +129,7 @@ export class Engine {
 		const name = contract?.engine
 		if (!name || name === this.runner.engine) return this.runner
 		const runner = this.runners.get(name)
-		if (!runner) throw new Error(`node type "${contract?.type}" pins subagent engine "${name}", but no runner is registered for it (wire it into the worker's runners map)`)
+		if (!runner) throw new FatalDispatchError(`node type "${contract?.type}" pins subagent engine "${name}", but no runner is registered for it (wire it into the worker's runners map)`)
 		return runner
 	}
 
@@ -358,7 +402,7 @@ export class Engine {
 		// a contract violation: throw (a held production with no one to answer is worse than a visible error).
 		if (parsed.kind === "ask") {
 			if (root.autonomyLever === "high") {
-				throw new Error(`dispatchProductionPlan: planner asked on "high" autonomy — on high it must decide and emit stages, not ask (${parsed.prompt})`)
+				throw new FatalDispatchError(`dispatchProductionPlan: planner asked on "high" autonomy — on high it must decide and emit stages, not ask (${parsed.prompt})`)
 			}
 			const askArtifact = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
 			const askVersion = await this.store.createVersion({
