@@ -101,6 +101,7 @@ export interface SubagentInput {
 	model?: string // per-call model override (else the runner's configured default)
 	maxBudgetUsd?: number // per-call spend cap (else the runner's configured default, SUBAGENT_MAX_BUDGET_USD)
 	resumeSessionId?: string // continue a prior provider session (e.g. claude --resume) across redo rounds
+	signal?: AbortSignal // 0009: the engine aborts this when a per-call wall-clock budget is exceeded; an adapter that honors it should kill the child process
 }
 
 // Token usage + cost the engine reports back, when it can. All optional: the fake and engines

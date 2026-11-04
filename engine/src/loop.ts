@@ -143,11 +143,40 @@ export class Engine {
 			model: input.model ?? contract?.model,
 			maxBudgetUsd: input.maxBudgetUsd ?? contract?.maxBudgetUsd,
 		}
-		const result = await runner.run(merged)
+		const t0 = Date.now()
+		const result = await this.runWithWatchdog(runner, merged)
+		const elapsed = Date.now() - t0
+		// 0009: surface a slow-but-completed call so a laggy produce is visible, not buried in timing.
+		if (this.config.subagentWarnMs !== undefined && elapsed > this.config.subagentWarnMs) {
+			this.log.warn("subagent.slow", { engine: runner.engine, skill: merged.skill, ms: elapsed, warnMs: this.config.subagentWarnMs })
+		}
 		if (runner.engine !== "fake") this.realCalls++
 		// Stamp which backend actually ran, so the interaction log + node metadata record the per-node
 		// engine rather than always the default. The runner may also report it on the result itself.
 		return { ...result, engine: result.engine ?? runner.engine }
+	}
+
+	// 0009: enforce a per-call wall-clock budget. Without one, a `claude -p` produce that does not
+	// terminate (one ran ~32 min) silently blocks the whole production. When subagentTimeoutMs is set,
+	// race the run against a timer; on timeout, abort the call (an adapter that honors the signal kills
+	// its child) and reject, so dispatch treats it as a failure (retried, then fails — 0001). No timeout
+	// configured → run unchanged, no signal.
+	private async runWithWatchdog(runner: SubagentRunner, input: SubagentInput): Promise<SubagentResult> {
+		const ms = this.config.subagentTimeoutMs
+		if (ms === undefined) return runner.run(input)
+		const controller = new AbortController()
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const timeout = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => {
+				controller.abort()
+				reject(new Error(`subagent call exceeded ${ms}ms wall-clock budget (skill=${input.skill ?? "?"}, engine=${runner.engine})`))
+			}, ms)
+		})
+		try {
+			return await Promise.race([runner.run({ ...input, signal: controller.signal }), timeout])
+		} finally {
+			if (timer) clearTimeout(timer)
+		}
 	}
 
 	// Drain all currently-actionable work (stops when idle). The live worker calls this each wake-up;

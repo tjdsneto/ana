@@ -1375,6 +1375,36 @@ describe("0001 — a dispatch that throws must not strand the node", () => {
 	})
 })
 
+describe("0009 — a per-subagent wall-clock watchdog aborts a runaway produce", () => {
+	class HangingRunner implements SubagentRunner {
+		engine = "fake"
+		aborted = false
+		run(input: SubagentInput): Promise<SubagentResult> {
+			return new Promise<SubagentResult>((_resolve, reject) => {
+				input.signal?.addEventListener("abort", () => {
+					this.aborted = true
+					reject(new Error("aborted by watchdog"))
+				})
+				// otherwise never resolves — simulates a produce that does not terminate
+			})
+		}
+	}
+
+	it("aborts a call that exceeds subagentTimeoutMs and fails the production instead of hanging", async () => {
+		const runner = new HangingRunner()
+		const engine = new Engine({ store, runner, types, config: makeConfig({ subagentTimeoutMs: 20 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 40; guard++) {
+			await engine.tick()
+			if ((await store.getProduction(root.id))?.status === "failed") break
+		}
+
+		expect(runner.aborted).toBe(true) // the watchdog aborted the hung call (did not wait on it forever)
+		expect((await store.getProduction(root.id))?.status).toBe("failed") // retried then failed, not hung
+	}, 4000)
+})
+
 describe("0010 — high autonomy auto-approves leaf gates but keeps final-review human", () => {
 	it("walks the whole pipeline with NO human approvals, then stops only at the final-review gate", async () => {
 		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig() })

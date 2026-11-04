@@ -27,6 +27,13 @@ export interface EngineConfig {
 	// ONLY place the generic engine touches the craft: it hands the worker a working directory, then the
 	// skill does the video work. undefined = run in the engine's own cwd (fake runner ignores it).
 	craftRoot?: string
+	// 0009: per-call wall-clock budget for a single subagent run (ms). A runaway produce once ran ~32 min
+	// and silently blocked the whole production; when set, the engine aborts a call that exceeds this and
+	// treats it as a dispatch failure (retried, then fails). undefined = no watchdog.
+	subagentTimeoutMs?: number
+	// 0009: soft threshold (ms) — a call that COMPLETES but takes longer than this is logged (subagent.slow)
+	// so a slow produce is visible, not buried in timing. undefined = no slow-call warning.
+	subagentWarnMs?: number
 }
 
 export function configFromEnv(env = process.env): EngineConfig {
@@ -40,6 +47,8 @@ export function configFromEnv(env = process.env): EngineConfig {
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,
+		subagentTimeoutMs: optNum(env.SUBAGENT_TIMEOUT_MS),
+		subagentWarnMs: optNum(env.SUBAGENT_WARN_MS),
 	}
 }
 
