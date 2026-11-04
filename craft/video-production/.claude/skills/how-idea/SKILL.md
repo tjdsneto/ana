@@ -15,6 +15,17 @@ Before developing your approach, read `craft/video-production/.claude/references
 
 Your bindings must be real. The production-capability registry (served by `get_capabilities` — call it) is the inventory: each entry is a generic capability class with its hard constraints (`produces`, `inputs`, `aspect`, `length`, `tier`, `hosted`) and prose guidance. The classes: `screen-recording`, `generative-image`, `generative-video`, `html-composition-render`, `avatar-presenter`, `tts`, `music`, `editing`. Bind each stage only to a class the registry carries, and match it to the brief — an approach's `aspect`/`length`/`tier`/`placement` must fit the class's constraints (e.g. don't bind a 20s beat to an `avatar-presenter` class capped below it, don't bind a `paid`-tier class if the brief is free-tier).
 
+## Read the concept's emphasis — it drives heaviness
+
+The winning concept (upstream) carries an `EMPHASIS:` line naming where its creative weight lies. **Read it and bias your approach to it** — the emphasis is what makes "how heavy a stage runs" honest: heaviness follows the idea's own weight, not a guess.
+
+- `sound` (dominant) → weight the audio heavy: several sound-design passes, layered `music` + `tts`, SFX work — carry it in the audio `binding` at `build`.
+- `visual-fx` / `generative` → weight the generative / motion-graphics stages: lean on `generative-image` / `generative-video` / `html-composition-render`, run the storyboard/board heavier.
+- `ugc-avatar` → reach for the `avatar-presenter` capability for the presenter beats (accept its tier cost if the brief allows).
+- `data-reveal` → weight the hero-number / board craft: a fuller `moodboard` + `storyboard`/`assemble-board` so the number gets its own legible, framed card.
+
+Honor **free-text** emphases too: if the concept leans somewhere not in that list, spend your heaviness toward whatever the phrase describes. The dominant weight gets the budget; a `(secondary)` weight gets some; everything else stays light. A dominant emphasis you leave light is a weak approach — the judge will mark it down.
+
 ## 1. Develop your approach into a candidate DAG
 
 From your seed brief + the brief + the winning concept, decide, **for each stage of the universal spine** — `script → moodboard → storyboard → assemble-board → build → assemble → polish → final-review`:

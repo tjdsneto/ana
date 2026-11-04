@@ -21,10 +21,19 @@ Before judging, read `craft/video-production/.claude/references/CRAFT-BAR.md`: h
 
 ## Output
 
-The **winning concept** as the approved brainstorm deliverable — restate the chosen treatment in full (angle, hook, beat arc, capability fit, grounding), so `script` has a self-contained spec to write from. Lead with one line:
+The **winning concept** as the approved brainstorm deliverable — restate the chosen treatment in full (angle, hook, beat arc, capability fit, grounding), so `script` has a self-contained spec to write from. Lead with two lines:
 
 ```
 WINNER: <concept name> — <one-line why it won over the others>
+EMPHASIS: <weight> (dominant)[ — <phrase of why the idea leans there>][; <weight> (secondary)]
 ```
 
 then the full chosen treatment. If the winner carries an unresolved `OPEN QUESTION` that must be answered before scripting, end with `NEEDS RESEARCH: <question>` so the phase can loop back.
+
+### The emphasis vector
+
+The brief is capability-blind, but the winning concept is **not weight-neutral** — a creative idea inherently leans somewhere, and that lean is a property of the *idea*, decided here, not something the HOW phase discovers from the tool registry. So after the `WINNER:` line you MUST emit an `EMPHASIS:` line naming where the concept's creative weight lies, so the downstream HOW brainstorm spends its production budget there.
+
+- It is an **open set** of weights — `sound` / `visual-fx` / `generative` / `ugc-avatar` / `data-reveal` are the common ones, but it is not a fixed taxonomy (consistent with carrying no video-type enum). If the idea leans somewhere not in that list, name it in **free text** — the HOW judge still reads it.
+- Mark the **one or two** weights that actually carry the idea as `(dominant)` (and `(secondary)` if a second one matters); don't spread it evenly. Add one phrase of *why* the idea leans there.
+- The lean follows the concept, not a default. Example: `EMPHASIS: sound (dominant) — the concept is many voices in many languages; visual-fx (secondary).`
