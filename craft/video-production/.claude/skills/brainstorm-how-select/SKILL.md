@@ -19,6 +19,23 @@ Before judging, read `craft/video-production/.claude/references/CRAFT-BAR.md`: h
 - **Spine integrity.** The winning DAG must be the eight spine stages, in order, nothing added or dropped, deps referencing only earlier stages. If the strongest approach's DAG has a small flaw (a missing stage, a mis-ordered dep), repair it to a valid spine when you emit it — don't pass a broken DAG.
 - **Weigh the peer votes** as signal, not as the decision — the how-idea agents saw each other's work. An approach the peers converged on is a strong prior, but judge for yourself.
 
+## Autonomy — ask before a paid/tier fork (low / medium)
+
+Your prompt states the production's **autonomy lever**. It decides whether you may ASK the client about a paid/tier capability before you freeze the DAG, or must DECIDE it yourself:
+
+- **`high`** — never ask. Decide every production choice yourself, including any paid/tier capability (e.g. `avatar-presenter`), within the brief + the capability registry, and emit the winning DAG. An `ask` block on `high` is a contract violation the engine rejects.
+- **`low` / `medium`** — if the winning approach's best plan needs a **paid/tier** capability (e.g. `avatar-presenter`) whose cost the client should confirm before you freeze the spine, you MAY emit — **instead of** the DAG — a single confirmation question:
+
+  ```json
+  {"ask": {"prompt": "An avatar presenter costs a paid tier — include it, or keep this screen-only?", "options": ["Include the avatar presenter", "Keep it screen-only"]}}
+  ```
+
+  Emit the `ask` block **alone** (no DAG). The engine presents it to the client and holds the production; you will be re-invoked with the client's answer. On `medium`, ask ONLY for a genuinely high-impact / cost-tier fork — decide the lower-impact choices yourself. If no paid/tier fork is in play, just emit the DAG.
+
+**When the client's answer is present** — your prompt carries a "client answered your earlier question" section (the resolved cost fork) — honor that answer and emit the winning DAG now. Do **not** ask again.
+
+The DAG-emission contract below is otherwise unchanged: when you are not asking, always emit the winning spine.
+
 ## Output
 
 Emit the **winning approach's DAG** as the frozen production spine — a fenced ```json block of the shape `{"stages": [{"id": string, "type": string, "deps": [string], "binding"?: object}]}`, carrying the eight spine stages in order with the winner's method/heaviness `binding`s. This JSON block is the load-bearing output; the engine parses it and materializes each stage as a sibling node. Lead with one line naming the winner, then the JSON:
