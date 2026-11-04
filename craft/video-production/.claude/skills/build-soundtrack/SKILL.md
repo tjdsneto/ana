@@ -31,7 +31,7 @@ Wire these with the tools (do not hand-fake audio):
 ## What to produce
 
 - **Music.** Choose/produce a music bed that fits the tone (free/licence-clear sources; a produced or provided file). Write it into the work dir.
-- **The audio plan.** Declare the separate tracks in the storyboard's `audio` block so `build.py` resolves them into `src/audio-plan.json` and `mix.py` sums them:
+- **The audio plan.** Declare the separate tracks in the **film.json `audio` block** so `build.py` resolves them into `src/audio-plan.json` and `mix.py` sums them. (For the board/kinetic render, `assemble-board` composes that block from the storyboard's sound plan — your job here is the `music` track's file + levels; for a per-scene authored film, the per-scene `film.json`.) The tracks:
   - `voice` — the narration track(s) (from `build-voice`).
   - `music` — the bed(s): `src`, `at` (word or seconds), `gain` (dB), `duck` (under the voice), optional `start` offset. Stop it at the last beat — do not let it run under a dead end card.
   - `sfx` — explicit cue sounds on the key beats (from the `click · tick · pop · hit · whoosh · swish` palette), beyond the ones `build.py`/`mix.py` derive from the timeline. These are expected on the signature beats, not "if any".
