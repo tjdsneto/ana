@@ -1,0 +1,27 @@
+{
+  "_doc": "E1 golden set — the graded reference corpus that VALIDATES the graders (does the bar actually pass known-good and fail known-bad?). `expect` is the HUMAN ground-truth label and is the whole point: it must be set by someone who watched the video and judged it against CRAFT-BAR + research/consolidated/north-star.md — never by the grader, never guessed. Paths resolve under --videos-root (default: the am-videos research/ dir). `because` records which bar clause the label turns on, so a wrong verdict is debuggable. Add entries over time; the set is a test suite.",
+  "_labels_owner": "Tiago — the PASS entries are the two north-stars blessed in north-star.md. The REVISE entries below are CANDIDATES seeded from prior research notes; confirm each against the actual video before trusting the false-pass number.",
+  "entries": [
+    {
+      "id": "sadia-the-world-speaks",
+      "video": "videos/universally__astro-launch.mp4",
+      "expect": "pass",
+      "because": "north-star #1 — planning rigor + polish; passes all 8 checks (north-star.md). Blessed.",
+      "brief": "Launch video for a product that makes a website speak 110+ languages. One hero stat (110+ languages), capability shown (live count-up + language grid), one declarative close. 1:1, ~40s, VO + music + SFX."
+    },
+    {
+      "id": "kabir-wpvibe-20k",
+      "video": "videos/kabir__wpvibe-20k-installs.mp4",
+      "expect": "pass",
+      "because": "north-star #2 — concept/hook/economy; one signature device (planet), one hero stat (20K), trust beat (real API trace), closed request->published loop, one payoff line. Blessed.",
+      "brief": "Launch video for a product that lets an AI build/publish WordPress pages. Revealing hook, one hero stat (20K installs), show the real API call + published page, one declarative close. 1:1, ~20s, silent with burned-in titles."
+    },
+    {
+      "id": "shub-sce-dashboard-silent",
+      "video": "videos/shub__sce-dashboard-feature.mp4",
+      "expect": "revise",
+      "because": "CANDIDATE — flagged as a silent SCE experiment; a production-quality video must clear the §A5 sound floor (at least a clean VO or a ducked bed). If silent, this is a correct revise. CONFIRM by watching before trusting.",
+      "brief": "Feature demo for a dashboard capability. Production-quality launch/demo bar."
+    }
+  ]
+}
