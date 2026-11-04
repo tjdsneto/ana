@@ -673,6 +673,86 @@ describe("production-plan — materializes the frozen DAG as siblings under the 
 	})
 })
 
+// Phase E — the autonomy lever gates whether production planning ASKS the client about a paid/tier
+// capability fork before freezing the DAG, or DECIDES. A plansProduction planner may emit, INSTEAD of
+// the stages, an {"ask":{prompt,options}} block. On low/medium the engine PRESENTS it (an `options`
+// chat_output) and HOLDS the node — no spine materializes until the client answers; the answer rides
+// back as version feedback (submitFeedback), re-dispatching the node with the answer in its prompt, and
+// the planner then emits the stages. On high an ask is a contract violation — the planner must decide —
+// so the engine throws rather than hanging.
+describe("Phase-2 autonomy — autonomyLever gates whether production planning asks or decides", () => {
+	it("low autonomy: a paid-capability fork is presented as options and holds; the answer resumes it into the frozen spine", async () => {
+		// The production-plan skill asks on the first pass; once the client's answer is in its prompt
+		// (feedback), it emits the stages. The fake keys off the answer text the engine threads through.
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "production-plan") {
+				return input.prompt.includes("screen-only")
+					? { output: '```json\n{"stages":[{"id":"script","type":"script","deps":[]},{"id":"final-review","type":"final-review","deps":["script"]}]}\n```' }
+					: { output: '```json\n{"ask":{"prompt":"Avatar presenter costs a tier — include it?","options":["yes","no"]}}\n```' }
+			}
+			return input.skill?.startsWith("review:") || input.skill === "final-review" ? { output: "VERDICT: pass" } : { output: "draft" }
+		})
+		const engine = new Engine({ store, runner, types: productionPlanTypes, config: makeConfig() })
+		const root = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "b", sessionId: "s", autonomyLever: "low", actorKind: "human" })
+
+		// tick until the plan node PRESENTS its paid-capability options (approving the briefing present on the way)
+		let ask: ChatOutput | undefined
+		for (let guard = 0; guard < 50; guard++) {
+			await engine.tick()
+			const pending = await store.pendingOutputs(root.id)
+			ask = pending.find((o) => o.type === "options")
+			if (ask) break
+			for (const o of pending) await gateApprove(store, o)
+		}
+		expect(ask).toBeDefined()
+		expect(ask?.options).toEqual(["yes", "no"])
+		expect(ask?.prompt).toMatch(/tier/i)
+		const plan = (await store.nodesFor(root.id)).find((n) => n.type === "production-plan")!
+		expect(plan.status).toBe("needs-presentation") // the plan node HOLDS — it is not approved
+		const held = await store.nodesFor(root.id)
+		expect(held.some((n) => n.type === "script")).toBe(false) // NO spine sibling materialized while it holds
+		expect(held.some((n) => n.type === "final-review")).toBe(false)
+
+		// the client answers → the node re-dispatches, the planner (now fed the answer) emits the stages
+		await gateFeedback(store, ask!, "no — keep it screen-only, skip the avatar")
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		const after = await store.nodesFor(root.id)
+		const script = after.find((n) => n.type === "script")
+		expect(script?.parentId).toBe(root.id) // now a SIBLING under the root
+		const finalReview = after.find((n) => n.type === "final-review")!
+		expect(finalReview.deps).toEqual([script!.id])
+		expect(after.find((n) => n.type === "production-plan")?.status).toBe("approved")
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+	})
+
+	it("high autonomy: an ask is a contract violation — the planner must decide, so the engine throws (no hang)", async () => {
+		const runner = new FakeSubagentRunner((input) =>
+			input.skill === "production-plan"
+				? { output: '```json\n{"ask":{"prompt":"Avatar presenter costs a tier — include it?","options":["yes","no"]}}\n```' }
+				: input.skill?.startsWith("review:") || input.skill === "final-review"
+					? { output: "VERDICT: pass" }
+					: { output: "draft" },
+		)
+		const engine = new Engine({ store, runner, types: productionPlanTypes, config: makeConfig() })
+		const root = await store.createProduction({ accountId: "acc_default", userId: "usr_default", brief: "b", sessionId: "s", autonomyLever: "high", actorKind: "agent" })
+
+		await expect(
+			(async () => {
+				for (let guard = 0; guard < 50; guard++) {
+					await engine.tick()
+					for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+					if ((await store.getProduction(root.id))?.status === "approved") break
+				}
+			})(),
+		).rejects.toThrow(/autonomy|ask|decide/i)
+	})
+})
+
 // The headline capability: the final review reopens ONE fanned-out scene, and only that scene's own
 // re-production + everything downstream rebuilds — its sibling scenes and the upstream are left alone.
 const SURGICAL_CONTRACTS: TypeContract[] = [

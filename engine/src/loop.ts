@@ -13,7 +13,7 @@ import { basename, extname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
-import { parseProductionDag } from "./plan-dag.js"
+import { parseProductionPlanOutput } from "./plan-dag.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
@@ -334,8 +334,13 @@ export class Engine {
 		const latest = priorVersions.at(-1)
 		const n = (latest?.n ?? 0) + 1
 
+		// Prior feedback: when this node is re-dispatched after a presented ask (an earlier tick HELD on a
+		// cost fork), the latest version is denied+feedback — the client's ANSWER. Thread it into the prompt
+		// so the planner resolves the fork and emits the stages (mirrors dispatchLeaf's revision-context read).
+		const feedback = latest?.status === "denied" ? (latest.feedback ?? undefined) : undefined
+
 		const t0 = Date.now()
-		const planPrompt = buildProductionPlanPrompt(contract, { brief: root.description ?? "", upstream })
+		const planPrompt = buildProductionPlanPrompt(contract, { brief: root.description ?? "", upstream, autonomyLever: root.autonomyLever ?? undefined, feedback })
 		const result = await this.runSubagent(
 			{
 				prompt: planPrompt,
@@ -345,7 +350,47 @@ export class Engine {
 			},
 			contract,
 		)
-		const stages = parseProductionDag(result.output)
+		const parsed = parseProductionPlanOutput(result.output)
+
+		// Autonomy gate (§5): on low/medium the planner MAY ASK the client about a paid/tier capability fork
+		// BEFORE freezing. Present the question as an `options` chat_output and HOLD — nothing materializes
+		// until the client answers. On high the planner must DECIDE within the brief + registry, so an ask is
+		// a contract violation: throw (a held production with no one to answer is worse than a visible error).
+		if (parsed.kind === "ask") {
+			if (root.autonomyLever === "high") {
+				throw new Error(`dispatchProductionPlan: planner asked on "high" autonomy — on high it must decide and emit stages, not ask (${parsed.prompt})`)
+			}
+			const askArtifact = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
+			const askVersion = await this.store.createVersion({
+				nodeId: node.id,
+				n,
+				prevVersionId: latest?.id,
+				status: "presentable", // "presentable" is the version's present status; the NODE goes needs-presentation below
+				artifactPath: askArtifact,
+				builtFrom: await this.computeBuiltFrom(node),
+				subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
+			})
+			await this.logInteraction(node, askVersion.id, "producer", result, Date.now() - t0, planPrompt)
+			// The present→feedback resume path (mirrors dispatchLeaf's present): the output carries THIS node
+			// + version, so the client's submit_feedback flips the version to denied+feedback and the node to
+			// pending (gate.ts); the next tick re-dispatches this node, reads that feedback (above), and the
+			// planner now emits the stages instead of asking again.
+			await this.store.emitOutput({
+				productionId: node.productionId,
+				nodeId: node.id,
+				versionId: askVersion.id,
+				accountId: root.accountId ?? undefined,
+				userId: root.userId ?? undefined,
+				type: "options",
+				prompt: parsed.prompt,
+				options: parsed.options,
+			})
+			await this.store.updateNodeStatus(node.id, "needs-presentation")
+			log.info("node.plan_production_ask", { versionId: askVersion.id, options: parsed.options.length })
+			return
+		}
+
+		const stages = parsed.stages
 
 		// Materialize each stage as a sibling under the root. Base the position past the root's existing
 		// direct children (the static checklist siblings — briefing, this plan node, …) so the spine does

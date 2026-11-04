@@ -1,6 +1,7 @@
 // Prompt construction for producers + reviewers. Plain string assembly — the SubagentRunner (fake
 // or claude -p) consumes these. Kept separate so the craft wording lives in one place.
 
+import type { AutonomyLever } from "@core/shared"
 import type { ReviewSpec, TypeContract } from "./typereg.js"
 
 export interface UpstreamArtifact {
@@ -104,7 +105,10 @@ export function parsePlan(output: string): PlanChild[] {
 // production's own spine: every universal stage, in order, each bound to a production method/heaviness
 // chosen from the capability registry. The engine owns only the output contract; the planner skill owns
 // the craft (which method fits the brief). Generic: no domain/product names here.
-export function buildProductionPlanPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+export function buildProductionPlanPrompt(
+	contract: TypeContract,
+	ctx: { brief: string; upstream: UpstreamArtifact[]; autonomyLever?: AutonomyLever; feedback?: string },
+): string {
 	const parts: string[] = []
 	parts.push(
 		contract.produce ??
@@ -116,6 +120,24 @@ export function buildProductionPlanPrompt(contract: TypeContract, ctx: { brief: 
 	parts.push(
 		"Emit EVERY stage of the universal spine, in order — script → moodboard → storyboard → assemble-board → build → assemble → polish → final-review — and never add or drop a spine stage. Bind each stage's method and heaviness from the production-capability registry, matched against the brief (aspect, length, tier, placement). deps may reference only earlier stage ids.",
 	)
+	// Autonomy gate (§5): the client's autonomy lever decides whether you may ASK about a paid/tier
+	// capability fork before freezing, or must DECIDE it yourself. The ask is a SEPARATE output shape the
+	// engine recognizes — emit it INSTEAD of the stages (not alongside); you will be re-invoked with the
+	// answer and then emit the stages.
+	const lever = ctx.autonomyLever ?? "medium"
+	if (lever === "high") {
+		parts.push(
+			"Autonomy is `high`: NEVER ask. Decide every production choice — including any paid/tier capability (e.g. an avatar presenter) — yourself, within the brief + the capability registry, and emit the stages. Do not emit an `ask` block on high autonomy.",
+		)
+	} else {
+		parts.push(
+			`Autonomy is \`${lever}\`: if your best plan needs a PAID/tier capability (e.g. an avatar presenter) whose cost the client should confirm before you freeze the DAG, you MAY emit \`{"ask":{"prompt":string,"options":string[]}}\` INSTEAD of the stages — one question to confirm the cost. Otherwise (no cost fork, or the choice is low-impact) just decide and emit the stages. On \`medium\`, ask ONLY for genuinely high-impact / cost-tier forks; decide the rest.`,
+		)
+	}
+	if (ctx.feedback) {
+		// The client answered a prior ask — this IS the resolved cost fork. Honor it and emit the stages.
+		parts.push(`\n## The client answered your earlier question\n${ctx.feedback}\n\nHonor this answer and emit the stage DAG now — do NOT ask again.`)
+	}
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## Approved upstream work")
