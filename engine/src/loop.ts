@@ -442,12 +442,18 @@ export class Engine {
 		const idByKey = new Map<string, string>() // stage key → created node id
 		const base = (await this.store.nodesFor(node.productionId)).filter((s) => s.parentId === node.productionId).length
 		for (const [i, s] of stages.entries()) {
+			const resolved = s.deps.map((k) => idByKey.get(k)).filter((x): x is string => Boolean(x))
+			// 0012: a spine ENTRY stage (no in-spine deps) would otherwise collectUpstream nothing and run on
+			// the bare brief — cut off from the winning concept + emphasis the brainstorm produced. Seed the
+			// roots with the plan node's OWN upstream (the same inheritance dispatchPlan gives its children),
+			// so script/moodboard see the concept; downstream stages inherit it transitively through them.
+			const deps = resolved.length > 0 ? resolved : node.deps
 			const [created] = await this.store.createChildNodes(node.productionId, [
 				{
 					type: s.type,
 					name: s.id,
 					description: s.binding ? JSON.stringify(s.binding) : undefined,
-					deps: s.deps.map((k) => idByKey.get(k)).filter((x): x is string => Boolean(x)),
+					deps,
 					position: base + i,
 				},
 			])

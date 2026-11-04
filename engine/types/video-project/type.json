@@ -22,6 +22,6 @@
 		{ "id": "brainstorm", "type": "brainstorm", "deps": ["briefing", "research"] },
 		{ "id": "brainstorm-select", "type": "brainstorm-select", "deps": ["brainstorm"] },
 		{ "id": "brainstorm-how", "type": "brainstorm-how", "deps": ["brainstorm-select"] },
-		{ "id": "brainstorm-how-select", "type": "brainstorm-how-select", "deps": ["brainstorm-how"] }
+		{ "id": "brainstorm-how-select", "type": "brainstorm-how-select", "deps": ["brainstorm-how", "brainstorm-select"] }
 	]
 }

@@ -367,7 +367,9 @@ describe("type registry", () => {
 		expect(byId.get("brainstorm")?.deps).toEqual(["briefing", "research"])
 		expect(byId.get("brainstorm-select")?.deps).toEqual(["brainstorm"])
 		expect(byId.get("brainstorm-how")?.deps).toEqual(["brainstorm-select"])
-		expect(byId.get("brainstorm-how-select")?.deps).toEqual(["brainstorm-how"])
+		// brainstorm-how-select also deps on brainstorm-select (not just brainstorm-how): the winning concept
+		// must be in the plan node's upstream so the materialized spine's entry stages can inherit it (0012).
+		expect(byId.get("brainstorm-how-select")?.deps).toEqual(["brainstorm-how", "brainstorm-select"])
 	})
 
 	it("loads the unified scene pipeline (build → scene → assemble)", async () => {
@@ -670,6 +672,38 @@ describe("production-plan — materializes the frozen DAG as siblings under the 
 		expect(finalReview.parentId).toBe(root.id)
 		expect(finalReview.deps).toEqual([script!.id])
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
+	})
+
+	it("seeds spine entry stages with the plan node's upstream, so they are not cut off from it (0012)", async () => {
+		const runner = new FakeSubagentRunner((input) =>
+			input.skill === "production-plan"
+				? { output: '```json\n{"stages":[{"id":"script","type":"script","deps":[]},{"id":"final-review","type":"final-review","deps":["script"]}]}\n```' }
+				: input.skill?.startsWith("review:") || input.skill === "final-review"
+					? { output: "VERDICT: pass" }
+					: { output: "draft" },
+		)
+		const engine = new Engine({ store, runner, types: productionPlanTypes, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		const all = await store.nodesFor(root.id)
+		const plan = all.find((n) => n.type === "production-plan")!
+		const briefing = all.find((n) => n.type === "briefing")!
+		const script = all.find((n) => n.type === "script")!
+		// script is a spine ENTRY stage (its frozen DAG deps are []). It must inherit the plan node's own
+		// upstream (here: briefing) so it is NOT cut off from what the plan was built from — otherwise it
+		// runs on the bare brief, never seeing the winning concept the brainstorm produced (0012).
+		expect(script.deps).toEqual(plan.deps)
+		expect(script.deps).toContain(briefing.id)
+		// a non-entry stage keeps its spine-local deps, not the plan node's
+		const finalReview = all.find((n) => n.type === "final-review")!
+		expect(finalReview.deps).toEqual([script.id])
 	})
 })
 
