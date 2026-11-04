@@ -1,0 +1,8 @@
+{
+	"type": "brainstorm-how-select",
+	"name": "Pick the winning approach",
+	"description": "Judges the candidate production approaches and emits the single winning approach as the frozen production DAG — the sibling spine the engine materializes.",
+	"plansProduction": true,
+	"skill": "brainstorm-how-select",
+	"produce": "You are given all the candidate production approaches (the how-idea agents' approaches + candidate DAGs) and their peer critiques. Judge them per your brainstorm-how-select skill, pick the one that best delivers the winning concept within the capabilities, and emit its {stages:[…]} DAG as the production's frozen spine — it becomes the pipeline the engine materializes."
+}

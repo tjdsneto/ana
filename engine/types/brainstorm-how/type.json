@@ -1,0 +1,11 @@
+{
+	"type": "brainstorm-how",
+	"name": "Brainstorm (how)",
+	"description": "Planner that seeds the distinct production approaches to explore (default 3) from the brief + the winning concept + the capability registry, fanned out into parallel how-idea agents.",
+	"planner": true,
+	"childType": "how-idea",
+	"exposeChildrenToDependents": true,
+	"skill": "brainstorm-how",
+	"model": "claude-opus-5-5",
+	"produce": "Read the brief, the winning concept (with its emphasis vector), and the production-capability registry, then seed the distinct production approaches to explore in parallel (default 3). Each approach is a genuinely different way to MAKE the winning concept over the universal spine. Output the generic approach list the engine fans out into how-idea agents."
+}
