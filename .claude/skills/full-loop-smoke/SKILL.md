@@ -41,6 +41,8 @@ Options: `--url` (default `http://localhost:8790/mcp`), `--production <id>` (res
 
 Real runs are long — launch in the background and read the output file; don't block on it. Use `--actor agent --lever high` to minimize gates.
 
+**The driver must outlive the production.** If `--max-ms` fires while the worker is still producing, versions that present afterward land in the inbox with no client to approve them — the production then parks at the human gate ("awaiting feedback") and never advances, even though nothing is wrong with it. For a real run, set `--max-ms` generously (hours), or re-run with `--production <id>` to drain the pending presents and carry on. A single real `video-project` has been observed at ~2h33m / ~$9.79 (project issue log 0009).
+
 ## Read the result
 
 - **Exit 0** = reached `status: done`. **Exit 1** = anything else: the `--max-ms` cap fired, or the production stranded/failed.
