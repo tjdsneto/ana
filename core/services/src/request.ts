@@ -25,7 +25,9 @@ export async function requestProduction(store: Store, input: RequestProductionIn
 		userId: user.id,
 		brief: input.brief,
 		sessionId: input.sessionId,
-		autonomyLever: input.autonomyLever ?? "medium",
+		// 0010: an agent actor runs unattended, so default it to full autonomy (`high`) unless a lever is
+		// given explicitly; a human actor still defaults to `medium`. An explicit lever always wins.
+		autonomyLever: input.autonomyLever ?? (input.actorKind === "agent" ? "high" : "medium"),
 		actorKind: input.actorKind ?? "human",
 		type: input.type,
 	})

@@ -46,6 +46,12 @@ describe("requestVideo (hand off)", () => {
 		expect(root?.autonomyLever).toBe("high")
 		expect(root?.actorKind).toBe("agent")
 	})
+
+	it("defaults an agent actor to high autonomy (0010) — an agent run is unattended by default", async () => {
+		const res = await requestVideo(store, { brief: "x", sessionId: "s", actorKind: "agent" })
+		const root = await store.getProduction(res.production_id)
+		expect(root?.autonomyLever).toBe("high")
+	})
 })
 
 describe("getStatus + inbox", () => {

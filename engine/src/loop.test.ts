@@ -1374,3 +1374,36 @@ describe("0001 — a dispatch that throws must not strand the node", () => {
 		expect(outs.some((o) => o.type === "notify")).toBe(true)
 	})
 })
+
+describe("0010 — high autonomy auto-approves leaf gates but keeps final-review human", () => {
+	it("walks the whole pipeline with NO human approvals, then stops only at the final-review gate", async () => {
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types, config: makeConfig() })
+		const root = await store.createProduction({
+			accountId: "acc_default",
+			userId: "usr_default",
+			brief: "a 15s promo about X",
+			sessionId: "sess_1",
+			autonomyLever: "high",
+			actorKind: "agent",
+		})
+
+		// Deliberately approve NOTHING. On high the engine must auto-approve every leaf gate and advance
+		// on its own, until it reaches the one hard human gate (final-review), where it stops.
+		for (let guard = 0; guard < 200; guard++) {
+			if (!(await engine.tick())) break
+		}
+
+		const all = await store.nodesFor(root.id)
+		// every produced leaf except final-review auto-approved without a human present
+		for (const n of all) {
+			if (n.parentId !== null && n.type !== "final-review") expect(n.status).toBe("approved")
+		}
+		// final-review is the sole gate: it presented and is holding for a human
+		const fr = all.find((n) => n.type === "final-review")
+		expect(fr?.status).toBe("needs-presentation")
+		const outs = await store.pendingOutputs(root.id)
+		expect(outs.length).toBe(1)
+		expect(outs[0]?.type).toBe("present")
+		expect(outs[0]?.nodeId).toBe(fr?.id)
+	})
+})

@@ -844,6 +844,16 @@ export class Engine {
 	}
 
 	private async present(node: Node, contract: TypeContract, versionId: string, root: Node, log: Logger, caveat?: string): Promise<void> {
+		// 0010: on full autonomy the engine must not block on a human. A `high` production auto-approves
+		// every presented leaf in place (it then rolls up) instead of emitting a present and holding —
+		// EXCEPT the holistic final review, which stays a human gate on every lever, so the finished video
+		// never ships without human sight. `low`/`medium` present as before.
+		if (root.autonomyLever === "high" && !contract.holisticReview) {
+			await this.store.updateVersion(versionId, { status: "approved" })
+			await this.store.updateNodeStatus(node.id, "approved")
+			log.info("node.auto_approved", { versionId, lever: "high", escalation: Boolean(caveat) })
+			return
+		}
 		await this.store.updateVersion(versionId, { status: "presentable" })
 
 		let prompt = `${node.name} is ready for review.`
