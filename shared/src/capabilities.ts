@@ -40,3 +40,38 @@ export function loadCapabilities(typesDir: string): Capability[] {
 	}
 	return out.sort((a, b) => a.type.localeCompare(b.type))
 }
+
+// A production capability — a generic class of production method the Phase-2 planner matches against.
+// "Hybrid depth": structured fields are the hard constraints Phase 2 matches deterministically
+// (produces / inputs / aspect / length / tier / hosted); `guidance` is the soft craft prose Phase 2
+// judges. Capabilities name generic CLASSES only — never a concrete vendor/brand (the concrete backend
+// is a later provisioning/config concern).
+export interface ProductionCapability {
+	id: string // generic class id, e.g. "screen-recording" | "generative-image" | "avatar-presenter"
+	name: string
+	produces: string[] // "image" | "video" | "audio" | "clip" — what Phase 2 can bind it to
+	inputs: string[] // what it needs (e.g. ["url"], ["prompt"], ["script"])
+	aspect: string[] // supported aspect ratios
+	length?: { minS?: number; maxS?: number } // clip length constraints
+	tier: "free" | "paid" // cost tier (Phase 2 surfaces paid per the autonomy lever)
+	hosted: boolean // hosted vs local
+	guidance: string // prose: when this class shines, its feel (Phase 2 judges)
+}
+
+// Read every `<dir>/*.json` production-capability file and return them sorted by id. Malformed files
+// (bad JSON or no `id`) are skipped. A missing dir yields []. Mirrors loadCapabilities' tolerance: a
+// bad entry just isn't offered, it doesn't break discovery.
+export function loadProductionCapabilities(dir: string): ProductionCapability[] {
+	if (!existsSync(dir)) return []
+	const out: ProductionCapability[] = []
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		if (!entry.isFile() || !entry.name.endsWith(".json")) continue
+		try {
+			const c = JSON.parse(readFileSync(join(dir, entry.name), "utf8")) as ProductionCapability
+			if (c.id) out.push(c)
+		} catch {
+			// skip a malformed capability file
+		}
+	}
+	return out.sort((a, b) => a.id.localeCompare(b.id))
+}

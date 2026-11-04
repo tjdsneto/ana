@@ -1,0 +1,11 @@
+{
+	"id": "generative-video",
+	"name": "Generative video",
+	"produces": ["clip", "video"],
+	"inputs": ["prompt", "reference-image"],
+	"aspect": ["16:9", "9:16", "1:1"],
+	"length": { "maxS": 20 },
+	"tier": "paid",
+	"hosted": true,
+	"guidance": "Text- or image-to-video via a hosted generative model, in short clips. Best for cinematic/mood B-roll, impossible or abstract shots, and motion that no capture can give. Clips are short — stitch several for length. Costs a tier — surface per the autonomy lever. Not for exact product UI (it hallucinates interface)."
+}

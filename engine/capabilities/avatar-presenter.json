@@ -1,0 +1,11 @@
+{
+	"id": "avatar-presenter",
+	"name": "Avatar presenter",
+	"produces": ["clip"],
+	"inputs": ["script"],
+	"aspect": ["16:9", "9:16"],
+	"length": { "maxS": 300 },
+	"tier": "paid",
+	"hosted": true,
+	"guidance": "A talking-head presenter generated from a script by a hosted avatar provider. Use for a human face / UGC feel; needs a persona image set prepared first. Costs a tier — surface per the autonomy lever. Keyless until provisioned (emit a spec)."
+}

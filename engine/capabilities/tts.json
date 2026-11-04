@@ -1,0 +1,10 @@
+{
+	"id": "tts",
+	"name": "Text-to-speech voice",
+	"produces": ["audio"],
+	"inputs": ["script"],
+	"aspect": [],
+	"tier": "free",
+	"hosted": false,
+	"guidance": "Narration / voiceover synthesized from a script. A local open-source voice is the free default; a hosted provider adds cloned voices and tighter per-word timestamp precision at a tier. Spell product names phonetically in the script — synth voices mis-stress proper nouns. Word-level timing matters when the render anchors events to spoken words."
+}

@@ -1,0 +1,10 @@
+{
+	"id": "editing",
+	"name": "Editing / assembly",
+	"produces": ["video"],
+	"inputs": ["video", "clip", "audio"],
+	"aspect": ["16:9", "9:16", "1:1"],
+	"tier": "free",
+	"hosted": false,
+	"guidance": "Cut, assemble, retime, mix, and burn captions over existing footage and audio into the final video, with a local toolchain. Best for stitching scenes to the edit decision list, syncing voice/music, karaoke-style caption burn-in on word timing, and the final polish pass. An agentic hosted editor can drive whole-timeline edits from a description at a tier — reach for it only when the local assembly can't express the edit."
+}

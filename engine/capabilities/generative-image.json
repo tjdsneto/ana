@@ -1,0 +1,10 @@
+{
+	"id": "generative-image",
+	"name": "Generative image",
+	"produces": ["image"],
+	"inputs": ["prompt", "reference-image"],
+	"aspect": ["16:9", "9:16", "1:1"],
+	"tier": "paid",
+	"hosted": true,
+	"guidance": "Text-to-image, or image-to-image from a reference, via a hosted generative model. Best for persona/character sets, stylized plates, and look-dev stills; supports img2img to carry a reference forward. Costs a tier when hosted — surface per the autonomy lever. Not for exact product UI (it invents interface, never the real screen)."
+}

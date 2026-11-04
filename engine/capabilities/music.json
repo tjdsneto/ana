@@ -1,0 +1,10 @@
+{
+	"id": "music",
+	"name": "Music / soundtrack",
+	"produces": ["audio"],
+	"inputs": ["prompt"],
+	"aspect": [],
+	"tier": "free",
+	"hosted": false,
+	"guidance": "A music bed for the cut — either a licence-safe stock track or a generative score from a prompt. Free stock libraries and a free local generative model are the default; a stronger hosted generative model exists at a tier. Keep the licence link with the production. How much the soundtrack carries follows the concept's emphasis, not a fixed rule."
+}

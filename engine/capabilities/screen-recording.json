@@ -1,0 +1,10 @@
+{
+	"id": "screen-recording",
+	"name": "Screen recording / site capture",
+	"produces": ["image", "video"],
+	"inputs": ["url"],
+	"aspect": ["16:9", "9:16", "1:1"],
+	"tier": "free",
+	"hosted": false,
+	"guidance": "The real product UI, captured. Best for tutorials/walkthroughs and authored real-UI beats; grounds every claim in the actual screen. Not for mood/cinematic shots."
+}

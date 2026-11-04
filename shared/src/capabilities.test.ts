@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { loadCapabilities } from "./capabilities.js"
+import { loadCapabilities, loadProductionCapabilities } from "./capabilities.js"
 
 const TYPES_DIR = new URL("../../engine/types", import.meta.url).pathname
+const CAPS_DIR = new URL("../../engine/capabilities", import.meta.url).pathname
 
 describe("loadCapabilities", () => {
 	it("returns the rootCapable types with their intake schema, excluding plumbing", () => {
@@ -22,5 +23,20 @@ describe("loadCapabilities", () => {
 
 	it("returns [] for a missing types dir", () => {
 		expect(loadCapabilities("/no/such/dir")).toEqual([])
+	})
+})
+
+describe("loadProductionCapabilities", () => {
+	it("loads production capabilities with hybrid depth (structured + prose)", () => {
+		const caps = loadProductionCapabilities(CAPS_DIR)
+		const screen = caps.find((c) => c.id === "screen-recording")
+		expect(screen).toBeTruthy()
+		expect(screen?.produces).toContain("video") // structured constraint Phase 2 matches
+		expect(typeof screen?.guidance).toBe("string") // prose craft guidance Phase 2 judges
+		expect(Array.isArray(screen?.aspect)).toBe(true)
+	})
+
+	it("returns [] for a missing capabilities dir", () => {
+		expect(loadProductionCapabilities("/no/such/dir")).toEqual([])
 	})
 })

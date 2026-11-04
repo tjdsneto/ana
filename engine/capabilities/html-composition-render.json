@@ -1,0 +1,10 @@
+{
+	"id": "html-composition-render",
+	"name": "HTML/CSS composition render",
+	"produces": ["video"],
+	"inputs": ["composition"],
+	"aspect": ["16:9", "9:16", "1:1"],
+	"tier": "free",
+	"hosted": false,
+	"guidance": "An HTML/CSS/code composition (markup + motion timeline) rendered to frames, then to MP4, by a local open-source frames renderer. Best for motion graphics, kinetic typography, data/number reveals, and composited real-UI beats with precise word-anchored timing. Vector (SVG) assets are the fidelity unlock — raster screenshots dropped in look pasted-on. Can carry a local text-to-speech voice inline."
+}
