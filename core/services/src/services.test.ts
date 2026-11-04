@@ -3,7 +3,10 @@
 
 import { FakeStore } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
-import { approve, approveBudget, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
+import { approve, approveBudget, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
+
+const TYPES_DIR = new URL("../../../engine/types", import.meta.url).pathname
+const CAPS_DIR = new URL("../../../engine/capabilities", import.meta.url).pathname
 
 let store: FakeStore
 
@@ -129,5 +132,13 @@ describe("getDeliverable", () => {
 		expect(res.version.id).toBe(version.id)
 		expect(res.artifact_path).toBeNull()
 		expect(res.content).toBeUndefined()
+	})
+})
+
+describe("getCapabilities", () => {
+	it("returns the rootCapable catalog + the production registry", () => {
+		const res = getCapabilities({ typesDir: TYPES_DIR, capsDir: CAPS_DIR })
+		expect(res.rootCapable.some((c) => c.type === "video-project")).toBe(true)
+		expect(res.production.some((c) => c.id === "screen-recording")).toBe(true)
 	})
 })

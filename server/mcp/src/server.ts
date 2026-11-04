@@ -53,7 +53,7 @@ export function buildServer(store: Store, logger: Logger = new NoopLogger()): Mc
 	server.registerTool(
 		"get_capabilities",
 		{
-			description: "List what the engine can produce: the rootCapable capabilities (a full video-project, and standalone ones like scene / clip / card) with their intake params. Call this first to discover what can be requested and what each needs; then request_video (or a typed production) with those params.",
+			description: "List what the engine can produce. Returns two layers: the rootCapable catalog (a full video-project, and standalone ones like scene / clip / card) with their intake params, and the production-capability registry (the generic production-method classes — screen capture, generative image/video, composition render, avatar presenter, voice, music, editing — with their hard constraints and craft guidance) the planner matches against. Call this first to discover what can be requested and what each needs; then request_video (or a typed production) with those params.",
 			inputSchema: {},
 		},
 		() => run("get_capabilities", async () => getCapabilities()),
