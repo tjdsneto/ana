@@ -35,6 +35,7 @@ export interface TypeContract {
 	checklist?: ChecklistEntry[] // static sub-project (expand)
 	planner?: boolean // dynamic sub-project (plan) — v0-flat: not exercised
 	childType?: string
+	plansProduction?: boolean // a planner that MATERIALIZES the production's sibling DAG (parseProductionDag) rather than fanning children of a childType
 	produce?: string // producer instruction (the prompt seed)
 	reviews?: ReviewSpec[] // the specialist reviewer set
 	advisoryReview?: boolean // rollup/review never blocks (agreement types)
