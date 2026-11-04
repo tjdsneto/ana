@@ -98,6 +98,32 @@ export function parsePlan(output: string): PlanChild[] {
 	return out
 }
 
+// A plansProduction planner reads the brief + staged upstream and FREEZES the production's whole
+// pipeline as an ordered stage DAG the engine materializes (parseProductionDag) into sibling nodes under
+// the root. Unlike buildPlannerPrompt (which fans childType units UNDER the planner), this emits the
+// production's own spine: every universal stage, in order, each bound to a production method/heaviness
+// chosen from the capability registry. The engine owns only the output contract; the planner skill owns
+// the craft (which method fits the brief). Generic: no domain/product names here.
+export function buildProductionPlanPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+	const parts: string[] = []
+	parts.push(
+		contract.produce ??
+			"Plan how this production is made: read the brief and the approved upstream work, then freeze the production pipeline as an ordered stage DAG over the universal spine.",
+	)
+	parts.push(
+		'Output ONLY a fenced ```json block of the shape {"stages": [{"id": string, "type": string, "deps": [string], "binding"?: object}]}. "id" is a stage key other stages name in their "deps"; "type" is the node type that produces the stage; "deps" are the ids of the earlier stages this one builds on; "binding" (optional) carries this stage\'s chosen method/heaviness (e.g. the acquisition source, how heavy it runs).',
+	)
+	parts.push(
+		"Emit EVERY stage of the universal spine, in order — script → moodboard → storyboard → assemble-board → build → assemble → polish → final-review — and never add or drop a spine stage. Bind each stage's method and heaviness from the production-capability registry, matched against the brief (aspect, length, tier, placement). deps may reference only earlier stage ids.",
+	)
+	parts.push(`\n## Brief\n${ctx.brief}`)
+	if (ctx.upstream.length > 0) {
+		parts.push("\n## Approved upstream work")
+		for (const u of ctx.upstream) parts.push(`\n### ${u.type}\n${u.content}`)
+	}
+	return parts.join("\n")
+}
+
 export interface ReviewContext {
 	draft: string
 	brief: string

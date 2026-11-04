@@ -603,6 +603,61 @@ describe("brainstorm phase — fan out ideas, fresh judge sees the developed ide
 	})
 })
 
+// A plansProduction node (the HOW judge) does NOT fan childType children under itself — it MATERIALIZES
+// the production's spine as SIBLING nodes under the root, then the ordinary loop runs them to approved.
+// The frozen DAG's deps are stage KEYS the engine resolves to the created siblings' real node ids. This
+// proves the sibling-under-root parenting and the dep-resolution, end to end on a materialized pipeline.
+const PRODUCTION_PLAN_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "VP",
+		rootCapable: true,
+		inputs: [{ name: "brief", required: true }],
+		checklist: [
+			{ id: "briefing", type: "briefing", deps: [] },
+			{ id: "plan", type: "production-plan", deps: ["briefing"] },
+		],
+	},
+	{ type: "briefing", name: "Briefing", produce: "brief", agreement: true, advisoryReview: true, reviews: [{ name: "coverage", kind: "coverage" }] },
+	{ type: "production-plan", name: "Plan", plansProduction: true, skill: "production-plan" },
+	{ type: "script", name: "Script", produce: "script" },
+	{ type: "final-review", name: "Final review", holisticReview: true },
+]
+const productionPlanTypes = TypeRegistry.fromContracts(PRODUCTION_PLAN_CONTRACTS)
+
+describe("production-plan — materializes the frozen DAG as siblings under the root", () => {
+	it("materializes its stages as sibling nodes under the root, then runs them to approved", async () => {
+		const runner = new FakeSubagentRunner((input) =>
+			input.skill === "production-plan"
+				? { output: '```json\n{"stages":[{"id":"script","type":"script","deps":[]},{"id":"final-review","type":"final-review","deps":["script"]}]}\n```' }
+				: input.skill?.startsWith("review:") || input.skill === "final-review"
+					? { output: "VERDICT: pass" }
+					: { output: "draft" },
+		)
+		const engine = new Engine({ store, runner, types: productionPlanTypes, config: makeConfig() })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		const all = await store.nodesFor(root.id)
+		const plan = all.find((n) => n.type === "production-plan")!
+		const script = all.find((n) => n.type === "script")
+		expect(script).toBeDefined()
+		expect(script?.parentId).toBe(root.id) // a SIBLING under the root, not a child of the plan node
+		expect(script?.parentId).not.toBe(plan.id)
+		// deps are stage keys resolved to real node ids: final-review builds on the script's own node id
+		const finalReview = all.find((n) => n.type === "final-review")!
+		expect(finalReview.parentId).toBe(root.id)
+		expect(finalReview.deps).toEqual([script!.id])
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+	})
+})
+
 // The headline capability: the final review reopens ONE fanned-out scene, and only that scene's own
 // re-production + everything downstream rebuilds — its sibling scenes and the upstream are left alone.
 const SURGICAL_CONTRACTS: TypeContract[] = [

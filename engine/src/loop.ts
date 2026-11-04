@@ -13,7 +13,8 @@ import { basename, extname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
-import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
+import { parseProductionDag } from "./plan-dag.js"
+import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
 const MAX_TICKS_PER_DRAIN = 10_000 // safety valve; redo caps bound real work well below this
@@ -241,6 +242,10 @@ export class Engine {
 			await this.expandNode(node)
 			return
 		}
+		if (contract.plansProduction) {
+			await this.dispatchProductionPlan(node, contract)
+			return
+		}
 		if (contract.planner) {
 			await this.dispatchPlan(node, contract)
 			return
@@ -307,6 +312,75 @@ export class Engine {
 		)
 		await this.store.updateNodeStatus(node.id, "in-progress")
 		log.info("node.plan", { versionId: version.id, children: planned.length })
+	}
+
+	// Production-plan dispatch (materialize the frozen spine): a plansProduction node runs a planner
+	// subagent that returns the production's whole pipeline as an ordered stage DAG (parseProductionDag),
+	// which the engine freezes into SIBLING nodes under the ROOT — not children fanned under this node
+	// (that is dispatchPlan). The root's own id IS the productionId, so passing node.productionId as the
+	// parent arg to createChildNodes parents each stage to the root; the root then rolls up when the
+	// materialized stages approve. Each stage's deps are stage KEYS resolved to the created siblings' node
+	// ids, so stages are created one-per-call in order (a batch can't reference ids that don't exist yet).
+	// The plan node is approved once the spine is laid — like dispatchPlan, the materialized children carry
+	// the gate from here. Bookkeeping (version/artifact/interaction) mirrors dispatchPlan.
+	private async dispatchProductionPlan(node: Node, contract: TypeContract): Promise<void> {
+		const root = await this.store.getProduction(node.productionId)
+		if (!root) throw new Error(`dispatchProductionPlan: production ${node.productionId} missing`)
+		const log = this.log.child({ productionId: node.productionId, nodeId: node.id, type: node.type })
+		log.info("node.dispatch")
+
+		const upstream = await this.collectUpstream(node)
+		const priorVersions = await this.store.versionsFor(node.id)
+		const latest = priorVersions.at(-1)
+		const n = (latest?.n ?? 0) + 1
+
+		const t0 = Date.now()
+		const planPrompt = buildProductionPlanPrompt(contract, { brief: root.description ?? "", upstream })
+		const result = await this.runSubagent(
+			{
+				prompt: planPrompt,
+				skill: contract.skill ?? node.type,
+				cwd: this.config.craftRoot,
+				resumeSessionId: latest?.subagent?.sessionId,
+			},
+			contract,
+		)
+		const stages = parseProductionDag(result.output)
+
+		// Materialize each stage as a sibling under the root. Base the position past the root's existing
+		// direct children (the static checklist siblings — briefing, this plan node, …) so the spine does
+		// not collide with them. Resolve each stage's dep keys to earlier siblings' real node ids as we go.
+		const idByKey = new Map<string, string>() // stage key → created node id
+		const base = (await this.store.nodesFor(node.productionId)).filter((s) => s.parentId === node.productionId).length
+		for (const [i, s] of stages.entries()) {
+			const [created] = await this.store.createChildNodes(node.productionId, [
+				{
+					type: s.type,
+					name: s.id,
+					description: s.binding ? JSON.stringify(s.binding) : undefined,
+					deps: s.deps.map((k) => idByKey.get(k)).filter((x): x is string => Boolean(x)),
+					position: base + i,
+				},
+			])
+			if (!created) throw new Error("dispatchProductionPlan: createChildNodes returned no row")
+			idByKey.set(s.id, created.id)
+		}
+
+		// Record the frozen DAG as an approved version (auditable, like dispatchPlan's plan version) and
+		// approve the plan node — the materialized spine carries the gate from here.
+		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest?.id,
+			status: "approved",
+			artifactPath,
+			builtFrom: await this.computeBuiltFrom(node),
+			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
+		})
+		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, planPrompt)
+		await this.store.updateNodeStatus(node.id, "approved")
+		log.info("node.plan_production", { versionId: version.id, stages: stages.length })
 	}
 
 	// Artifact filename base for a node. Fanned-out children of a planner share a type, so a
