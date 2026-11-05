@@ -920,9 +920,11 @@ describe("planner re-plan — reopen the storyboard, reconcile scenes by name", 
 	})
 })
 
-// Convergence: 3 reviewers can oscillate (each round a different one dissents) and never all pass a
-// genuinely good leaf. After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it
-// instead of grinding to the redo cap. A weak leaf (more than one dissent) never sustains the streak.
+// Convergence: a leaf can sit at all-but-one-pass round after round and never get a unanimous pass.
+// After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it instead of grinding to
+// the redo cap. A weak leaf (more than one dissent) never sustains the streak. (Under carry-forward,
+// 0021, a passed axis is not re-run — so the reachable near-pass is a single axis that keeps dissenting
+// while the carried ones pass; convergence absorbs exactly that. convergeAfter defaults to 99 = off.)
 const CONVERGE_CONTRACTS: TypeContract[] = [
 	{ type: "video-project", name: "Root", checklist: [{ id: "leaf", type: "leaf", deps: [] }] },
 	{
@@ -940,15 +942,12 @@ const convergeTypes = TypeRegistry.fromContracts(CONVERGE_CONTRACTS)
 
 describe("convergence — accept an oscillating near-pass instead of grinding to the cap", () => {
 	it("accepts a leaf that passes all-but-one reviewer for convergeAfter consecutive rounds", async () => {
-		let round = 0
 		const runner = new FakeSubagentRunner((input) => {
-			if (!input.skill?.startsWith("review:")) {
-				round++
-				return { output: "draft" }
-			}
+			if (!input.skill?.startsWith("review:")) return { output: "draft" }
 			const kind = input.skill.slice("review:".length)
-			const dissenter = ["craft", "coverage", "consistency"][(round - 1) % 3] // rotate the single dissenter each round
-			return { output: kind === dissenter ? "VERDICT: revise" : "VERDICT: pass" }
+			// One axis keeps dissenting; the other two pass on v1 and are carried forward (0021), so each
+			// redo is all-but-one-pass ([revise, pass, pass]) — the streak the convergence gate absorbs.
+			return { output: kind === "craft" ? "VERDICT: revise" : "VERDICT: pass" }
 		})
 		const engine = new Engine({ store, runner, types: convergeTypes, config: makeConfig({ convergeAfter: 3, maxRedos: 20 }) })
 		const root = await newProduction(store)
