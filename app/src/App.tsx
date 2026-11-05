@@ -262,7 +262,6 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
 				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
 				{versions.length === 0 && kids.length > 0 && <p className="muted">No artifact of its own — expands into the sub-steps below.</p>}
-				<NodeMedia productionId={detail.root.id} nodeType={nv.node.type} />
 				{versions.length > 0 && (
 					<div className="revs">
 						{versions.map((vw, i) => (
@@ -277,6 +276,8 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 						))}
 					</div>
 				)}
+				{/* Media the node produced — shown AFTER its report/versions so the write-up reads first. */}
+				<NodeMedia productionId={detail.root.id} nodeType={nv.node.type} />
 				{kids.length > 0 && (
 					<>
 						<div className="sub-h">Sub-steps</div>
@@ -357,6 +358,8 @@ function VersionBlock({
 function NodeMedia({ productionId, nodeType }: { productionId: string; nodeType: string }) {
 	const specs = mediaDirsForNodeType(nodeType)
 	const [files, setFiles] = useState<MediaFile[]>([])
+	const [imgPage, setImgPage] = useState(0)
+	const IMG_PAGE_SIZE = 12
 	useEffect(() => {
 		if (specs.length === 0) return
 		let alive = true
@@ -397,16 +400,33 @@ function NodeMedia({ productionId, nodeType }: { productionId: string; nodeType:
 					))}
 				</ul>
 			)}
-			{images.length > 0 && (
-				<div className="asset-grid">
-					{images.map((f) => (
-						<a key={f.path} className="asset-thumb" href={mediaUrlByPath(f.path)} target="_blank" rel="noreferrer" title={`${f.name} · ${fmtBytes(f.sizeBytes)}`}>
-							<img src={mediaUrlByPath(f.path)} alt={f.name} loading="lazy" />
-							<span className="asset-name">{f.name}</span>
-						</a>
-					))}
-				</div>
-			)}
+			{images.length > 0 && (() => {
+				// Paginate the grid: a build-assets node can hold dozens of images and the full grid takes
+				// over the card. Show one page at a time with a pager; clamp the page if the list shrank.
+				const pageCount = Math.ceil(images.length / IMG_PAGE_SIZE)
+				const page = Math.min(imgPage, pageCount - 1)
+				const start = page * IMG_PAGE_SIZE
+				const shown = images.slice(start, start + IMG_PAGE_SIZE)
+				return (
+					<>
+						<div className="asset-grid">
+							{shown.map((f) => (
+								<a key={f.path} className="asset-thumb" href={mediaUrlByPath(f.path)} target="_blank" rel="noreferrer" title={`${f.name} · ${fmtBytes(f.sizeBytes)}`}>
+									<img src={mediaUrlByPath(f.path)} alt={f.name} loading="lazy" />
+									<span className="asset-name">{f.name}</span>
+								</a>
+							))}
+						</div>
+						{pageCount > 1 && (
+							<div className="asset-pager">
+								<button type="button" disabled={page <= 0} onClick={() => setImgPage(page - 1)}>‹ Prev</button>
+								<span className="muted">{start + 1}–{start + shown.length} of {images.length}</span>
+								<button type="button" disabled={page >= pageCount - 1} onClick={() => setImgPage(page + 1)}>Next ›</button>
+							</div>
+						)}
+					</>
+				)
+			})()}
 		</div>
 	)
 }

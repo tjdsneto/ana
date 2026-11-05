@@ -1422,3 +1422,26 @@ code {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+.asset-pager {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 10px;
+	font-size: 12px;
+}
+.asset-pager button {
+	border: 1px solid var(--line);
+	background: var(--surface);
+	color: var(--fg);
+	border-radius: 6px;
+	padding: 4px 10px;
+	cursor: pointer;
+}
+.asset-pager button:hover:not(:disabled) {
+	border-color: var(--line-strong);
+}
+.asset-pager button:disabled {
+	color: var(--faint);
+	cursor: default;
+}
