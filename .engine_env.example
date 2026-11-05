@@ -50,3 +50,9 @@ SUBAGENT_ENGINE=fake
 # inject here; never baked. Read when a node pins engine "codex" (TypeContract.engine) or
 # SUBAGENT_ENGINE=codex. Shared with the openai image-gen provider above (IMAGE_PROVIDER=openai).
 # OPENAI_API_KEY=
+
+# Google Gemini auth (the engine image bundles the Gemini CLI for the `gemini` SubagentRunner backend).
+# gemini in-container has no interactive Google login, so it authenticates from GEMINI_API_KEY. Store in
+# 1Password, inject here; never baked. Read when a node pins engine "gemini" (TypeContract.engine) or
+# SUBAGENT_ENGINE=gemini. Same key as the gemini image-gen provider above (IMAGE_PROVIDER=gemini).
+# GEMINI_API_KEY=

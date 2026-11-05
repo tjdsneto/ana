@@ -63,7 +63,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: engine           # the image WITH the Claude Code CLI (claude -p)
+      target: engine           # the image WITH the agent CLIs (claude -p, codex, gemini) — see Dockerfile engine-tools "SHARED-IMAGE CONTRACT"
     image: production-engine-claude:local
     command: ["node", "engine/dist/worker/index.js"]
     # All the worker knobs (subagent engine/model/caps, render + voice providers, the Claude
@@ -150,7 +150,9 @@ services:
   # In the `tools` profile so a plain `docker compose up` never starts it.
   toolbox:
     # Same image as engine-worker (target: engine) so ./x IS the engine container — it has the baked
-    # chromium + ffmpeg + python3 + voice venvs the craft tools shell out to, not just node/npm. A plain
+    # agent CLIs (claude/codex/gemini) + chromium + ffmpeg + python3 + voice venvs the craft tools shell
+    # out to, not just node/npm. This MUST track engine-worker's target: see the "SHARED-IMAGE CONTRACT"
+    # note in Dockerfile's engine-tools stage — ./x must run exactly what the worker runs. A plain
     # `./x npm ci|test|build` still works; `./x node craft/video-production/tools/motion-graphics/index.mjs …` and
     # `./x python3 craft/video-production/tools/image.py …` now render + generate here, keyed from .engine_env.
     build:

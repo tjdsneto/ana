@@ -44,6 +44,15 @@ CMD ["node", "server/mcp/dist/http.js"]
 # Subagents run text-only with tools denied (Manual mode), so the image stays root. Auth is injected at
 # runtime (CLAUDE_CODE_OAUTH_TOKEN, never baked). piper's binary bundles its own onnxruntime +
 # espeak-ng-data; the model is baked so there is no network or key at runtime.
+#
+# SHARED-IMAGE CONTRACT — read before changing the agent-CLI installs below. The engine stage
+# (FROM engine-tools) is run by TWO Compose services: `engine-worker` (the real loop, `target: engine`)
+# AND `toolbox` (the `./x` wrapper, also `target: engine` — see docker-compose.yml). They MUST stay the
+# same image: every subagent-engine CLI the worker can dispatch to (claude-code, codex, gemini) is baked
+# HERE, in engine-tools, precisely so both services carry the identical set. Never add an agent CLI to
+# only one service, and never split toolbox onto a lighter target — `./x` must be able to run exactly
+# what the worker runs, or a `codex`/`gemini` node that works under the worker breaks under toolbox (and
+# vice versa). Add a new engine CLI only in this stage.
 FROM node:24-bookworm-slim AS engine-tools
 ARG TARGETARCH
 # Docker Desktop's VM filesystem (macOS/arm64) breaks apt's unprivileged `_apt` sandbox: that user
@@ -69,6 +78,15 @@ RUN apt-get update \
 # `codex exec -m <model> --dangerously-bypass-approvals-and-sandbox` (the worker container IS the
 # external sandbox that flag is meant for).
 RUN npm i -g @openai/codex@0.166.0
+# Google Gemini CLI — the third SubagentRunner backend (`gemini -p`), for nodes that pin engine
+# "gemini" (TypeContract.engine) or SUBAGENT_ENGINE=gemini. Bin is a bundled JS entry (bundle/gemini.js,
+# no native link), so it installs clean under npm 12. The install DOES warn that two OPTIONAL scripts
+# are blocked — @github/keytar (OS-keychain store for interactive OAuth login) and node-pty (interactive
+# PTY); neither is needed for our headless, API-key use and `gemini --version` runs without them, so the
+# warning is expected and left as-is (do NOT --allow-scripts them). Pinned. Auth is injected at runtime
+# (GEMINI_API_KEY in .engine_env), never baked — the container has no interactive Google login. Headless
+# call (intended): `gemini -p "<prompt>" -m <model>`.
+RUN npm i -g @google/gemini-cli@0.67.0
 # piper (offline neural TTS) — pinned release; arch from the build platform. Extracts to /opt/piper
 # (binary + libs + espeak-ng-data via $ORIGIN rpath), symlinked onto PATH. Default voice under
 # /opt/piper-voices.
