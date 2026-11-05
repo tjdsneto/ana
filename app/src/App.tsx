@@ -425,10 +425,45 @@ function ArtifactView({
 				<ScriptView content={content} />
 			) : kind === "storyboard" ? (
 				<StoryboardBoard content={content} />
+			) : kind === "card" ? (
+				<CardPlate content={content} />
 			) : (
 				<pre className="raw">{content}</pre>
 			)}
 		</>
+	)
+}
+
+// Card: the composed plate rendered in-app, so you see the beat as pixels — not the raw JSON. The card
+// artifact is JSON {id, vo_line, camera, plate_html} (sometimes fenced in ```json). We extract plate_html
+// and render it in a sandboxed iframe (no scripts — the plate is static HTML/CSS, the way the render
+// screenshots it as a still). Falls back to raw JSON if the shape is unexpected.
+function CardPlate({ content }: { content: string }) {
+	let html: string | null = null
+	let vo: string | undefined
+	try {
+		let t = content.trim()
+		const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/)
+		if (fenced?.[1]) t = fenced[1]
+		else {
+			const s = t.indexOf("{")
+			const e = t.lastIndexOf("}")
+			if (s >= 0 && e > s) t = t.slice(s, e + 1)
+		}
+		const card = JSON.parse(t) as { plate_html?: string; vo_line?: string }
+		html = card.plate_html ?? null
+		vo = card.vo_line
+	} catch {
+		html = null
+	}
+	if (!html) return <pre className="raw">{content}</pre>
+	return (
+		<figure className="card-plate">
+			<div className="plate-wrap">
+				<iframe className="plate-frame" title="card plate" sandbox="" srcDoc={html} />
+			</div>
+			{vo && <figcaption>“{vo}”</figcaption>}
+		</figure>
 	)
 }
 
@@ -451,17 +486,28 @@ function ScriptView({ content }: { content: string }) {
 // Storyboard: the word-anchored film.json shown as a visual beat board — theme swatches, voice, and
 // one card per beat. Falls back to raw JSON if the shape is unexpected.
 function StoryboardBoard({ content }: { content: string }) {
-	let data: Record<string, unknown>
+	let parsed: unknown
 	try {
-		data = JSON.parse(content) as Record<string, unknown>
+		let t = content.trim()
+		const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/) // storyboard artifacts are often fenced in ```json
+		if (fenced?.[1]) t = fenced[1]
+		else {
+			const s = t.search(/[[{]/)
+			if (s > 0) t = t.slice(s)
+		}
+		parsed = JSON.parse(t)
 	} catch {
 		return <pre className="raw">{content}</pre>
 	}
-	const theme = (data.theme ?? {}) as Record<string, string>
-	const voice = (data.voice ?? {}) as Record<string, unknown>
-	const size = data.size as [number, number] | undefined
-	const beatsRaw = (Array.isArray(data.beats) ? data.beats : Array.isArray(data.scenes) ? data.scenes : Array.isArray(data.script) ? data.script : []) as unknown[]
+	// Two shapes: the card-PLAN — a top-level array of {name, brief}, i.e. the storyboard before any card
+	// renders — or a film.json object (theme/voice/beats). Normalize both to a beats list.
+	const obj = (Array.isArray(parsed) ? {} : (parsed ?? {})) as Record<string, unknown>
+	const theme = (obj.theme ?? {}) as Record<string, string>
+	const voice = (obj.voice ?? {}) as Record<string, unknown>
+	const size = obj.size as [number, number] | undefined
+	const beatsRaw = (Array.isArray(parsed) ? parsed : Array.isArray(obj.beats) ? obj.beats : Array.isArray(obj.scenes) ? obj.scenes : Array.isArray(obj.script) ? obj.script : []) as unknown[]
 	const beats = beatsRaw.map((b) => (typeof b === "string" ? { vo: b } : (b as Record<string, unknown>)))
+	if (beats.length === 0) return <pre className="raw">{content}</pre>
 	return (
 		<>
 			<div className="sb-theme">
@@ -481,11 +527,11 @@ function StoryboardBoard({ content }: { content: string }) {
 					<div key={i} className="beat">
 						<span className="t">beat {i + 1}</span>
 						<div>
-							{(b.beat != null || b.label != null || b.time != null) && (
-								<div className="bn">{String(b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
+							{(b.name ?? b.label ?? b.beat ?? b.time) != null && (
+								<div className="bn">{String(b.name ?? b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
 							)}
 							{(b.vo ?? b.line ?? b.text) != null && <div className="vo">{String(b.vo ?? b.line ?? b.text)}</div>}
-							{(b.capture ?? b.onscreen) != null && <div className="cap">{String(b.capture ?? b.onscreen)}</div>}
+							{(b.brief ?? b.capture ?? b.onscreen) != null && <div className="cap">{String(b.brief ?? b.capture ?? b.onscreen)}</div>}
 						</div>
 					</div>
 				))}
@@ -830,10 +876,11 @@ function Spinner({ label }: { label?: string }) {
 	)
 }
 
-function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "text" {
+function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "card" | "text" {
 	if (isVideoPath(path)) return "video"
 	const t = nodeType.toLowerCase()
 	const ext = path ? path.split(".").pop()?.toLowerCase() : null
+	if (t === "card") return "card" // a composed card: its artifact carries plate_html we can render in-app
 	if (t.includes("storyboard") || ext === "json") return "storyboard"
 	if (t.includes("script")) return "script"
 	if (ext === "md" || ext === "markdown" || ["briefing", "moodboard", "brief", "review", "polish", "coverage", "craft"].some((k) => t.includes(k))) return "markdown"
