@@ -215,7 +215,7 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 				<div className="phead">{head}</div>
 			)}
 			<div className="phead">
-				<UsageStrip usage={detail.usage} />
+				<UsageStrip usage={detail.usage} wallMs={subtreeUsage(detail.nodes, detail.root.id).wallMs} />
 			</div>
 			<Gate inbox={detail.inbox} productionId={detail.root.id} budget={detail.budget} onAction={onAction} cancelled={detail.root.status === "cancelled"} />
 			<div className="stages">
@@ -1220,7 +1220,11 @@ function TelemGrid({ it }: { it: Interaction }) {
 	)
 }
 
-function UsageStrip({ usage }: { usage: UsageSummary }) {
+// `usage.durationMs` is the SUM of every subagent's wall time (compute / machine time); with parallel
+// workers that runs well past how long the production actually took. `wallMs` is the concurrency-aware
+// elapsed span over all runs — the honest "how long it took" — so the strip shows both, not a summed
+// "duration" that reads as elapsed.
+function UsageStrip({ usage, wallMs }: { usage: UsageSummary; wallMs: number }) {
 	return (
 		<div className="usage">
 			<Stat label="interactions" value={String(usage.interactions)} />
@@ -1229,7 +1233,8 @@ function UsageStrip({ usage }: { usage: UsageSummary }) {
 			<Stat label="tokens out" value={fmtNum(usage.outputTokens)} />
 			<Stat label="cache read" value={fmtNum(usage.cacheReadTokens)} />
 			<Stat label="cost" value={`$${usage.costUsd.toFixed(2)}`} />
-			<Stat label="duration" value={fmtDur(usage.durationMs)} />
+			<Stat label="elapsed" value={fmtDur(wallMs > 0 ? wallMs : usage.durationMs)} />
+			<Stat label="compute" value={fmtDur(usage.durationMs)} />
 		</div>
 	)
 }
