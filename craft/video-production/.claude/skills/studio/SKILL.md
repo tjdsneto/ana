@@ -5,7 +5,7 @@ description: Produce audio or assemble a quick clip with the craft tools — syn
 
 # studio
 
-Ad-hoc audio + asset production with the craft tools, driven by the **`./studio`** launcher at the repo root (`/Users/tjdsneto/projects/am-videos/free-craft-tools`). It resolves the right venv per tool, auto-loads API keys from `repo/.engine_env` (Freesound, OpenAI, ElevenLabs — never printed), and defaults the music `generate:` seam to local MusicGen. **Run every command from the repo root.** A command given no `--out` writes to `/tmp` and opens it; pass `--out` for a specific path.
+Ad-hoc audio + asset production with the craft tools, driven by the **`./studio`** launcher at the repo root. It resolves the right venv per tool, auto-loads API keys from `repo/.engine_env` (Freesound, OpenAI, ElevenLabs — never printed), and defaults the music `generate:` seam to local MusicGen. **Run every command from the repo root.** A command given no `--out` writes to `/tmp` and opens it; pass `--out` for a specific path.
 
 This is standalone/ad-hoc use of the same tools the film pipeline uses — not a separate implementation. `./studio` is **not** `./x` (that's the Docker node/npm toolbox).
 
