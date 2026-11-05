@@ -31,6 +31,10 @@ SUBAGENT_ENGINE=fake
 # VOICE_BIN=                   # override the TTS binary
 # RENDER_FONT=                 # override the baked drawtext TTF
 # VOICE_MODEL=                 # override the baked piper .onnx voice
+# Keyed voice providers (vo.py --engine openai-tts | elevenlabs) — BYO-key, runtime-injected, NEVER
+# baked; the provider tool reads the env var (or an --api-key-file the voice-production skill passes).
+# openai-tts uses $OPENAI_API_KEY (set below, shared with codex + image-gen). elevenlabs:
+# ELEVENLABS_API_KEY=          # ElevenLabs TTS (craft/video-production/tools/tts/elevenlabs.py); voice = rachel/adam/antoni/domi or a raw voice_id
 
 # Image generation (the asset / moodboard lane — craft/video-production/tools/image.py). Default: stub (keyless SVG
 # placeholder, zero cost), matching the render/voice stub defaults. Keyed providers are BYO-key, never
