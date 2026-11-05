@@ -11,6 +11,7 @@ export interface Node {
 	autonomyLever: string | null
 	actorKind: string | null
 	deps: string[] // sibling prerequisite node ids — this node's upstream inputs (the DAG edges)
+	position: number // order among siblings; used to number fanned-out sets (Card 1 … Card N)
 	description: string | null // root: the original request (the brief); a fanned-out node: its per-instance spec
 	params: Record<string, unknown> | null // root only: the intake params the production was requested with
 	createdAt: string
@@ -22,6 +23,7 @@ export interface Version {
 	n: number
 	prevVersionId: string | null
 	status: string
+	subagent: { status?: string | null } | null // the attached producer run's state (spawned|running|done|failed) — tells if a worker is drafting this version right now
 	artifactPath: string | null
 	feedback: string | null
 	approvedBy: "human" | "agent" | "agent-escalated" | null // who approved it; null = pre-tracking / not approved

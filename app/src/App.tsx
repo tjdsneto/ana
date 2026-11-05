@@ -39,6 +39,7 @@ import { Markdown } from "./markdown.js"
 import { fileViewKind, isBoardShape, isCard, isFilm, pairVoiceClips, parseJsonLoose, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
 import { type FileRef, nodeFileIO } from "./node-io.js"
 import { subtreeUsage } from "./rollup.js"
+import { siblingIndex, stepPhase } from "./step-phase.js"
 import { stepDescription } from "./step-info.js"
 import { useLive } from "./useLive.js"
 
@@ -276,9 +277,21 @@ function StepInfo({ nodeType }: { nodeType: string }) {
 // Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
 function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: ProductionDetail; videos: VideoFile[]; depth?: number }) {
 	const [open, setOpen] = useState(() => needsAttention(nv.node.status))
-	const kids = childrenOf(detail, nv.node.id)
+	const kids = [...childrenOf(detail, nv.node.id)].sort((a, b) => a.node.position - b.node.position)
 	const versions = [...nv.versions].sort((a, b) => a.version.n - b.version.n)
 	const latest = versions[versions.length - 1]
+
+	// Number a node within a fanned-out set of the same type (Card 1 … Card N). For a leaf, derive the
+	// *real* live phase (producing / reviewing / queued / waiting) instead of the coarse node.status, which
+	// reads "in-progress" for every fanned leaf whether a worker holds it or it's just waiting in the queue.
+	const siblings = childrenOf(detail, nv.node.parentId ?? "").map((s) => ({ id: s.node.id, type: s.node.type, position: s.node.position }))
+	const idx = siblingIndex(nv.node.id, siblings)
+	const label = idx ? `${titleCase(nv.node.type)} ${idx}` : titleCase(nv.node.type)
+	const slug = nv.node.name !== nv.node.type ? nv.node.name : null
+	const isLeaf = kids.length === 0
+	const phase = isLeaf ? stepPhase(nv) : null
+	const chipStatus = phase ?? nv.node.status
+	const spinning = phase ? phase === "producing" : isActive(nv.node.status)
 
 	return (
 		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""} ${isActive(nv.node.status) ? "active" : ""} ${isPending(nv.node.status) ? "pending" : ""}`}>
@@ -286,10 +299,11 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				<span className="stage-ico" aria-hidden="true"><StageIcon type={nv.node.type} /></span>
 				<span className="stage-main">
 					<span className="stage-name">
-						{titleCase(nv.node.type)}
+						{label}
+						{slug && <span className="stage-slug">{slug}</span>}
 						<StepInfo nodeType={nv.node.type} />
-						<StatusChip status={nv.node.status} />
-						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
+						<StatusChip status={chipStatus} />
+						{spinning && <Spinner label={`${label} ${phase ?? "running"}`} />}
 					</span>
 					<span className="stage-prev">{stageMeta(nv, latest, videos, detail)}</span>
 				</span>
@@ -1321,6 +1335,8 @@ function chipVariant(status: string): string {
 		case "queued-running":
 			return "info"
 		case "review":
+		case "reviewing":
+		case "revising":
 		case "needs-work":
 		case "presentable":
 		case "awaiting feedback":
