@@ -64,6 +64,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: engine           # the image WITH the agent CLIs (claude -p, codex, gemini) — see Dockerfile engine-tools "SHARED-IMAGE CONTRACT"
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}   # stamped into the image + logged at worker.up (0015); set by scripts/worker-reload.sh
     image: production-engine-claude:local
     command: ["node", "engine/dist/worker/index.js"]
     # All the worker knobs (subagent engine/model/caps, render + voice providers, the Claude

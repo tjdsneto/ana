@@ -113,6 +113,14 @@ Note: npm 12 blocks dependency install scripts by default — if an install warn
 blocked ... not covered by allowScripts` and something then fails for a missing native binary, run
 `./x npm install-scripts ls` to see what's blocked and whitelist it.
 
+**Picking up engine changes in the running worker.** `engine-worker` runs a **baked image** — the
+engine `dist` + `engine/types/` are COPYed in, not bind-mounted — so `docker compose up -d
+--force-recreate engine-worker` ALONE runs **stale** code/types (issue 0015). Use
+**`scripts/worker-reload.sh`** (rebuilds + recreates, stamping the git SHA so `worker.up` logs
+`buildSha`), or manually: `GIT_SHA=$(git rev-parse --short HEAD) docker compose build engine-worker &&
+docker compose up -d --no-deps engine-worker`. Confirm the new build is live by checking `buildSha` in
+the `worker.up` log matches HEAD.
+
 ## Testing seam — ports and adapters (bake in from the start)
 
 An interface (port) at every external edge; core logic depends on the interface, never the concrete:

@@ -150,6 +150,10 @@ WORKDIR /repo
 RUN npm i --no-save playwright@1.48.2 \
 	&& npx playwright install --with-deps chromium
 COPY --from=base /repo /repo
+# Stamp the source git SHA (passed as a build arg) so the worker logs which build it is running (0015),
+# making a stale / not-rebuilt image visible at worker.up instead of silently running old code.
+ARG GIT_SHA=unknown
+ENV ENGINE_BUILD_SHA=$GIT_SHA
 CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────

@@ -15,6 +15,9 @@ import { missingSkills, skillsDirFor } from "./skills-check.js"
 const config = configFromEnv()
 // This module lives at dist/worker/index.js; the bundled types/ sits at the engine root, two levels up.
 const typesDir = process.env.AUTONOMY_TYPES_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "types")
+// The source git SHA baked at image-build time (docker build --build-arg GIT_SHA=…); "unknown" if the
+// image was built without it. Logged at worker.up so a stale (not-rebuilt) worker is visible (0015).
+const buildSha = process.env.ENGINE_BUILD_SHA ?? "unknown"
 
 const logger = new JsonLogger({ bound: { svc: "engine" } })
 
@@ -75,6 +78,7 @@ async function main(): Promise<void> {
 		logger,
 	})
 	logger.info("worker.up", {
+		buildSha,
 		typesDir,
 		skillsDir: skillsDirFor(config.craftRoot),
 		pollIntervalMs: config.pollIntervalMs,
