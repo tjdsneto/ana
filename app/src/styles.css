@@ -1503,6 +1503,40 @@ code {
 	font-style: italic;
 }
 
+/* ---- step info (fixed per-type description) ---- */
+.step-info {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+.step-info-ico {
+	cursor: help;
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1;
+	user-select: none;
+}
+.step-info-ico:hover {
+	color: var(--fg);
+}
+.step-info-pop {
+	/* Portaled to <body> with fixed top/left (set inline) so the card's overflow:hidden can't clip it. */
+	position: fixed;
+	z-index: 1100;
+	width: max-content;
+	max-width: 340px;
+	padding: 8px 10px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--fg);
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.45;
+	white-space: normal;
+	box-shadow: 0 6px 20px rgba(20, 26, 34, 0.18);
+}
+
 /* ---- input / output panel ---- */
 .node-io {
 	margin: 10px 0 2px;

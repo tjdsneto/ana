@@ -11,6 +11,8 @@ export interface Node {
 	autonomyLever: string | null
 	actorKind: string | null
 	deps: string[] // sibling prerequisite node ids — this node's upstream inputs (the DAG edges)
+	description: string | null // root: the original request (the brief); a fanned-out node: its per-instance spec
+	params: Record<string, unknown> | null // root only: the intake params the production was requested with
 	createdAt: string
 }
 

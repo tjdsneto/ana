@@ -5,6 +5,7 @@
 // refetches on every WebSocket nudge, so the view tracks the worker in real time.
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
 	approveBudget,
 	approveOutput,
@@ -24,6 +25,7 @@ import {
 	videoUrlByVersion,
 	type ChatOutput,
 	type Interaction,
+	type Node as EngineNode,
 	type NodeView,
 	type ProductionDetail,
 	type ProductionListItem,
@@ -37,6 +39,7 @@ import { Markdown } from "./markdown.js"
 import { fileViewKind, isBoardShape, isCard, isFilm, pairVoiceClips, parseJsonLoose, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
 import { type FileRef, nodeFileIO } from "./node-io.js"
 import { subtreeUsage } from "./rollup.js"
+import { stepDescription } from "./step-info.js"
 import { useLive } from "./useLive.js"
 
 type Tab = "productions" | "videos"
@@ -236,6 +239,39 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 	)
 }
 
+// The info affordance on a step card: a small ⓘ that reveals the step's FIXED description (what this
+// kind of step does, from the type registry) on hover or click. It's a span, not a button — it lives
+// inside the card's header button, so it stops propagation to avoid toggling the card. Hidden for a
+// type with no description.
+function StepInfo({ nodeType }: { nodeType: string }) {
+	const desc = stepDescription(nodeType)
+	const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+	const icoRef = useRef<HTMLSpanElement>(null)
+	if (!desc) return null
+	// Position the popover under the icon with fixed coords, then portal it to <body>. The step card has
+	// `overflow: hidden` (rounded corners), which would clip an in-card absolutely-positioned popover —
+	// especially when the card is collapsed and the popover sits below the header. A body portal escapes it.
+	const reveal = () => {
+		const r = icoRef.current?.getBoundingClientRect()
+		if (!r) return
+		const left = Math.min(r.left, window.innerWidth - 360) // keep it inside the viewport's right edge
+		setPos({ top: r.bottom + 6, left: Math.max(8, left) })
+	}
+	const hide = () => setPos(null)
+	const toggle = (e: { stopPropagation: () => void }) => {
+		e.stopPropagation()
+		pos ? hide() : reveal()
+	}
+	return (
+		<span className="step-info" onMouseEnter={reveal} onMouseLeave={hide}>
+			<span ref={icoRef} className="step-info-ico" role="button" tabIndex={0} aria-label="What this step does" onClick={toggle} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggle(e)}>
+				ⓘ
+			</span>
+			{pos && createPortal(<span className="step-info-pop" role="tooltip" style={{ top: pos.top, left: pos.left }}>{desc}</span>, document.body)}
+		</span>
+	)
+}
+
 // One major pipeline step as a big card. Collapsed = name + status + latest version + a preview.
 // Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
 function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: ProductionDetail; videos: VideoFile[]; depth?: number }) {
@@ -251,6 +287,7 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				<span className="stage-main">
 					<span className="stage-name">
 						{titleCase(nv.node.type)}
+						<StepInfo nodeType={nv.node.type} />
 						<StatusChip status={nv.node.status} />
 						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
 					</span>
@@ -261,10 +298,10 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				</span>
 			</button>
 			<div className="stage-body">
-				{/* Input/Output first — it's how you read a step: what it takes in (its upstream deps + the
-				    board files it reads off disk) and what it puts out (its deliverable + the files it writes).
-				    The dep chips ARE the step-to-step dependency; each opens the upstream it builds on. */}
-				<NodeIO nv={nv} detail={detail} />
+				{/* Input at the top — it's how you read a step: what it takes in (its upstream deps + the board
+				    files it reads, or the original request for the intake step). The dep chips ARE the
+				    step-to-step dependency; each opens the upstream it builds on. Output sits at the bottom. */}
+				<NodeIO nv={nv} detail={detail} side="input" />
 				{/* An expand node (e.g. build) has no artifact of its own — don't claim "nothing produced"
 				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
 				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
@@ -290,6 +327,8 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				) : (
 					<NodeMedia productionId={detail.root.id} nodeType={nv.node.type} />
 				)}
+				{/* Output at the bottom — this step's own deliverable + the files it writes. */}
+				<NodeIO nv={nv} detail={detail} side="output" />
 				{kids.length > 0 && (
 					<>
 						<div className="sub-h">Sub-steps</div>
@@ -482,43 +521,48 @@ function VoiceMedia({ productionId }: { productionId: string }) {
 	)
 }
 
-// The Input / Output panel for one node: what the step READS (its upstream deps as the DAG recorded
-// them, each opening that dep's deliverable; plus the board files it reads off disk) and what it WRITES
-// (its own captured deliverable; plus the side files it writes). Answers "what's the input, what's the
-// output of this step" on the card itself. Files open in the viewer modal; a dep/deliverable opens the
-// produced artifact. Renders nothing for a node with no inputs and no output of its own (e.g. a bare
-// expand node whose work is all in its sub-steps).
-function NodeIO({ nv, detail }: { nv: NodeView; detail: ProductionDetail }) {
+// One side of the Input / Output panel for a node, so Input can sit at the top of the card and Output
+// at the bottom — the way a step reads. INPUT = its upstream deps (as the DAG recorded them, each
+// opening that dep's deliverable) + the board files it reads off disk; the intake step (briefing) also
+// shows the production's original request, its true input. OUTPUT = its own captured deliverable + the
+// side files it writes. Renders nothing when that side is empty.
+function NodeIO({ nv, detail, side }: { nv: NodeView; detail: ProductionDetail; side: "input" | "output" }) {
 	const [open, setOpen] = useState<ViewerTarget | null>(null)
 	const io = nodeFileIO(nv.node.type, detail.root.id)
-
-	// Resolve each dep node-id to {label, versionId} — its type + latest version — so the Input chip
-	// opens the upstream's actual deliverable. Unknown/version-less deps are dropped.
-	const depRefs = (nv.node.deps ?? [])
-		.map((id) => {
-			const dn = detail.nodes.find((x) => x.node.id === id)
-			const v = dn?.versions[dn.versions.length - 1]?.version
-			return dn && v ? { label: titleCase(dn.node.type), versionId: v.id } : null
-		})
-		.filter((x): x is { label: string; versionId: string } => x != null)
-
-	// This node's own output = its latest version's artifact (the captured deliverable).
-	const ownLatest = nv.versions[nv.versions.length - 1]?.version
-	const hasInput = depRefs.length > 0 || io.reads.length > 0
-	const hasOutput = ownLatest != null || io.writes.length > 0
-	if (!hasInput && !hasOutput) return null
 
 	const fileChip = (f: FileRef) => (
 		<button key={f.path} type="button" className="file-chip" onClick={() => setOpen({ name: f.label, path: f.path })}>
 			{f.label}
 		</button>
 	)
-	return (
-		<div className="node-io">
-			{hasInput && (
+
+	if (side === "input") {
+		// Resolve each dep node-id to {label, versionId} — its type + latest version — so the chip opens
+		// the upstream's actual deliverable. Unknown/version-less deps are dropped.
+		const depRefs = (nv.node.deps ?? [])
+			.map((id) => {
+				const dn = detail.nodes.find((x) => x.node.id === id)
+				const v = dn?.versions[dn.versions.length - 1]?.version
+				return dn && v ? { label: titleCase(dn.node.type), versionId: v.id } : null
+			})
+			.filter((x): x is { label: string; versionId: string } => x != null)
+		// The intake step has no upstream node — its input is the request the production was asked with.
+		const request = nv.node.type === "briefing" ? requestText(detail.root) : null
+
+		if (depRefs.length === 0 && io.reads.length === 0 && request == null) return null
+		return (
+			<div className="node-io">
 				<div className="io-row">
 					<span className="io-label io-in">Input</span>
 					<span className="io-chips">
+						{request != null && (
+							<span className="io-seg">
+								<span className="io-seg-l">request</span>
+								<button type="button" className="file-chip io-dep" onClick={() => setOpen({ name: "Original request", text: request })}>
+									the brief
+								</button>
+							</span>
+						)}
 						{/* The dep chips are the step-to-step dependency: the upstream steps this one builds on. */}
 						{depRefs.length > 0 && (
 							<span className="io-seg">
@@ -538,48 +582,66 @@ function NodeIO({ nv, detail }: { nv: NodeView; detail: ProductionDetail }) {
 						)}
 					</span>
 				</div>
-			)}
-			{hasOutput && (
-				<div className="io-row">
-					<span className="io-label io-out">Output</span>
-					<span className="io-chips">
-						<span className="io-seg">
-							<span className="io-seg-l">produces</span>
-							{ownLatest && (
-								<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
-									deliverable
-								</button>
-							)}
-							{io.writes.map(fileChip)}
-						</span>
+				{open && <FileViewer target={open} onClose={() => setOpen(null)} />}
+			</div>
+		)
+	}
+
+	// side === "output"
+	const ownLatest = nv.versions[nv.versions.length - 1]?.version
+	if (ownLatest == null && io.writes.length === 0) return null
+	return (
+		<div className="node-io">
+			<div className="io-row">
+				<span className="io-label io-out">Output</span>
+				<span className="io-chips">
+					<span className="io-seg">
+						<span className="io-seg-l">produces</span>
+						{ownLatest && (
+							<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
+								deliverable
+							</button>
+						)}
+						{io.writes.map(fileChip)}
 					</span>
-				</div>
-			)}
+				</span>
+			</div>
 			{open && <FileViewer target={open} onClose={() => setOpen(null)} />}
 		</div>
 	)
 }
 
-// What the viewer modal shows: a produced file by artifacts-root path, or a node's deliverable by
-// version id (fetched + rendered as markdown).
-type ViewerTarget = { name: string; path: string } | { name: string; versionId: string }
+// The production's original request, as the caller asked for it — the brief (root.description) plus any
+// intake params. This is the input to the intake step (briefing). Empty string → nothing to show.
+function requestText(root: EngineNode): string {
+	const brief = (root.description ?? "").trim()
+	// Show the intake params too, unless the only key is `brief` (it just duplicates the description).
+	const extraKeys = Object.keys(root.params ?? {}).filter((k) => k !== "brief")
+	const params = extraKeys.length > 0 ? `\n\n---\nIntake params:\n\n\`\`\`json\n${JSON.stringify(root.params, null, 2)}\n\`\`\`` : ""
+	return brief + params
+}
+
+// What the viewer modal shows: a produced file by artifacts-root path, a node's deliverable by version
+// id (fetched), or inline text already in hand (the request). Deliverable + inline text render as markdown.
+type ViewerTarget = { name: string; path: string } | { name: string; versionId: string } | { name: string; text: string }
 
 // A single input/output item opened in a modal. A file path: audio/image/video play inline, json/text
 // are fetched and shown as text (JSON re-indented), with an "open raw" link. A version id: the
 // deliverable's content, rendered as markdown.
 function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => void }) {
 	const isFile = "path" in target
+	const isInline = "text" in target // content already in hand (the request) — no fetch
 	const kind = isFile ? fileViewKind(target.name) : "deliverable"
-	const needsText = !isFile || kind === "json" || kind === "text"
-	const [text, setText] = useState<string | null>(null)
+	const needsFetch = isFile ? kind === "json" || kind === "text" : !isInline
+	const [text, setText] = useState<string | null>(isInline ? (target as { text: string }).text : null)
 	const [err, setErr] = useState<string | null>(null)
-	const [loading, setLoading] = useState(needsText)
+	const [loading, setLoading] = useState(needsFetch)
 	const [raw, setRaw] = useState(false)
 
 	useEffect(() => {
-		if (!needsText) return
+		if (!needsFetch) return
 		let alive = true
-		const p = isFile ? fetchMediaText(target.path) : getDeliverable(target.versionId).then((d) => d.content ?? "")
+		const p = isFile ? fetchMediaText(target.path) : getDeliverable((target as { versionId: string }).versionId).then((d) => d.content ?? "")
 		void p
 			.then((t) => alive && setText(t))
 			.catch(() => alive && setErr("Couldn't load this."))
@@ -587,7 +649,7 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 		return () => {
 			alive = false
 		}
-	}, [isFile, needsText, isFile ? target.path : target.versionId])
+	}, [isFile, needsFetch, isFile ? target.path : "versionId" in target ? target.versionId : ""])
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -601,6 +663,8 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 	const parsed = text != null ? parseJsonLoose(text) : null
 	const view = isFilm(parsed) ? "film" : isCard(parsed) ? "card" : isBoardShape(parsed) ? "board" : !isFile ? "markdown" : kind === "json" ? "json" : "text"
 	const structured = view === "film" || view === "card" || view === "board"
+	// Everything that isn't a pure media element (audio/image/video file) renders in the text area below.
+	const textual = !isFile || (kind !== "audio" && kind !== "image" && kind !== "video")
 
 	const url = isFile ? mediaUrlByPath(target.path) : null
 	return (
@@ -621,7 +685,7 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 					{isFile && kind === "audio" && url && <audio className="file-audio" controls autoPlay src={url} />}
 					{isFile && kind === "image" && url && <img className="file-img" src={url} alt={target.name} />}
 					{isFile && kind === "video" && url && <video className="file-video" controls src={url} />}
-					{needsText &&
+					{textual &&
 						(loading ? (
 							<p className="muted">Loading…</p>
 						) : err ? (

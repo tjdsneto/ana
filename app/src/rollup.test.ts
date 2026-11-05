@@ -25,7 +25,7 @@ function node(id: string, parentId: string | null, runs: Array<{ dur: number; co
 		prompt: null,
 	}))
 	return {
-		node: { id, parentId, productionId: "p", type: id, name: id, status: "approved", autonomyLever: null, actorKind: null, deps: [], createdAt: "2026-11-05T00:00:00Z" },
+		node: { id, parentId, productionId: "p", type: id, name: id, status: "approved", autonomyLever: null, actorKind: null, deps: [], description: null, params: null, createdAt: "2026-11-05T00:00:00Z" },
 		versions: [],
 		interactions,
 	}
