@@ -24,6 +24,8 @@ You own the **whole-board coherence** — the cards only see their own brief, so
 
 ## Output — ONLY a JSON array (no prose, no code fence)
 
+The schema + a valid example live beside this skill — `schema.json` + `example.json` — as the source of truth your output must conform to (a downstream convert step validates against them).
+
 One object per card, in playback order:
 
 ```

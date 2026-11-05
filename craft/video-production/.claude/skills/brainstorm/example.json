@@ -1,0 +1,5 @@
+[
+  {"name": "Over-the-shoulder build", "brief": "Angle: watch the agent assemble a launch video live. Hook: open in-product on one real high-stakes action (type the brief, hit go). Beats: hook → the board materializing → the hero result card → CTA. Leans on: capture-based dashboard scenes (real-UI-capture). OPEN QUESTION: does the dashboard expose per-step cost to show on the result card?"},
+  {"name": "The empty timeline", "brief": "Angle: a blank editing timeline fills itself, beat by beat, as the VO names what each does. Hook: a benefit question over the empty canvas, product name withheld 3s. Beats: question → timeline self-fills → finished frame → CTA. Leans on: kinetic SVG cards (motion-graphics). Signature: the self-drawing playhead."},
+  {"name": "One prompt, one film", "brief": "Angle: a single typed sentence expands into the whole video in one continuous push. Hook: the recognizable UI assembling from nothing. Beats: prompt typed → continuous zoom through the pipeline → reveal the rendered film → CTA. Leans on: authored-continuous composite. Needs no external service."}
+]

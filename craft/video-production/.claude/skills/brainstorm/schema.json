@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "brainstorm — concept seeds",
+  "description": "Output of the brainstorm planner: a JSON array of exactly N concept seeds (N is set by the creativity lever). Names must be distinct. One artifact is the source of truth the output conforms to; grading criteria live in .claude/references/craft-bar/deliverable-brainstorm.md.",
+  "type": "array",
+  "minItems": 2,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name", "brief"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Short concept label; must be distinct across the seeds."
+      },
+      "brief": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Self-contained spec the idea agent needs: the angle, the hook, a rough beat arc, which capability it leans on (a technique from techniques.json), and any 'OPEN QUESTION:' lines. A roadmap-feasibility technique must be flagged 'needs <service>'."
+      }
+    }
+  }
+}

@@ -30,6 +30,8 @@ A concept may **re-call research**: if your angle needs knowledge the dossier do
 
 ## Output contract (planner)
 
+The schema + a valid example live beside this skill — `schema.json` + `example.json` — as the source of truth your output must conform to (a downstream convert step validates against them).
+
 Output ONLY a fenced ```json block: an array of exactly N objects `{"name": string, "brief": string}`, one per concept, in no particular order. `name` is a short concept label; `brief` is the self-contained spec the idea agent needs — the angle, the hook, the rough beat arc, which capability it leans on, and any `OPEN QUESTION:` lines. No prose outside the JSON.
 
 ```json

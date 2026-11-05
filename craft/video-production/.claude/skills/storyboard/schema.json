@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "storyboard — card plan",
+  "description": "Output of the storyboard planner: a JSON array of one card per beat, in playback order (ONLY the array — no prose, no code fence). Beat count keys off the §B length band (~4–12), not a fixed number. Grading criteria: .claude/references/craft-bar/deliverable-storyboard.md.",
+  "type": "array",
+  "minItems": 3,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name", "brief"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Short beat id, e.g. 'hook', 'reveal', 'cta'."
+      },
+      "brief": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A single structured string carrying labelled fields so assemble-board can map it into film.json: VO line (spoken) | On-screen text | SOUND/SFX (the music-bed feel for this beat; a deliberate hit as a structured cue '<sound>@<anchor>', sound from click·tick·pop·hit·whoosh·swish, anchor = the VO word it lands on or a timecode; else '—' for a quiet beat) | Timecode (start–end, ~Ns) | Role | Focal element that must dominate the safe area | Signature move (does THIS card carry the board's one signature device? how; else '—') | Hero-number/receipt card (the number/receipt if THIS beat owns it full-frame; else '—') | Ground/colour | Font (the moodboard's sourced face) | Camera intent (frame …, zoom ~n)."
+      }
+    }
+  }
+}

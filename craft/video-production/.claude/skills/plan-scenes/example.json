@@ -1,0 +1,6 @@
+[
+  {"name": "Hook", "method": "authored-continuous", "brief": "0:00–0:03. Open on the product's result screen, slow push-in. VO: 'Ship your launch video in minutes.' Bright palette per the moodboard."},
+  {"name": "Walkthrough", "method": "authored-composite", "brief": "0:03–0:10. Real dashboard plate; a presenter PiP shrinks to the top-right corner as the VO explains. VO: '…and it does the work for you.'"},
+  {"name": "Vibe", "method": "whole-clip-generative", "brief": "0:10–0:12. Cinematic b-roll mood shot, no UI. VO: (music swell)."},
+  {"name": "CTA", "method": "authored-composite", "brief": "0:12–0:15. End card with the brand mark + one 'Start free' CTA; a character layer waves. VO: 'Start free at <domain>.'"}
+]

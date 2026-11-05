@@ -17,6 +17,8 @@ You plan the **build** step of a generative video. The storyboard upstream alrea
 
 ## What to output
 
+The schema + a valid example live beside this skill — `schema.json` + `example.json` — as the source of truth your output must conform to (a downstream convert step validates against them).
+
 **Only** a fenced ```json block: an array of objects `{ "name": string, "brief": string, "method": string }`, one per storyboard scene, in playback order. Nothing else — no prose, no trailing text.
 
 - `name` — a short scene label (e.g. `"Hook"`, `"Problem"`, `"Feature: forms"`, `"CTA"`).
