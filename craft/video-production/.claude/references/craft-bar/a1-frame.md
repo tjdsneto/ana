@@ -1,0 +1,8 @@
+### A1. Frame craft — this is where weak work actually fails
+- **One dominant subject per beat, filling ≥ ~50% of the frame.** The thing the VO names at that moment must be the clear, readable anchor. A big empty ring/band/gradient with the real content tiny in a corner = dead space = revise. Scale the focal element up (raise `zoom`, aim `focus` at it).
+- **Clear focal hierarchy.** One hero element; everything else is subordinate and smaller. When several similar elements share a beat, the active one is visibly larger or ringed while the rest recede — a tiny caption is not enough.
+- **Every beat is visually distinct. No slideshow.** Near-duplicate held cards (the same card across 3–4 beats with a slow zoom, a line repeated over the same frame) read as padding — cut them or change the frame. Dead static holds, especially a frozen sparse end card, are the worst offenders.
+- **Motion must mean something.** The merge animates, the chart draws, the number counts up, the camera moves over a canvas to reveal. A slow zoom on a static card is not motion. Zero real cuts/transitions on the VO beats = slideshow = revise.
+- **Give the single strongest number/receipt its own full-frame moment.** When a video has one hero metric, it earns its own card, not a footnote. (Not every type has such a number — see §B; but when one exists, frame it big.)
+- **One signature move.** Every *memorable* video has one device that is unmistakably *this* product's (a recurring motif, a tempo break, a bespoke transition). A video with no signature is forgettable, however clean. This is a taste requirement, not a launch-video requirement.
+

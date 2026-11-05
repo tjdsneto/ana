@@ -1,0 +1,9 @@
+### A3. Look — must not read as AI slop (the cluster test)
+A design should look like it could **only** belong to this project. Detection is by **cluster**, not any single choice: **0–1 tells reads as deliberate; 2–3 reads as lightly-edited AI output; 4+ reads as unedited AI output → revise.** Aim for **0–1**; count them explicitly. The common tells:
+- **Gradients everywhere** (the biggest tell), **a card/rounded-rect for everything**, a single bright accent on a dark/near-black ground, hairline rules, emoji as headings.
+- **Unspecified-default fonts** — if the type wasn't chosen *for this brand*, it's a tell. Treat as defaults: Inter, Roboto, Open Sans, Lato, Arial, Helvetica, Montserrat, Poppins, system-ui (tier 1); Space Grotesk, Geist, DM Sans, Plus Jakarta, Manrope, **Outfit**, Syne, Instrument Sans/Serif, Fraunces, Playfair (tier 2 — now just as much a tell). Swapping one default for another does not fix it. A **declared, sourced substitute** — a non-default face chosen for the brand, used when a licensed primary can't be obtained — is **not** a tell: the tell is an *unspecified* default, not a deliberate fallback. A missing primary must degrade to that declared substitute, **never** to a system default, and a missing-but-substituted primary must never deadlock the pipeline (a licensed font that isn't staged is a provisioning gap, not a quality fail).
+- **Every look choice must trace to the brand's own material** (its real product, palette, era, audience, content). "Clean / modern / lets it breathe" is not a reason. **Swap test:** put a different product's name on it — if it still fits, it's generic, revise.
+- **No house style.** Do not reuse a signature or palette from a previous video. Each starts from the brand's material, not from the last good design.
+
+2+ tells → a revise with the specific swaps named (and the swap must be *sourced*, not another default).
+
