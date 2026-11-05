@@ -29,6 +29,7 @@ import {
 	type VideoFile,
 } from "./api.js"
 import { Markdown } from "./markdown.js"
+import { subtreeUsage } from "./rollup.js"
 import { useLive } from "./useLive.js"
 
 type Tab = "productions" | "videos"
@@ -246,7 +247,7 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 						<StatusChip status={nv.node.status} />
 						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
 					</span>
-					<span className="stage-prev">{stageMeta(nv, latest, videos)}</span>
+					<span className="stage-prev">{stageMeta(nv, latest, videos, detail)}</span>
 				</span>
 				<span className="stage-right">
 					<Chevron />
@@ -419,6 +420,11 @@ function ArtifactView({
 				<p className="muted">—</p>
 			) : raw || kind === "text" ? (
 				<pre className="raw">{content}</pre>
+			) : kind === "markdown" && looksLikePlan(content) ? (
+				// A plan/fan-out node (brainstorm-how, build-scenes, …) writes its children as a JSON array
+				// of {name, brief}. Those land in a .md artifact (markdown kind) but are not prose — render
+				// them as a board, like the storyboard, instead of dumping the raw ```json.
+				<StoryboardBoard content={content} />
 			) : kind === "markdown" ? (
 				<div className="md"><Markdown source={content} /></div>
 			) : kind === "script" ? (
@@ -443,7 +449,7 @@ function CardPlate({ content }: { content: string }) {
 	let vo: string | undefined
 	try {
 		let t = content.trim()
-		const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/)
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/) // tolerate ```json AND the two-backtick ``json producers sometimes emit
 		if (fenced?.[1]) t = fenced[1]
 		else {
 			const s = t.indexOf("{")
@@ -489,7 +495,7 @@ function StoryboardBoard({ content }: { content: string }) {
 	let parsed: unknown
 	try {
 		let t = content.trim()
-		const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/) // storyboard artifacts are often fenced in ```json
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/) // storyboard/plan artifacts are often fenced in ```json (sometimes a two-backtick ``json)
 		if (fenced?.[1]) t = fenced[1]
 		else {
 			const s = t.search(/[[{]/)
@@ -538,6 +544,37 @@ function StoryboardBoard({ content }: { content: string }) {
 			</div>
 		</>
 	)
+}
+
+// A plan/fan-out artifact is a JSON array of child seeds ({name, brief}) — the thing a plan node emits
+// before its children render. It arrives in a .md file (so its kind is "markdown"), often wrapped in a
+// code fence (```json, or a two-backtick ``json). Detect that shape so it renders as a board instead of
+// raw text — while leaving genuine prose markdown (e.g. a build-assets report) alone.
+function parsePlanArray(content: string): Record<string, unknown>[] | null {
+	try {
+		let t = content.trim()
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/)
+		if (fenced?.[1]) t = fenced[1].trim()
+		else {
+			const s = t.search(/[[{]/)
+			if (s < 0) return null
+			t = t.slice(s)
+		}
+		const parsed = JSON.parse(t)
+		if (!Array.isArray(parsed)) return null
+		const objs = parsed.filter((x) => x != null && typeof x === "object" && !Array.isArray(x)) as Record<string, unknown>[]
+		if (objs.length === 0) return null
+		// Every item must name/brief itself (a concept or scene seed) — this is what keeps a prose report
+		// that merely contains a JSON snippet from being mistaken for a plan.
+		const planLike = objs.length === parsed.length && objs.every((o) => "name" in o || "brief" in o || "label" in o || "vo" in o)
+		return planLike ? objs : null
+	} catch {
+		return null
+	}
+}
+
+function looksLikePlan(content: string): boolean {
+	return parsePlanArray(content) != null
 }
 
 // One reviewer verdict, flat (no accordion): label + verdict chip. For a revise, the feedback shows
@@ -916,26 +953,33 @@ function Loop() {
 	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
 }
 
-// The collapsed card's sub-line: version (vN of N), then the step's rolled-up telemetry — runs,
-// cost, duration — and, for a render, the finished file's size. Only the parts that have data show,
-// so a cheap fake-engine step stays short.
-function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[]): string {
-	if (!latest) return "Nothing produced yet."
-	const n = nv.versions.length
-	const parts = [n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`]
+// The collapsed card's sub-line: version (vN of N), then the step's telemetry — runs, cost, duration —
+// rolled up over the node AND its whole subtree, so a parent like storyboard or build reflects the
+// fanned-out cards/scenes beneath it (most of a production's time lives there). A "↳ N sub-steps" tail
+// flags that the figure is a subtree total and where to drill. Rolling up is also what makes the
+// top-level rows add up to the production's total duration. Only parts that have data show.
+function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[], detail: ProductionDetail): string {
+	const u = subtreeUsage(detail.nodes, nv.node.id)
+	// An expand node (e.g. build) has no version of its own but holds work in its subtree — describe
+	// that instead of "Nothing produced yet"; a truly empty node keeps the empty state.
+	if (!latest && u.runs === 0) return "Nothing produced yet."
 
-	const runs = nv.interactions.length
-	if (runs > 0) parts.push(`${runs} run${runs === 1 ? "" : "s"}`)
-	const cost = nv.interactions.reduce((s, it) => s + (it.costUsd ?? 0), 0)
-	if (cost > 0) parts.push(`$${cost.toFixed(2)}`)
-	const dur = nv.interactions.reduce((s, it) => s + (it.durationMs ?? 0), 0)
-	if (dur > 0) parts.push(fmtDur(dur))
+	const parts: string[] = []
+	const n = nv.versions.length
+	if (latest) parts.push(n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`)
+
+	if (u.runs > 0) parts.push(`${u.runs} run${u.runs === 1 ? "" : "s"}`)
+	if (u.costUsd > 0) parts.push(`$${u.costUsd.toFixed(2)}`)
+	if (u.durationMs > 0) parts.push(fmtDur(u.durationMs))
 
 	// Step-specific fact: a render's finished file size, matched from the videos list by path.
-	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
+	if (latest?.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
 		const vid = findVideo(videos, latest.version.artifactPath)
 		if (vid) parts.push(fmtBytes(vid.sizeBytes))
 	}
+
+	// Flag that the figures above are a subtree roll-up, and where the time went.
+	if (u.descNodeCount > 0) parts.push(`↳ ${u.descNodeCount} sub-step${u.descNodeCount === 1 ? "" : "s"}`)
 	return parts.join(" · ")
 }
 
