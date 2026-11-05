@@ -132,9 +132,13 @@ def make_synth(a: argparse.Namespace):
                 return
             # The provider tool resolves its own key at call time (a forwarded --api-key-file, else its
             # env var); vo.py passes a path, never the key value.
+            # Don't force an output format: each provider's default is one it actually supports
+            # (openai-tts -> wav, elevenlabs -> mp3), and trimmed_f32() ffmpeg-decodes by content not
+            # extension, so mp3 bytes in an sNN.wav file decode fine. Forcing "wav" 403s on ElevenLabs,
+            # which has no wav output_format.
             r = subprocess.run(
                 [sys.executable, str(tool), "--out", str(out_wav), "--voice", str(a.voice),
-                 "--speed", str(a.speed), "--format", "wav", *key_args],
+                 "--speed", str(a.speed), *key_args],
                 input=text.encode("utf-8"), capture_output=True)
             if r.returncode != 0:
                 sys.exit(f"vo: {a.engine} failed — {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
