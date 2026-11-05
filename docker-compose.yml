@@ -95,6 +95,10 @@ services:
       # live-mounted), so a moodboard's declared primary face can be staged into the board instead of
       # only the free substitute. See docs/lisa/font-resolution.md + the store's README.
       - ./craft/video-production/assets/fonts:/repo/craft/video-production/assets/fonts
+      # Live-mount the craft REFERENCES (CRAFT-BAR, COMPOSED-CARDS, techniques.json) the skills cite, for
+      # the same reason the skills are mounted: a reference edit reaches the worker without an image
+      # rebuild, and a live skill never points at a stale baked reference. Baking is for a shippable image.
+      - ./craft/video-production/.claude/references:/repo/craft/video-production/.claude/references
     depends_on:
       db:
         condition: service_healthy
