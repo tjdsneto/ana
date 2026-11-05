@@ -1499,3 +1499,55 @@ describe("0020 — no-progress escape: a repeated unfixable finding escalates in
 		expect((await store.versionsFor(leaf.id)).length).toBe(2) // v1, v2 → escalated at v2, NOT ground to maxRedos=10
 	})
 })
+
+describe("0027 — per-node model diversity across a diverseChildren planner's fan-out", () => {
+	it("rotates fanoutModelMix across the children; each child's producer runs on its assigned model", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "brainstorm") return { output: '```json\n[{"name":"A","brief":"AAA"},{"name":"B","brief":"BBB"},{"name":"C","brief":"CCC"}]\n```' }
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const T = TypeRegistry.fromContracts([
+			{ type: "video-project", name: "Root", checklist: [{ id: "brainstorm", type: "brainstorm", deps: [] }] },
+			{ type: "brainstorm", name: "Brainstorm", planner: true, childType: "idea", diverseChildren: true, skill: "brainstorm" },
+			{ type: "idea", name: "Idea", skill: "idea", produce: "develop" }, // no reviewers → auto-present
+		])
+		const engine = new Engine({ store, runner, types: T, config: makeConfig({ fanoutModelMix: ["model-A", "model-B", "model-C"] }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 200; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		const ideas = (await store.nodesFor(root.id)).filter((n) => n.type === "idea").sort((a, b) => a.position - b.position)
+		expect(ideas).toHaveLength(3)
+		expect(ideas.map((i) => i.model)).toEqual(["model-A", "model-B", "model-C"]) // mix rotated across the fan-out
+		// each idea producer ran on ITS assigned model (node.model threaded into the subagent call)
+		const ideaModels = runner.calls.filter((c) => c.skill === "idea").map((c) => c.model).sort()
+		expect(ideaModels).toEqual(["model-A", "model-B", "model-C"])
+	})
+
+	it("leaves children's model undefined when the planner is not diverseChildren (unchanged behaviour)", async () => {
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "brainstorm") return { output: '```json\n[{"name":"A","brief":"AAA"},{"name":"B","brief":"BBB"}]\n```' }
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const T = TypeRegistry.fromContracts([
+			{ type: "video-project", name: "Root", checklist: [{ id: "brainstorm", type: "brainstorm", deps: [] }] },
+			{ type: "brainstorm", name: "Brainstorm", planner: true, childType: "idea", skill: "brainstorm" }, // no diverseChildren
+			{ type: "idea", name: "Idea", skill: "idea", produce: "develop" },
+		])
+		const engine = new Engine({ store, runner, types: T, config: makeConfig({ fanoutModelMix: ["model-A", "model-B"] }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 200; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		const ideas = (await store.nodesFor(root.id)).filter((n) => n.type === "idea")
+		expect(ideas.every((i) => i.model === null)).toBe(true) // no mix applied → inherit the type's model
+	})
+})

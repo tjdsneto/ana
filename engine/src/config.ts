@@ -21,6 +21,12 @@ export interface EngineConfig {
 	// the independent fan-out (cards/scenes) that dominates wall-clock — they are sibling leaves with no
 	// dependency on each other. Keep it bounded so the resource-limited host is not starved.
 	maxParallel: number
+	// 0027: a model-diversity mix for the fanned-out children of a `diverseChildren` planner (the
+	// brainstorm's idea agents). Child i is assigned mix[i % len] as its per-node model, so the N agents
+	// run on different models — a real "different sensibilities in the room". Empty (default) → children
+	// inherit the type's model (unchanged). From FANOUT_MODEL_MIX, a comma list, e.g.
+	// "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5".
+	fanoutModelMix?: string[]
 	// 0020: no-progress escape. If a leaf's failing-review finding repeats UNCHANGED for this many
 	// consecutive redo rounds, the producer is not converging (a defect it structurally can't fix — e.g.
 	// a missing licensed font the card can't add). Escalate early with the finding instead of grinding to
@@ -56,6 +62,7 @@ export function configFromEnv(env = process.env): EngineConfig {
 		convergeAfter: num(env.CONVERGE_AFTER, 3),
 		maxParallel: num(env.ENGINE_MAX_PARALLEL, 1),
 		noProgressAfter: num(env.NO_PROGRESS_AFTER, 2),
+		fanoutModelMix: (env.FANOUT_MODEL_MIX ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,

@@ -36,6 +36,7 @@ export interface TypeContract {
 	checklist?: ChecklistEntry[] // static sub-project (expand)
 	planner?: boolean // dynamic sub-project (plan) — v0-flat: not exercised
 	childType?: string
+	diverseChildren?: boolean // 0027: a planner whose fanned children get the config's FANOUT_MODEL_MIX rotated across them (per-node model diversity); off → children inherit this type's model
 	plansProduction?: boolean // a planner that MATERIALIZES the production's sibling DAG (parseProductionDag) rather than fanning children of a childType
 	produce?: string // producer instruction (the prompt seed)
 	reviews?: ReviewSpec[] // the specialist reviewer set

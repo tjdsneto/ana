@@ -123,6 +123,7 @@ export interface NewChildNode {
 	description?: string
 	deps?: string[]
 	position?: number
+	model?: string // 0027: per-node model override for this child (e.g. a diversity mix rotated across fanned idea agents); undefined → inherit the type's model
 }
 
 export interface NewVersion {

@@ -102,6 +102,7 @@ export class FakeStore implements Store {
 			sessionId: input.sessionId,
 			autonomyLever: input.autonomyLever,
 			actorKind: input.actorKind,
+			model: null,
 			params: seedParams(input),
 			createdAt: now,
 			updatedAt: now,
@@ -170,6 +171,7 @@ export class FakeStore implements Store {
 				sessionId: null,
 				autonomyLever: null,
 				actorKind: null,
+				model: c.model ?? null,
 				params: null, // children carry no intake params (root only)
 				createdAt: now,
 				updatedAt: now,

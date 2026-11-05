@@ -397,9 +397,14 @@ export class Engine {
 
 		const childType = contract.childType
 		const childName = this.types.has(childType) ? (this.types.get(childType).name ?? childType) : childType
+		// 0027: a diverseChildren planner (e.g. brainstorm) rotates the configured FANOUT_MODEL_MIX across
+		// its fanned children, so the N idea agents run on different models ("different sensibilities in the
+		// room"). Off / empty mix → undefined model → each child inherits the childType's model (unchanged).
+		const mix = contract.diverseChildren ? (this.config.fanoutModelMix ?? []) : []
+		if (mix.length) log.info("node.fanout_model_mix", { mix, children: planned.length })
 		await this.store.createChildNodes(
 			node.id,
-			planned.map((c, i) => ({ type: childType, name: c.name || `${childName} ${i + 1}`, description: c.brief, deps: node.deps, position: i })),
+			planned.map((c, i) => ({ type: childType, name: c.name || `${childName} ${i + 1}`, description: c.brief, deps: node.deps, position: i, model: mix.length ? mix[i % mix.length] : undefined })),
 		)
 		await this.store.updateNodeStatus(node.id, "in-progress")
 		log.info("node.plan", { versionId: version.id, children: planned.length })
@@ -617,6 +622,7 @@ export class Engine {
 				{
 					prompt: producerPrompt,
 					skill: contract.skill ?? node.type, // the type names its skill; no video default in the engine
+					model: node.model ?? undefined, // 0027: per-node model override (diversity-mix idea agent); undefined → the type model
 					cwd: this.config.craftRoot,
 				},
 				contract,
@@ -660,6 +666,7 @@ export class Engine {
 				{
 					prompt: producerPrompt,
 					skill: contract.skill ?? node.type,
+					model: node.model ?? undefined, // 0027: per-node model override (diversity-mix idea agent); undefined → the type model
 					cwd: this.config.craftRoot,
 				},
 				contract,
@@ -710,7 +717,7 @@ export class Engine {
 				{
 					prompt: reviewPrompt,
 					skill: rv.skill ?? `review:${rv.kind}`, // a reviewer skill (per-step rubric) if declared, else the kind label (generic lens, no directive)
-					model: rv.model, // 0021: per-axis model override (cheaper model for mechanical axes); undefined → the node model (runSubagent)
+					model: rv.model ?? node.model ?? undefined, // 0021 per-axis override, else 0027 per-node model, else the type model (runSubagent)
 					cwd: this.config.craftRoot,
 				},
 				contract,

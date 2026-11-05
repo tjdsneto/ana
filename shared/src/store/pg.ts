@@ -185,6 +185,7 @@ export class PgStore implements Store {
 			sessionId: null,
 			autonomyLever: null,
 			actorKind: null,
+			model: c.model ?? null, // 0027: per-node model override (diversity mix); null → inherit the type's model
 			createdAt: now,
 			updatedAt: now,
 		}))

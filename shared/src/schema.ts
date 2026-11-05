@@ -46,6 +46,7 @@ export const nodes = pgTable(
 		sessionId: text("session_id"), // root only: owning client session (nudge target)
 		autonomyLever: text("autonomy_lever").$type<AutonomyLever>(), // root only
 		actorKind: text("actor_kind").$type<ActorKind>(), // root only: human | agent — sets the agreement cap
+		model: text("model"), // 0027: per-NODE subagent model override (a fanned idea agent can run a different model for diversity); null → the type contract's model → SUBAGENT_MODEL (unchanged)
 		params: jsonb("params").$type<Record<string, unknown>>(), // root only: the intake params the production was requested with, resolved against the root type's `inputs`
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
