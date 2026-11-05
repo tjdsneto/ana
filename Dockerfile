@@ -61,6 +61,14 @@ RUN apt-get update \
 	# native binary) is skipped and `claude` won't launch — run it explicitly.
 	&& npm i -g @anthropic-ai/claude-code@2.1.312 \
 	&& node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
+# OpenAI Codex CLI — the second SubagentRunner backend (`codex exec`), for nodes that pin engine
+# "codex" (TypeContract.engine) or SUBAGENT_ENGINE=codex. Installs clean under npm 12 with NO explicit
+# postinstall (verified): unlike claude-code's install.cjs above, codex ships a prebuilt per-platform
+# binary as an optional dep, so npm's script-blocking doesn't skip anything. Pinned. Auth is injected
+# at runtime (OPENAI_API_KEY in .engine_env), never baked. Headless call:
+# `codex exec -m <model> --dangerously-bypass-approvals-and-sandbox` (the worker container IS the
+# external sandbox that flag is meant for).
+RUN npm i -g @openai/codex@0.166.0
 # piper (offline neural TTS) — pinned release; arch from the build platform. Extracts to /opt/piper
 # (binary + libs + espeak-ng-data via $ORIGIN rpath), symlinked onto PATH. Default voice under
 # /opt/piper-voices.

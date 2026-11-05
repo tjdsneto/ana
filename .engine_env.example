@@ -44,3 +44,9 @@ SUBAGENT_ENGINE=fake
 # with `claude setup-token`, store in 1Password, inject here. NEVER set ANTHROPIC_API_KEY /
 # ANTHROPIC_AUTH_TOKEN — either silently outranks the OAuth token and bills the API.
 # CLAUDE_CODE_OAUTH_TOKEN=
+
+# OpenAI Codex auth (the engine image bundles the Codex CLI for the `codex` SubagentRunner backend).
+# codex in-container has no ChatGPT login, so it authenticates from OPENAI_API_KEY. Store in 1Password,
+# inject here; never baked. Read when a node pins engine "codex" (TypeContract.engine) or
+# SUBAGENT_ENGINE=codex. Shared with the openai image-gen provider above (IMAGE_PROVIDER=openai).
+# OPENAI_API_KEY=
