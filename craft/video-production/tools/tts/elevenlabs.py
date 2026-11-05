@@ -33,8 +33,14 @@ KNOWN_VOICES = {
     "domi": "AZnzlk1XvdvUeBnXmlld",
 }
 DEFAULT_VOICE = "rachel"
-DEFAULT_MODEL = "eleven_multilingual_v2"
+DEFAULT_MODEL = "eleven_v4"  # most emotive, reads inline audio tags; cheaper than v3 ($0.08 vs ~$0.10/1k)
 DEFAULT_FORMAT = "mp3_44100_128"
+# Voice-settings defaults tuned for a lively read (the flat-TTS tell is high stability): lower stability
+# = more varied/expressive; style adds expressiveness; speaker boost improves similarity. Per-line
+# emotion comes from inline audio tags in the text, not these.
+DEFAULT_STABILITY = 0.4
+DEFAULT_STYLE = 0.35
+DEFAULT_SPEAKER_BOOST = True
 
 
 def resolve_key(value: "str | None", key_file: "str | None", env_name: str) -> "str | None":
@@ -59,13 +65,29 @@ def pick_voice(requested: "str | None", known=KNOWN_VOICES, default=DEFAULT_VOIC
     return known[default], None
 
 
-def build_payload(text: str, model: str, speed: float) -> dict:
-    """POST body. `speed` goes in voice_settings, clamped to the API's accepted 0.7-1.2 range."""
-    return {
-        "text": text,
-        "model_id": model,
-        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "speed": max(0.7, min(1.2, speed))},
+def _clamp01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def build_payload(
+    text: str,
+    model: str,
+    speed: float,
+    stability: "float | None" = None,
+    style: "float | None" = None,
+    speaker_boost: "bool | None" = None,
+) -> dict:
+    """POST body. The expressivity knobs live in voice_settings: `stability` (lower = more varied),
+    `style` (more expressive), `use_speaker_boost`. None -> the lively defaults above. `speed` is clamped
+    to the API's accepted 0.7-1.2 range; stability/style to 0.0-1.0."""
+    vs = {
+        "stability": DEFAULT_STABILITY if stability is None else _clamp01(stability),
+        "similarity_boost": 0.75,
+        "style": DEFAULT_STYLE if style is None else _clamp01(style),
+        "use_speaker_boost": DEFAULT_SPEAKER_BOOST if speaker_boost is None else bool(speaker_boost),
+        "speed": max(0.7, min(1.2, speed)),
     }
+    return {"text": text, "model_id": model, "voice_settings": vs}
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,6 +98,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--voice", default=None, help="friendly name (rachel/adam/…) or a raw voice_id; default rachel")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"model_id (default {DEFAULT_MODEL})")
     p.add_argument("--speed", type=float, default=1.0, help="0.7-1.2 (clamped); goes in voice_settings")
+    p.add_argument("--stability", type=float, default=None, help=f"0.0-1.0; lower = more varied/expressive (default {DEFAULT_STABILITY})")
+    p.add_argument("--style", type=float, default=None, help=f"0.0-1.0; expressiveness (default {DEFAULT_STYLE})")
+    p.add_argument("--speaker-boost", dest="speaker_boost", default=None, choices=("on", "off"), help="similarity boost (default on)")
     p.add_argument("--format", dest="fmt", default=DEFAULT_FORMAT, help=f"output_format (default {DEFAULT_FORMAT})")
     p.add_argument("--api-key", default=None, help="key by value (visible in `ps`; prefer --api-key-file or $ELEVENLABS_API_KEY)")
     p.add_argument("--api-key-file", default=None, help="read the key from this file (not visible in `ps`)")
@@ -102,7 +127,8 @@ def main() -> None:
     if note:
         print(f"elevenlabs: {note}", file=sys.stderr)
 
-    payload = build_payload(text, a.model, a.speed)
+    speaker_boost = None if a.speaker_boost is None else (a.speaker_boost == "on")
+    payload = build_payload(text, a.model, a.speed, a.stability, a.style, speaker_boost)
     url = f"{API_BASE}/{voice_id}?output_format={a.fmt}"
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"), method="POST",

@@ -32,6 +32,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from tts.text_tags import split_audio_tags  # noqa: E402  (local tool module, dep-free)
+
 SR = 48000  # composition sample rate
 
 # Voice provider seam (tmp/audio-provider-seam-design.md): name -> an adapter TOOL that writes an audio
@@ -42,6 +45,13 @@ TTS_TOOLS = {
     "elevenlabs": Path(__file__).resolve().parent / "tts" / "elevenlabs.py",
 }
 
+# Engines that consume inline audio tags ([excited]/[whispers]) AND accept the expressivity
+# voice_settings (stability/style/speaker_boost). For these, vo.py sends the tagged synth text and
+# forwards the settings; every other engine gets the tag-stripped spoken text and no settings — so
+# kokoro/piper (the no-spend local engines) never speak a literal tag. Keep this a capability SET:
+# add a new tag-aware provider here, never special-case a brand name in the synth/align logic.
+EXPRESSIVE_ENGINES = {"elevenlabs"}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="voiceover + per-word timing")
@@ -50,6 +60,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--film", default=None, help="film.json to read voice{id,speed,lead,gap}+tail from (CLI flags override)")
     p.add_argument("--voice", default=None, help="voice id (Kokoro id for kokoro; an OpenAI voice for openai-tts)")
     p.add_argument("--speed", type=float, default=None)
+    p.add_argument("--stability", type=float, default=None, help="expressive engines: 0.0-1.0, lower = more varied (film.voice.stability)")
+    p.add_argument("--style", type=float, default=None, help="expressive engines: 0.0-1.0 expressiveness (film.voice.style)")
+    p.add_argument("--speaker-boost", dest="speaker_boost", default=None, choices=("on", "off"), help="expressive engines: similarity boost")
     p.add_argument("--lead", type=float, default=None, help="silence before the first line (s)")
     p.add_argument("--gap", type=float, default=None, help="silence between lines (s)")
     p.add_argument("--tail", type=float, default=None, help="trailing room after the last line (s)")
@@ -62,16 +75,23 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--piper-bin", default=None, help="piper binary (default: $PIPER_BIN or 'piper')")
     p.add_argument("--piper-model", default=None, help="piper .onnx voice (default: $PIPER_MODEL or $VOICE_MODEL)")
     a = p.parse_args()
-    # Defaults, then film.json (if given), then explicit CLI flags win.
-    d = {"voice": "af_heart", "speed": 0.95, "lead": 0.6, "gap": 0.45, "tail": 3.0}
+    # Defaults, then film.json (if given), then explicit CLI flags win. stability/style/speaker_boost
+    # stay None unless set (the provider tool supplies its own defaults) — only expressive engines use them.
+    d = {"voice": "af_heart", "speed": 0.95, "lead": 0.6, "gap": 0.45, "tail": 3.0,
+         "stability": None, "style": None, "speaker_boost": None}
     if a.film:
         f = json.loads(Path(a.film).read_text())
         v = f.get("voice", {})
         d.update(voice=v.get("id", d["voice"]), speed=v.get("speed", d["speed"]),
-                 lead=v.get("lead", d["lead"]), gap=v.get("gap", d["gap"]), tail=f.get("tail", d["tail"]))
-    for k in ("voice", "speed", "lead", "gap", "tail"):
+                 lead=v.get("lead", d["lead"]), gap=v.get("gap", d["gap"]), tail=f.get("tail", d["tail"]),
+                 stability=v.get("stability", d["stability"]), style=v.get("style", d["style"]),
+                 speaker_boost=v.get("speaker_boost", d["speaker_boost"]))
+    for k in ("voice", "speed", "lead", "gap", "tail", "stability", "style", "speaker_boost"):
         if getattr(a, k) is None:
             setattr(a, k, d[k])
+    # Normalize a film.json boolean speaker_boost to the on/off the provider flag takes.
+    if isinstance(a.speaker_boost, bool):
+        a.speaker_boost = "on" if a.speaker_boost else "off"
     return a
 
 
@@ -126,6 +146,15 @@ def make_synth(a: argparse.Namespace):
             sys.exit(f"vo: provider tool missing: {tool}")
 
         key_args = ["--api-key-file", str(a.api_key_file)] if a.api_key_file else []
+        # Expressivity knobs go only to engines that accept them (never to openai-tts/kokoro/piper).
+        settings_args: list[str] = []
+        if a.engine in EXPRESSIVE_ENGINES:
+            if a.stability is not None:
+                settings_args += ["--stability", str(a.stability)]
+            if a.style is not None:
+                settings_args += ["--style", str(a.style)]
+            if a.speaker_boost is not None:
+                settings_args += ["--speaker-boost", str(a.speaker_boost)]
 
         def synth(text: str, out_wav: Path) -> None:
             if out_wav.exists():
@@ -138,7 +167,7 @@ def make_synth(a: argparse.Namespace):
             # which has no wav output_format.
             r = subprocess.run(
                 [sys.executable, str(tool), "--out", str(out_wav), "--voice", str(a.voice),
-                 "--speed", str(a.speed), *key_args],
+                 "--speed", str(a.speed), *settings_args, *key_args],
                 input=text.encode("utf-8"), capture_output=True)
             if r.returncode != 0:
                 sys.exit(f"vo: {a.engine} failed — {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
@@ -274,12 +303,18 @@ def main() -> None:
     lines = [l.strip() for l in Path(a.script).read_text().splitlines() if l.strip()]
     if not lines:
         sys.exit("vo: script is empty")
+    # Each line may carry inline audio tags ([excited]/[whispers]). A tag-aware engine is fed the tagged
+    # synth text so it performs the cue; every engine's TIMING + captions use the tag-stripped spoken
+    # text, so a tag never becomes a word and a non-tag engine never speaks it literally.
+    tagful = a.engine in EXPRESSIVE_ENGINES
+    spoken_lines = [split_audio_tags(l)[1] for l in lines]
 
     synth = make_synth(a)
     clips: list[np.ndarray] = []
     for i, line in enumerate(lines, 1):
+        synth_text, spoken = split_audio_tags(line)
         raw_wav = vodir / f"s{i:02d}.wav"
-        synth(line, raw_wav)
+        synth(synth_text if tagful else spoken, raw_wav)
         clips.append(squeeze_pauses(trimmed_f32(raw_wav)))
 
     starts, t = [], a.lead
@@ -290,10 +325,10 @@ def main() -> None:
 
     bed = np.zeros(int(duration * SR) + SR, np.float32)
     words: list[dict] = []
-    for i, (line, st, clip) in enumerate(zip(lines, starts, clips), 1):
+    for i, (spoken, st, clip) in enumerate(zip(spoken_lines, starts, clips), 1):
         k = int(st * SR)
         bed[k:k + len(clip)] += clip
-        disp = line.split()
+        disp = spoken.split()  # spoken words only — tags were stripped, so they never become timed words
         clip_s = len(clip) / SR
         # whisper needs a file: write the trimmed clip, align, then discard
         tmp = vodir / f"s{i:02d}.trim.wav"
@@ -302,7 +337,7 @@ def main() -> None:
         tmp.unlink(missing_ok=True)
         for word, (ws, we) in zip(disp, times):
             words.append({"text": word, "start": round(st + ws, 3), "end": round(st + we, 3), "line": i})
-        print(f"line {i:2d}  {st:6.2f}-{st + clip_s:6.2f}  {line[:60]}")
+        print(f"line {i:2d}  {st:6.2f}-{st + clip_s:6.2f}  {spoken[:60]}")
 
     sf.write(str(out / "vo.wav"), bed[: int(duration * SR)], SR)
     (out / "words.json").write_text(json.dumps({"duration": duration, "words": words}, indent=0))
