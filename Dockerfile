@@ -140,12 +140,16 @@ ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
 # apt/piper/model layers above stay cached.
 FROM engine-tools AS engine
 WORKDIR /repo
-COPY --from=base /repo /repo
 # Playwright + chromium for the composed render (craft/video-production/tools/site-capture.mjs screenshots each plate).
 # Installed in the IMAGE only — not the shared repo package.json, which would shadow the host's own
 # playwright. npm 12 blocks the browser-download postinstall, so fetch chromium + its apt deps explicitly.
+# Kept ABOVE the source COPY (issue 0031): this layer depends only on engine-tools, so editing source or
+# a type.json never invalidates it and chromium is not re-downloaded on a rebuild. The browser lands in
+# /root/.cache/ms-playwright (outside /repo); the playwright npm package in /repo/node_modules survives
+# the COPY overlay because base carries no playwright dep (it is --no-save).
 RUN npm i --no-save playwright@1.48.2 \
 	&& npx playwright install --with-deps chromium
+COPY --from=base /repo /repo
 CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────
