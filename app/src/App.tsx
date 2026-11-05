@@ -1280,6 +1280,12 @@ function Gallery({ videos }: { videos: VideoFile[] }) {
 	)
 }
 
+// The render-budget money-gate is seeded unapproved on every production but the engine loop never reads
+// it (issue 0016): it gates nothing and render is stubbed, so the banner only miscounts the inbox and
+// mislabels autonomous runs "awaiting feedback". Hidden until it's implemented lever-aware + loop-
+// enforced; flip this back on then. Nothing about the stored row or the approve_budget endpoint changes.
+const RENDER_BUDGET_GATE = false
+
 function Gate({ inbox, productionId, budget, onAction, cancelled }: { inbox: ChatOutput[]; productionId: string; budget: ProductionDetail["budget"]; onAction: () => void; cancelled?: boolean }) {
 	const act = async (fn: () => Promise<void>) => {
 		await fn()
@@ -1287,7 +1293,7 @@ function Gate({ inbox, productionId, budget, onAction, cancelled }: { inbox: Cha
 	}
 	// The unapproved render budget is a gate item that waits on the user just like a present — it renders
 	// inside the inbox, so count it in the badge too (otherwise the badge reads 1 while two actions wait).
-	const pendingBudget = budget && !budget.approved ? 1 : 0
+	const pendingBudget = RENDER_BUDGET_GATE && budget && !budget.approved ? 1 : 0
 	const count = inbox.length + pendingBudget
 	if (count === 0) return null
 	// A cancelled production is terminal: its gate items are leftovers, not live asks. Keep them visible
@@ -1312,7 +1318,7 @@ function Gate({ inbox, productionId, budget, onAction, cancelled }: { inbox: Cha
 					)}
 				</div>
 			))}
-			{budget && !budget.approved && (
+			{RENDER_BUDGET_GATE && budget && !budget.approved && (
 				<div className="out">
 					<div><code>budget</code> render spend not yet approved</div>
 					<div className="controls"><button disabled={cancelled} onClick={() => void act(() => approveBudget(productionId))}>Approve budget</button></div>
@@ -1383,7 +1389,7 @@ function isPending(status: string): boolean {
 // header reads "awaiting feedback" instead of a misleading "in-progress" + spinner.
 function awaitingFeedback(detail: ProductionDetail): boolean {
 	if (["approved", "done", "failed", "denied", "cancelled"].includes(detail.root.status)) return false
-	return detail.inbox.length > 0 || (!!detail.budget && !detail.budget.approved)
+	return detail.inbox.length > 0 || (RENDER_BUDGET_GATE && !!detail.budget && !detail.budget.approved)
 }
 
 // A spinning ring marking the one thing currently executing. Respects prefers-reduced-motion (the CSS

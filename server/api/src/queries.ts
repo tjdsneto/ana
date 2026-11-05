@@ -44,8 +44,11 @@ export async function listProductions(store: Store): Promise<ProductionListItem[
 	return Promise.all(
 		roots.map(async (root) => {
 			if (TERMINAL_PRODUCTION.has(root.status)) return { ...root, awaitingFeedback: false }
-			const [inbox, budget] = await Promise.all([store.pendingOutputs(root.id), store.getBudget(root.id)])
-			return { ...root, awaitingFeedback: inbox.length > 0 || (!!budget && !budget.approved) }
+			// Issue 0016: the render-budget gate is unenforced by the loop, so an unapproved budget must NOT
+			// mark an autonomous run "awaiting feedback" — only a real pending inbox item does. (Budget read
+			// dropped until the gate is implemented lever-aware + loop-enforced.)
+			const inbox = await store.pendingOutputs(root.id)
+			return { ...root, awaitingFeedback: inbox.length > 0 }
 		}),
 	)
 }
