@@ -71,3 +71,43 @@ export function prettyJson(raw: string): string {
 		return raw
 	}
 }
+
+// Loose JSON parse for the viewer's shape detection + the board/card/film renderers: pull a fenced
+// ```json block (or a two-backtick ``json) or the first [/{ onward, then JSON.parse. null when not JSON.
+export function parseJsonLoose(content: string): unknown {
+	try {
+		let t = content.trim()
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/)
+		if (fenced?.[1]) t = fenced[1].trim()
+		else {
+			const s = t.search(/[[{]/)
+			if (s < 0) return null
+			t = t.slice(s)
+		}
+		return JSON.parse(t)
+	} catch {
+		return null
+	}
+}
+
+function isObj(v: unknown): v is Record<string, unknown> {
+	return v != null && typeof v === "object" && !Array.isArray(v)
+}
+
+// A film.json: the assembled film — a VO `script` array plus the camera/plate timeline. It has no
+// `beats` array, which is why the beat-board renderer alone can't draw it (it needs the film view).
+export function isFilm(v: unknown): boolean {
+	return isObj(v) && Array.isArray(v.script) && (Array.isArray(v.camera) || v.plates != null)
+}
+
+// A card artifact: an object carrying inline plate HTML.
+export function isCard(v: unknown): boolean {
+	return isObj(v) && typeof v.plate_html === "string"
+}
+
+// A storyboard plan (a top-level array of seeds) or a board object with a beats/scenes list — the shape
+// the beat board draws. Checked AFTER isFilm so a film.json (script, no beats) is never mistaken for one.
+export function isBoardShape(v: unknown): boolean {
+	if (Array.isArray(v)) return true
+	return isObj(v) && (Array.isArray(v.beats) || Array.isArray(v.scenes))
+}

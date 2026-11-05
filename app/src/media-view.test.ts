@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { fileViewKind, pairVoiceClips, prettyJson, sceneNumFromName, splitScriptLines } from "./media-view.js"
+import { fileViewKind, isBoardShape, isCard, isFilm, pairVoiceClips, parseJsonLoose, prettyJson, sceneNumFromName, splitScriptLines } from "./media-view.js"
 
 describe("fileViewKind", () => {
 	test("classifies by extension, case-insensitive", () => {
@@ -73,5 +73,42 @@ describe("prettyJson", () => {
 	})
 	test("returns the raw text unchanged when it isn't JSON", () => {
 		expect(prettyJson("not json")).toBe("not json")
+	})
+})
+
+describe("parseJsonLoose", () => {
+	test("parses a bare object/array", () => {
+		expect(parseJsonLoose('{"a":1}')).toEqual({ a: 1 })
+		expect(parseJsonLoose("[1,2]")).toEqual([1, 2])
+	})
+	test("pulls a fenced ```json block out of prose", () => {
+		expect(parseJsonLoose('here:\n```json\n{"a":1}\n```')).toEqual({ a: 1 })
+	})
+	test("null when there is no JSON", () => {
+		expect(parseJsonLoose("just prose")).toBeNull()
+	})
+})
+
+describe("artifact shape detectors", () => {
+	const film = { size: [1080, 1080], voice: { id: "x" }, script: ["a", "b"], camera: [{ plate: "p", at: "a" }], plates: {} }
+	const planArray = [{ name: "beat 1", brief: "…" }, { name: "beat 2", brief: "…" }]
+	const boardObj = { theme: {}, beats: [{ vo: "a" }] }
+	const card = { id: "c1", vo_line: "hi", plate_html: "<div/>" }
+	const wordsJson = { duration: 44, words: [{ text: "a", start: 0, end: 1, line: 1 }] }
+
+	test("isFilm matches a film.json, not a plain board/words.json", () => {
+		expect(isFilm(film)).toBe(true)
+		expect(isFilm(boardObj)).toBe(false)
+		expect(isFilm(wordsJson)).toBe(false)
+	})
+	test("isBoardShape matches a plan array or a beats object, never a film.json", () => {
+		expect(isBoardShape(planArray)).toBe(true)
+		expect(isBoardShape(boardObj)).toBe(true)
+		expect(isBoardShape(film)).toBe(false) // film has no beats — must fall through to the film view
+		expect(isBoardShape(wordsJson)).toBe(false)
+	})
+	test("isCard matches a plate-bearing object only", () => {
+		expect(isCard(card)).toBe(true)
+		expect(isCard(film)).toBe(false)
 	})
 })

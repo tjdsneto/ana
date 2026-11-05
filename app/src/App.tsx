@@ -34,7 +34,7 @@ import {
 	type VideoFile,
 } from "./api.js"
 import { Markdown } from "./markdown.js"
-import { fileViewKind, pairVoiceClips, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
+import { fileViewKind, isBoardShape, isCard, isFilm, pairVoiceClips, parseJsonLoose, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
 import { type FileRef, nodeFileIO } from "./node-io.js"
 import { subtreeUsage } from "./rollup.js"
 import { useLive } from "./useLive.js"
@@ -261,6 +261,10 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				</span>
 			</button>
 			<div className="stage-body">
+				{/* Input/Output first — it's how you read a step: what it takes in (its upstream deps + the
+				    board files it reads off disk) and what it puts out (its deliverable + the files it writes).
+				    The dep chips ARE the step-to-step dependency; each opens the upstream it builds on. */}
+				<NodeIO nv={nv} detail={detail} />
 				{/* An expand node (e.g. build) has no artifact of its own — don't claim "nothing produced"
 				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
 				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
@@ -279,9 +283,6 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 						))}
 					</div>
 				)}
-				{/* What this step reads and writes: its Input (upstream deps + the board files it reads off
-				    disk) and Output (its own deliverable + the files it writes). Shown after the report. */}
-				<NodeIO nv={nv} detail={detail} />
 				{/* The produced media, experienced: build-voice pairs each clip with the line it reads;
 				    other build nodes get audio players / an image gallery. */}
 				{nv.node.type === "build-voice" ? (
@@ -518,12 +519,23 @@ function NodeIO({ nv, detail }: { nv: NodeView; detail: ProductionDetail }) {
 				<div className="io-row">
 					<span className="io-label io-in">Input</span>
 					<span className="io-chips">
-						{depRefs.map((d) => (
-							<button key={d.versionId} type="button" className="file-chip io-dep" onClick={() => setOpen({ name: d.label, versionId: d.versionId })}>
-								{d.label}
-							</button>
-						))}
-						{io.reads.map(fileChip)}
+						{/* The dep chips are the step-to-step dependency: the upstream steps this one builds on. */}
+						{depRefs.length > 0 && (
+							<span className="io-seg">
+								<span className="io-seg-l">depends on</span>
+								{depRefs.map((d) => (
+									<button key={d.versionId} type="button" className="file-chip io-dep" onClick={() => setOpen({ name: d.label, versionId: d.versionId })}>
+										{d.label}
+									</button>
+								))}
+							</span>
+						)}
+						{io.reads.length > 0 && (
+							<span className="io-seg">
+								<span className="io-seg-l">reads</span>
+								{io.reads.map(fileChip)}
+							</span>
+						)}
 					</span>
 				</div>
 			)}
@@ -531,12 +543,15 @@ function NodeIO({ nv, detail }: { nv: NodeView; detail: ProductionDetail }) {
 				<div className="io-row">
 					<span className="io-label io-out">Output</span>
 					<span className="io-chips">
-						{ownLatest && (
-							<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
-								deliverable
-							</button>
-						)}
-						{io.writes.map(fileChip)}
+						<span className="io-seg">
+							<span className="io-seg-l">produces</span>
+							{ownLatest && (
+								<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
+									deliverable
+								</button>
+							)}
+							{io.writes.map(fileChip)}
+						</span>
 					</span>
 				</div>
 			)}
@@ -559,13 +574,12 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 	const [text, setText] = useState<string | null>(null)
 	const [err, setErr] = useState<string | null>(null)
 	const [loading, setLoading] = useState(needsText)
+	const [raw, setRaw] = useState(false)
 
 	useEffect(() => {
 		if (!needsText) return
 		let alive = true
-		const p = isFile
-			? fetchMediaText(target.path).then((t) => (kind === "json" ? prettyJson(t) : t))
-			: getDeliverable(target.versionId).then((d) => d.content ?? "")
+		const p = isFile ? fetchMediaText(target.path) : getDeliverable(target.versionId).then((d) => d.content ?? "")
 		void p
 			.then((t) => alive && setText(t))
 			.catch(() => alive && setErr("Couldn't load this."))
@@ -573,7 +587,7 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 		return () => {
 			alive = false
 		}
-	}, [isFile, needsText, kind, isFile ? target.path : target.versionId])
+	}, [isFile, needsText, isFile ? target.path : target.versionId])
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -581,12 +595,25 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 		return () => window.removeEventListener("keydown", onKey)
 	}, [onClose])
 
+	// Pick how to render the text: in its proper visual form, not raw JSON. A film.json → the film view;
+	// a storyboard/plan → the beat board; a card → its plate; a deliverable → markdown; other JSON gets
+	// pretty-printed. A "Raw" toggle always falls back to the source for the structured views.
+	const parsed = text != null ? parseJsonLoose(text) : null
+	const view = isFilm(parsed) ? "film" : isCard(parsed) ? "card" : isBoardShape(parsed) ? "board" : !isFile ? "markdown" : kind === "json" ? "json" : "text"
+	const structured = view === "film" || view === "card" || view === "board"
+
 	const url = isFile ? mediaUrlByPath(target.path) : null
 	return (
 		<div className="modal-backdrop" onClick={onClose}>
 			<div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-head">
 					<h3>{target.name}</h3>
+					{structured && (
+						<span className="seg" role="group" aria-label="View mode">
+							<button className={raw ? "" : "on"} onClick={() => setRaw(false)}>Rendered</button>
+							<button className={raw ? "on" : ""} onClick={() => setRaw(true)}>JSON</button>
+						</span>
+					)}
 					{url && <a className="modal-dl" href={url} target="_blank" rel="noreferrer">open raw ↗</a>}
 					<button className="modal-x" onClick={onClose} aria-label="Close">×</button>
 				</div>
@@ -599,13 +626,74 @@ function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => 
 							<p className="muted">Loading…</p>
 						) : err ? (
 							<p className="muted">{err}</p>
-						) : !isFile ? (
-							<Markdown source={text ?? ""} />
+						) : raw || view === "json" ? (
+							<pre className="raw">{prettyJson(text ?? "")}</pre>
+						) : view === "film" ? (
+							<FilmView content={text ?? ""} />
+						) : view === "card" ? (
+							<CardPlate content={text ?? ""} />
+						) : view === "board" ? (
+							<StoryboardBoard content={text ?? ""} />
+						) : view === "markdown" ? (
+							<div className="md"><Markdown source={text ?? ""} /></div>
 						) : (
 							<pre className="raw">{text}</pre>
 						))}
 				</div>
 			</div>
+		</div>
+	)
+}
+
+// film.json shown as a readable film rather than raw JSON: a voice/size header, the VO script numbered,
+// and the camera cues as a shot list — each shot is a plate framed on the word it fires on, with its
+// zoom move. (Plate thumbnails are skipped: the plate HTML references fonts/assets by absolute server
+// paths that don't resolve in the browser, so they'd render blank.)
+function FilmView({ content }: { content: string }) {
+	const parsed = parseJsonLoose(content)
+	if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return <pre className="raw">{content}</pre>
+	const film = parsed as Record<string, unknown>
+	const size = film.size as [number, number] | undefined
+	const voice = (film.voice ?? {}) as Record<string, unknown>
+	const script = (Array.isArray(film.script) ? film.script : []) as string[]
+	const camera = (Array.isArray(film.camera) ? film.camera : []) as Record<string, unknown>[]
+	const plates = (film.plates != null && typeof film.plates === "object" ? film.plates : {}) as Record<string, unknown>
+	return (
+		<div className="film-view">
+			<div className="sb-theme">
+				{size && <span>{size[0]}×{size[1]}</span>}
+				{voice.id != null && (
+					<span>voice <span className="tag">{String(voice.id)}</span>{voice.speed != null ? ` speed ${String(voice.speed)}` : ""}</span>
+				)}
+				<span>{script.length} lines</span>
+				<span>{camera.length} shots</span>
+				<span>{Object.keys(plates).length} plates</span>
+			</div>
+			{script.length > 0 && (
+				<>
+					<div className="sub-h">Voiceover</div>
+					<ol className="film-script">
+						{script.map((l, i) => (
+							<li key={i}>{l}</li>
+						))}
+					</ol>
+				</>
+			)}
+			{camera.length > 0 && (
+				<>
+					<div className="sub-h">Shots — camera moves</div>
+					<ol className="film-shots">
+						{camera.map((c, i) => (
+							<li key={i} className="film-shot">
+								<span className="shot-n">{i + 1}</span>
+								<span className="shot-plate">{String(c.plate ?? "—")}</span>
+								{c.at != null && <span className="shot-at">on “{String(c.at)}”</span>}
+								{(c.zoom != null || c.to_zoom != null) && <span className="muted">zoom {String(c.zoom ?? 1)}→{String(c.to_zoom ?? c.zoom ?? 1)}</span>}
+							</li>
+						))}
+					</ol>
+				</>
+			)}
 		</div>
 	)
 }
@@ -805,7 +893,10 @@ function StoryboardBoard({ content }: { content: string }) {
 								<div className="bn">{String(b.name ?? b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
 							)}
 							{(b.vo ?? b.line ?? b.text) != null && <div className="vo">{String(b.vo ?? b.line ?? b.text)}</div>}
-							{(b.brief ?? b.capture ?? b.onscreen) != null && <div className="cap">{String(b.brief ?? b.capture ?? b.onscreen)}</div>}
+							{(b.brief ?? b.capture ?? b.onscreen) != null && (
+								// Clamp the long brief to a few lines so a beat stays scannable; full text on hover.
+								<div className="cap" title={String(b.brief ?? b.capture ?? b.onscreen)}>{String(b.brief ?? b.capture ?? b.onscreen)}</div>
+							)}
 						</div>
 					</div>
 				))}
