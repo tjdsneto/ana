@@ -183,6 +183,8 @@ export interface NewInteraction {
 	cacheReadTokens?: number
 	cacheCreationTokens?: number
 	costUsd?: number
-	durationMs?: number
+	durationMs?: number // engine-measured wall time for the whole subagent spawn
+	numTurns?: number // agent turns the run took, when the engine reports it
+	apiDurationMs?: number // of durationMs, the part spent in model API calls (wall − api ≈ tool exec + rate-limit backoff)
 	status: "done" | "failed"
 }

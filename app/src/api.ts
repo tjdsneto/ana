@@ -10,6 +10,9 @@ export interface Node {
 	status: string
 	autonomyLever: string | null
 	actorKind: string | null
+	deps: string[] // sibling prerequisite node ids — this node's upstream inputs (the DAG edges)
+	description: string | null // root: the original request (the brief); a fanned-out node: its per-instance spec
+	params: Record<string, unknown> | null // root only: the intake params the production was requested with
 	createdAt: string
 }
 
@@ -49,7 +52,9 @@ export interface Interaction {
 	cacheReadTokens: number | null
 	cacheCreationTokens: number | null
 	costUsd: number | null
-	durationMs: number | null
+	durationMs: number | null // engine-measured wall time for the whole run
+	numTurns: number | null // agent turns the run took (assistant + tool round-trips)
+	apiDurationMs: number | null // of durationMs, the part spent in model API calls; wall − api ≈ tool exec + rate-limit backoff
 	status: string
 	createdAt: string
 	prompt: string | null // the full prompt sent to the subagent; null on old rows / pre-prompt failures
@@ -72,6 +77,17 @@ export interface VideoFile {
 	path: string
 	name: string
 	dir: string
+	sizeBytes: number
+	mtimeMs: number
+}
+
+// One produced media file under a node's output dir — for the dashboard media strips (build-assets
+// gallery, build-voice / build-soundtrack audio players).
+export interface MediaFile {
+	path: string // relative to the artifacts root; the key /api/media takes as ?path=
+	name: string
+	dir: string
+	kind: "audio" | "image" | "video"
 	sizeBytes: number
 	mtimeMs: number
 }
@@ -144,6 +160,43 @@ export function videoUrlByPath(path: string): string {
 // Rendered storyboard board sheet for a version (404s for versions produced before boards existed).
 export function boardUrlByVersion(versionId: string): string {
 	return `/api/board?version_id=${encodeURIComponent(versionId)}`
+}
+
+// Stream URL for any produced media file (audio/image/video) by its artifacts-root-relative path.
+export function mediaUrlByPath(path: string): string {
+	return `/api/media?path=${encodeURIComponent(path)}`
+}
+
+// Read a produced text file (script.txt, words.json, …) by its artifacts-root-relative path. The media
+// route streams any file; here we read the body as text for the file-viewer modal and the voice pairing.
+export async function fetchMediaText(path: string): Promise<string> {
+	const res = await fetch(mediaUrlByPath(path))
+	if (!res.ok) throw new Error(`HTTP ${res.status}`)
+	return res.text()
+}
+
+// List the media a node produced, under <productionId>/<dir>. `kinds` filters (default audio+image).
+export async function listNodeMedia(productionId: string, dir: string, kinds?: Array<MediaFile["kind"]>): Promise<MediaFile[]> {
+	const q = new URLSearchParams({ production_id: productionId, dir })
+	if (kinds) q.set("kinds", kinds.join(","))
+	const { files } = await json<{ files: MediaFile[] }>(await fetch(`/api/media-list?${q.toString()}`))
+	return files
+}
+
+// Which output dir(s) a node type's produced media live in, relative to the production root. These are
+// the craft's conventions (build-* nodes write into the shared board/ + assets/ dirs), surfaced so the
+// dashboard can show what was made. Empty = this node type has no media strip.
+export function mediaDirsForNodeType(nodeType: string): Array<{ dir: string; kinds: Array<MediaFile["kind"]>; label: string }> {
+	switch (nodeType) {
+		case "build-assets":
+			return [{ dir: "assets", kinds: ["image"], label: "Assets" }]
+		case "build-soundtrack":
+			return [{ dir: "board/audio", kinds: ["audio"], label: "Soundtrack" }]
+		case "build-voice":
+			return [{ dir: "board/media/vo", kinds: ["audio"], label: "Voice" }]
+		default:
+			return []
+	}
 }
 
 export function emitsBoard(nodeType: string): boolean {

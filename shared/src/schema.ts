@@ -165,7 +165,9 @@ export const interactions = pgTable(
 		cacheReadTokens: integer("cache_read_tokens"),
 		cacheCreationTokens: integer("cache_creation_tokens"),
 		costUsd: doublePrecision("cost_usd"),
-		durationMs: integer("duration_ms"),
+		durationMs: integer("duration_ms"), // engine-measured wall time for the whole subagent spawn
+		numTurns: integer("num_turns"), // agent turns the run took (assistant + tool round-trips); nullable
+		apiDurationMs: integer("api_duration_ms"), // of duration_ms, time in model API calls; wall − api ≈ tool exec + rate-limit backoff
 		status: text("status").notNull(), // done | failed
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	},

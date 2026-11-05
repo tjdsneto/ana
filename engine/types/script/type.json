@@ -2,7 +2,7 @@
 	"type": "script",
 	"name": "Script",
 	"description": "Writes the short, tight video script that delivers the brief's messages in the target length, hook first and lines speakable.",
-	"model": "claude-opus-5-5",
+	"model": "claude-haiku-5-5",
 	"produce": "Write a short, tight video script that delivers the brief's messages in the target length. Lead with the hook; keep lines speakable.",
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-script-quality" },

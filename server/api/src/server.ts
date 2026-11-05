@@ -8,7 +8,7 @@ import { basename, dirname, join } from "node:path"
 import { approve, approveBudget, getDeliverable, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
-import { artifactsRoot, listVideos, locateUnderRoot } from "./media.js"
+import { artifactsRoot, contentTypeFor, listMedia, listVideos, locateUnderRoot, type MediaFile, resolveUnderRoot } from "./media.js"
 import { listProductions, productionDetail } from "./queries.js"
 
 // Inline only small text artifacts, matching the service's own cap. Binary artifacts stream instead.
@@ -107,6 +107,50 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 			if (!res.headersSent) res.status(400).json({ error: err instanceof Error ? err.message : String(err) })
 		}
 	})
+
+	// ── media (audio / image / any produced file) ─────────────────────────────────────────────────
+	// Stream one media file by ?path= (relative, from /api/media-list) or ?version_id=. Content-Type is
+	// derived from the extension, so this serves audio (vo/soundtrack .wav/.mp3) and images (assets)
+	// the same way /api/video serves .mp4. res.sendFile handles Range so <audio>/<video> can seek.
+	app.get("/api/media", async (req, res) => {
+		try {
+			const root = artifactsRoot()
+			let target: string | null = null
+			if (typeof req.query.version_id === "string") {
+				const d = await getDeliverable(store, { versionId: req.query.version_id })
+				target = d.artifact_path
+			} else if (typeof req.query.path === "string") {
+				target = req.query.path
+			}
+			const abs = target ? locateUnderRoot(root, target) : null
+			if (!abs) {
+				res.status(400).json({ error: "pass ?path= (relative, from /api/media-list) or ?version_id=" })
+				return
+			}
+			res.sendFile(abs, { headers: { "Content-Type": contentTypeFor(abs) ?? "application/octet-stream" } }, (err) => {
+				if (err && !res.headersSent) res.status(404).json({ error: "media not found" })
+			})
+		} catch (err) {
+			if (!res.headersSent) res.status(400).json({ error: err instanceof Error ? err.message : String(err) })
+		}
+	})
+
+	// List the audio/image/video files a node produced, under <production_id>/<dir> (relative to the
+	// artifacts root). Used by the dashboard media strips: build-assets → "assets", build-soundtrack →
+	// "board/audio", build-voice → "board/media/vo". Guarded under root; empty list if the dir is absent.
+	app.get(
+		"/api/media-list",
+		handle("media_list", async (req) => {
+			const pid = typeof req.query.production_id === "string" ? req.query.production_id : undefined
+			if (!pid) throw new Error("pass ?production_id=")
+			const dir = typeof req.query.dir === "string" ? req.query.dir : ""
+			const root = artifactsRoot()
+			const startAbs = resolveUnderRoot(root, join(pid, dir))
+			if (!startAbs) return { files: [] as MediaFile[] }
+			const requested = (typeof req.query.kinds === "string" ? req.query.kinds.split(",") : ["audio", "image", "video"]).filter((k): k is MediaFile["kind"] => k === "audio" || k === "image" || k === "video")
+			return { files: await listMedia(root, startAbs, new Set(requested)) }
+		}),
+	)
 
 	// ── storyboard board image ─────────────────────────────────────────────────────────────────
 	// The rendered board sheet for a storyboard version (one card per beat). The producer saves it to

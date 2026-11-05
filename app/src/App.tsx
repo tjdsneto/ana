@@ -5,20 +5,27 @@
 // refetches on every WebSocket nudge, so the view tracks the worker in real time.
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
 	approveBudget,
 	approveOutput,
 	boardUrlByVersion,
 	emitsBoard,
+	fetchMediaText,
 	getDeliverable,
 	getProduction,
 	getProductions,
 	getVideos,
 	isVideoPath,
+	listNodeMedia,
+	type MediaFile,
+	mediaDirsForNodeType,
+	mediaUrlByPath,
 	videoUrlByPath,
 	videoUrlByVersion,
 	type ChatOutput,
 	type Interaction,
+	type Node as EngineNode,
 	type NodeView,
 	type ProductionDetail,
 	type ProductionListItem,
@@ -29,6 +36,10 @@ import {
 	type VideoFile,
 } from "./api.js"
 import { Markdown } from "./markdown.js"
+import { fileViewKind, isBoardShape, isCard, isFilm, pairVoiceClips, parseJsonLoose, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
+import { type FileRef, nodeFileIO } from "./node-io.js"
+import { subtreeUsage } from "./rollup.js"
+import { stepDescription } from "./step-info.js"
 import { useLive } from "./useLive.js"
 
 type Tab = "productions" | "videos"
@@ -228,6 +239,39 @@ function Detail({ detail, videos, onAction }: { detail: ProductionDetail; videos
 	)
 }
 
+// The info affordance on a step card: a small ⓘ that reveals the step's FIXED description (what this
+// kind of step does, from the type registry) on hover or click. It's a span, not a button — it lives
+// inside the card's header button, so it stops propagation to avoid toggling the card. Hidden for a
+// type with no description.
+function StepInfo({ nodeType }: { nodeType: string }) {
+	const desc = stepDescription(nodeType)
+	const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+	const icoRef = useRef<HTMLSpanElement>(null)
+	if (!desc) return null
+	// Position the popover under the icon with fixed coords, then portal it to <body>. The step card has
+	// `overflow: hidden` (rounded corners), which would clip an in-card absolutely-positioned popover —
+	// especially when the card is collapsed and the popover sits below the header. A body portal escapes it.
+	const reveal = () => {
+		const r = icoRef.current?.getBoundingClientRect()
+		if (!r) return
+		const left = Math.min(r.left, window.innerWidth - 360) // keep it inside the viewport's right edge
+		setPos({ top: r.bottom + 6, left: Math.max(8, left) })
+	}
+	const hide = () => setPos(null)
+	const toggle = (e: { stopPropagation: () => void }) => {
+		e.stopPropagation()
+		pos ? hide() : reveal()
+	}
+	return (
+		<span className="step-info" onMouseEnter={reveal} onMouseLeave={hide}>
+			<span ref={icoRef} className="step-info-ico" role="button" tabIndex={0} aria-label="What this step does" onClick={toggle} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggle(e)}>
+				ⓘ
+			</span>
+			{pos && createPortal(<span className="step-info-pop" role="tooltip" style={{ top: pos.top, left: pos.left }}>{desc}</span>, document.body)}
+		</span>
+	)
+}
+
 // One major pipeline step as a big card. Collapsed = name + status + latest version + a preview.
 // Expanded = the revision timeline, plus any child nodes nested as their own stage cards.
 function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: ProductionDetail; videos: VideoFile[]; depth?: number }) {
@@ -243,17 +287,25 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				<span className="stage-main">
 					<span className="stage-name">
 						{titleCase(nv.node.type)}
+						<StepInfo nodeType={nv.node.type} />
 						<StatusChip status={nv.node.status} />
 						{isActive(nv.node.status) && <Spinner label={`${titleCase(nv.node.type)} running`} />}
 					</span>
-					<span className="stage-prev">{stageMeta(nv, latest, videos)}</span>
+					<span className="stage-prev">{stageMeta(nv, latest, videos, detail)}</span>
 				</span>
 				<span className="stage-right">
 					<Chevron />
 				</span>
 			</button>
 			<div className="stage-body">
-				{versions.length === 0 && <p className="muted">Nothing produced yet.</p>}
+				{/* Input at the top — it's how you read a step: what it takes in (its upstream deps + the board
+				    files it reads, or the original request for the intake step). The dep chips ARE the
+				    step-to-step dependency; each opens the upstream it builds on. Output sits at the bottom. */}
+				<NodeIO nv={nv} detail={detail} side="input" />
+				{/* An expand node (e.g. build) has no artifact of its own — don't claim "nothing produced"
+				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
+				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
+				{versions.length === 0 && kids.length > 0 && <p className="muted">No artifact of its own — expands into the sub-steps below.</p>}
 				{versions.length > 0 && (
 					<div className="revs">
 						{versions.map((vw, i) => (
@@ -268,6 +320,15 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 						))}
 					</div>
 				)}
+				{/* The produced media, experienced: build-voice pairs each clip with the line it reads;
+				    other build nodes get audio players / an image gallery. */}
+				{nv.node.type === "build-voice" ? (
+					<VoiceMedia productionId={detail.root.id} />
+				) : (
+					<NodeMedia productionId={detail.root.id} nodeType={nv.node.type} />
+				)}
+				{/* Output at the bottom — this step's own deliverable + the files it writes. */}
+				<NodeIO nv={nv} detail={detail} side="output" />
 				{kids.length > 0 && (
 					<>
 						<div className="sub-h">Sub-steps</div>
@@ -337,6 +398,366 @@ function VersionBlock({
 					</div>
 				)}
 			</div>
+		</div>
+	)
+}
+
+// The media a node actually produced, surfaced so you can hear/see it in place: audio players for
+// build-voice / build-soundtrack, a thumbnail gallery for build-assets. Which dirs hold a node type's
+// media is a craft convention (mediaDirsForNodeType); this fetches them lazily and renders nothing when
+// a node type has no media or none was written. An image opens full-size in a new tab on click.
+function NodeMedia({ productionId, nodeType }: { productionId: string; nodeType: string }) {
+	const specs = mediaDirsForNodeType(nodeType)
+	const [files, setFiles] = useState<MediaFile[]>([])
+	const [imgPage, setImgPage] = useState(0)
+	const IMG_PAGE_SIZE = 12
+	useEffect(() => {
+		if (specs.length === 0) return
+		let alive = true
+		void Promise.all(specs.map((s) => listNodeMedia(productionId, s.dir, s.kinds).catch(() => [] as MediaFile[])))
+			.then((lists) => {
+				if (!alive) return
+				// de-dupe by path (a dir can be listed by more than one spec)
+				const seen = new Set<string>()
+				const merged: MediaFile[] = []
+				for (const f of lists.flat()) {
+					if (!seen.has(f.path)) {
+						seen.add(f.path)
+						merged.push(f)
+					}
+				}
+				setFiles(merged)
+			})
+		return () => {
+			alive = false
+		}
+	}, [productionId, nodeType, specs.length])
+
+	if (specs.length === 0 || files.length === 0) return null
+	const audio = files.filter((f) => f.kind === "audio")
+	const images = files.filter((f) => f.kind === "image")
+	const label = specs.map((s) => s.label).join(" · ")
+	return (
+		<div className="node-media">
+			<div className="sub-h">{label} — produced files <span className="muted">{files.length}</span></div>
+			{audio.length > 0 && (
+				<ul className="audio-list">
+					{audio.map((f) => (
+						<li key={f.path} className="audio-row">
+							<span className="audio-name">{f.name}</span>
+							<audio controls preload="none" src={mediaUrlByPath(f.path)} />
+							<span className="muted">{fmtBytes(f.sizeBytes)}</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{images.length > 0 && (() => {
+				// Paginate the grid: a build-assets node can hold dozens of images and the full grid takes
+				// over the card. Show one page at a time with a pager; clamp the page if the list shrank.
+				const pageCount = Math.ceil(images.length / IMG_PAGE_SIZE)
+				const page = Math.min(imgPage, pageCount - 1)
+				const start = page * IMG_PAGE_SIZE
+				const shown = images.slice(start, start + IMG_PAGE_SIZE)
+				return (
+					<>
+						<div className="asset-grid">
+							{shown.map((f) => (
+								<a key={f.path} className="asset-thumb" href={mediaUrlByPath(f.path)} target="_blank" rel="noreferrer" title={`${f.name} · ${fmtBytes(f.sizeBytes)}`}>
+									<img src={mediaUrlByPath(f.path)} alt={f.name} loading="lazy" />
+									<span className="asset-name">{f.name}</span>
+								</a>
+							))}
+						</div>
+						{pageCount > 1 && (
+							<div className="asset-pager">
+								<button type="button" disabled={page <= 0} onClick={() => setImgPage(page - 1)}>‹ Prev</button>
+								<span className="muted">{start + 1}–{start + shown.length} of {images.length}</span>
+								<button type="button" disabled={page >= pageCount - 1} onClick={() => setImgPage(page + 1)}>Next ›</button>
+							</div>
+						)}
+					</>
+				)
+			})()}
+		</div>
+	)
+}
+
+// build-voice stitches per-scene clips (board/media/vo/piper/sNN.wav), one per script line, into the
+// single narration. Instead of a flat list of anonymous clips, show each small clip beside the small
+// line it reads (script line N ↔ scene N). The source files it reads/writes live in the Input/Output
+// panel above (NodeIO); this is the produced voice, auditioned line by line.
+function VoiceMedia({ productionId }: { productionId: string }) {
+	const [pairs, setPairs] = useState<VoicePair[]>([])
+
+	useEffect(() => {
+		let alive = true
+		const clipsP = listNodeMedia(productionId, "board/media/vo", ["audio"]).catch(() => [] as MediaFile[])
+		const scriptP = fetchMediaText(`${productionId}/board/script.txt`)
+			.then(splitScriptLines)
+			.catch(() => [] as string[])
+		void Promise.all([scriptP, clipsP]).then(([lines, clips]) => {
+			if (!alive) return
+			setPairs(pairVoiceClips(lines, clips.map((c) => ({ name: c.name, path: c.path }))))
+		})
+		return () => {
+			alive = false
+		}
+	}, [productionId])
+
+	if (pairs.length === 0) return null
+	return (
+		<div className="node-media">
+			<div className="sub-h">Script &amp; voice — line by line <span className="muted">{pairs.length}</span></div>
+			<ol className="vo-lines">
+				{pairs.map((p) => (
+					<li key={p.n} className="vo-line">
+						<span className="vo-n">{p.n}</span>
+						<span className="vo-text">{p.text || <em className="muted">(no line)</em>}</span>
+						{p.clip ? <audio controls preload="none" src={mediaUrlByPath(p.clip.path)} /> : <span className="muted vo-missing">no clip</span>}
+					</li>
+				))}
+			</ol>
+		</div>
+	)
+}
+
+// One side of the Input / Output panel for a node, so Input can sit at the top of the card and Output
+// at the bottom — the way a step reads. INPUT = its upstream deps (as the DAG recorded them, each
+// opening that dep's deliverable) + the board files it reads off disk; the intake step (briefing) also
+// shows the production's original request, its true input. OUTPUT = its own captured deliverable + the
+// side files it writes. Renders nothing when that side is empty.
+function NodeIO({ nv, detail, side }: { nv: NodeView; detail: ProductionDetail; side: "input" | "output" }) {
+	const [open, setOpen] = useState<ViewerTarget | null>(null)
+	const io = nodeFileIO(nv.node.type, detail.root.id)
+
+	const fileChip = (f: FileRef) => (
+		<button key={f.path} type="button" className="file-chip" onClick={() => setOpen({ name: f.label, path: f.path })}>
+			{f.label}
+		</button>
+	)
+
+	if (side === "input") {
+		// Resolve each dep node-id to {label, versionId} — its type + latest version — so the chip opens
+		// the upstream's actual deliverable. Unknown/version-less deps are dropped.
+		const depRefs = (nv.node.deps ?? [])
+			.map((id) => {
+				const dn = detail.nodes.find((x) => x.node.id === id)
+				const v = dn?.versions[dn.versions.length - 1]?.version
+				return dn && v ? { label: titleCase(dn.node.type), versionId: v.id } : null
+			})
+			.filter((x): x is { label: string; versionId: string } => x != null)
+		// The intake step has no upstream node — its input is the request the production was asked with.
+		const request = nv.node.type === "briefing" ? requestText(detail.root) : null
+
+		if (depRefs.length === 0 && io.reads.length === 0 && request == null) return null
+		return (
+			<div className="node-io">
+				<div className="io-row">
+					<span className="io-label io-in">Input</span>
+					<span className="io-chips">
+						{request != null && (
+							<span className="io-seg">
+								<span className="io-seg-l">request</span>
+								<button type="button" className="file-chip io-dep" onClick={() => setOpen({ name: "Original request", text: request })}>
+									the brief
+								</button>
+							</span>
+						)}
+						{/* The dep chips are the step-to-step dependency: the upstream steps this one builds on. */}
+						{depRefs.length > 0 && (
+							<span className="io-seg">
+								<span className="io-seg-l">depends on</span>
+								{depRefs.map((d) => (
+									<button key={d.versionId} type="button" className="file-chip io-dep" onClick={() => setOpen({ name: d.label, versionId: d.versionId })}>
+										{d.label}
+									</button>
+								))}
+							</span>
+						)}
+						{io.reads.length > 0 && (
+							<span className="io-seg">
+								<span className="io-seg-l">reads</span>
+								{io.reads.map(fileChip)}
+							</span>
+						)}
+					</span>
+				</div>
+				{open && <FileViewer target={open} onClose={() => setOpen(null)} />}
+			</div>
+		)
+	}
+
+	// side === "output"
+	const ownLatest = nv.versions[nv.versions.length - 1]?.version
+	if (ownLatest == null && io.writes.length === 0) return null
+	return (
+		<div className="node-io">
+			<div className="io-row">
+				<span className="io-label io-out">Output</span>
+				<span className="io-chips">
+					<span className="io-seg">
+						<span className="io-seg-l">produces</span>
+						{ownLatest && (
+							<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
+								deliverable
+							</button>
+						)}
+						{io.writes.map(fileChip)}
+					</span>
+				</span>
+			</div>
+			{open && <FileViewer target={open} onClose={() => setOpen(null)} />}
+		</div>
+	)
+}
+
+// The production's original request, as the caller asked for it — the brief (root.description) plus any
+// intake params. This is the input to the intake step (briefing). Empty string → nothing to show.
+function requestText(root: EngineNode): string {
+	const brief = (root.description ?? "").trim()
+	// Show the intake params too, unless the only key is `brief` (it just duplicates the description).
+	const extraKeys = Object.keys(root.params ?? {}).filter((k) => k !== "brief")
+	const params = extraKeys.length > 0 ? `\n\n---\nIntake params:\n\n\`\`\`json\n${JSON.stringify(root.params, null, 2)}\n\`\`\`` : ""
+	return brief + params
+}
+
+// What the viewer modal shows: a produced file by artifacts-root path, a node's deliverable by version
+// id (fetched), or inline text already in hand (the request). Deliverable + inline text render as markdown.
+type ViewerTarget = { name: string; path: string } | { name: string; versionId: string } | { name: string; text: string }
+
+// A single input/output item opened in a modal. A file path: audio/image/video play inline, json/text
+// are fetched and shown as text (JSON re-indented), with an "open raw" link. A version id: the
+// deliverable's content, rendered as markdown.
+function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => void }) {
+	const isFile = "path" in target
+	const isInline = "text" in target // content already in hand (the request) — no fetch
+	const kind = isFile ? fileViewKind(target.name) : "deliverable"
+	const needsFetch = isFile ? kind === "json" || kind === "text" : !isInline
+	const [text, setText] = useState<string | null>(isInline ? (target as { text: string }).text : null)
+	const [err, setErr] = useState<string | null>(null)
+	const [loading, setLoading] = useState(needsFetch)
+	const [raw, setRaw] = useState(false)
+
+	useEffect(() => {
+		if (!needsFetch) return
+		let alive = true
+		const p = isFile ? fetchMediaText(target.path) : getDeliverable((target as { versionId: string }).versionId).then((d) => d.content ?? "")
+		void p
+			.then((t) => alive && setText(t))
+			.catch(() => alive && setErr("Couldn't load this."))
+			.finally(() => alive && setLoading(false))
+		return () => {
+			alive = false
+		}
+	}, [isFile, needsFetch, isFile ? target.path : "versionId" in target ? target.versionId : ""])
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+		window.addEventListener("keydown", onKey)
+		return () => window.removeEventListener("keydown", onKey)
+	}, [onClose])
+
+	// Pick how to render the text: in its proper visual form, not raw JSON. A film.json → the film view;
+	// a storyboard/plan → the beat board; a card → its plate; a deliverable → markdown; other JSON gets
+	// pretty-printed. A "Raw" toggle always falls back to the source for the structured views.
+	const parsed = text != null ? parseJsonLoose(text) : null
+	const view = isFilm(parsed) ? "film" : isCard(parsed) ? "card" : isBoardShape(parsed) ? "board" : !isFile ? "markdown" : kind === "json" ? "json" : "text"
+	const structured = view === "film" || view === "card" || view === "board"
+	// Everything that isn't a pure media element (audio/image/video file) renders in the text area below.
+	const textual = !isFile || (kind !== "audio" && kind !== "image" && kind !== "video")
+
+	const url = isFile ? mediaUrlByPath(target.path) : null
+	return (
+		<div className="modal-backdrop" onClick={onClose}>
+			<div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+				<div className="modal-head">
+					<h3>{target.name}</h3>
+					{structured && (
+						<span className="seg" role="group" aria-label="View mode">
+							<button className={raw ? "" : "on"} onClick={() => setRaw(false)}>Rendered</button>
+							<button className={raw ? "on" : ""} onClick={() => setRaw(true)}>JSON</button>
+						</span>
+					)}
+					{url && <a className="modal-dl" href={url} target="_blank" rel="noreferrer">open raw ↗</a>}
+					<button className="modal-x" onClick={onClose} aria-label="Close">×</button>
+				</div>
+				<div className="modal-body">
+					{isFile && kind === "audio" && url && <audio className="file-audio" controls autoPlay src={url} />}
+					{isFile && kind === "image" && url && <img className="file-img" src={url} alt={target.name} />}
+					{isFile && kind === "video" && url && <video className="file-video" controls src={url} />}
+					{textual &&
+						(loading ? (
+							<p className="muted">Loading…</p>
+						) : err ? (
+							<p className="muted">{err}</p>
+						) : raw || view === "json" ? (
+							<pre className="raw">{prettyJson(text ?? "")}</pre>
+						) : view === "film" ? (
+							<FilmView content={text ?? ""} />
+						) : view === "card" ? (
+							<CardPlate content={text ?? ""} />
+						) : view === "board" ? (
+							<StoryboardBoard content={text ?? ""} />
+						) : view === "markdown" ? (
+							<div className="md"><Markdown source={text ?? ""} /></div>
+						) : (
+							<pre className="raw">{text}</pre>
+						))}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+// film.json shown as a readable film rather than raw JSON: a voice/size header, the VO script numbered,
+// and the camera cues as a shot list — each shot is a plate framed on the word it fires on, with its
+// zoom move. (Plate thumbnails are skipped: the plate HTML references fonts/assets by absolute server
+// paths that don't resolve in the browser, so they'd render blank.)
+function FilmView({ content }: { content: string }) {
+	const parsed = parseJsonLoose(content)
+	if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return <pre className="raw">{content}</pre>
+	const film = parsed as Record<string, unknown>
+	const size = film.size as [number, number] | undefined
+	const voice = (film.voice ?? {}) as Record<string, unknown>
+	const script = (Array.isArray(film.script) ? film.script : []) as string[]
+	const camera = (Array.isArray(film.camera) ? film.camera : []) as Record<string, unknown>[]
+	const plates = (film.plates != null && typeof film.plates === "object" ? film.plates : {}) as Record<string, unknown>
+	return (
+		<div className="film-view">
+			<div className="sb-theme">
+				{size && <span>{size[0]}×{size[1]}</span>}
+				{voice.id != null && (
+					<span>voice <span className="tag">{String(voice.id)}</span>{voice.speed != null ? ` speed ${String(voice.speed)}` : ""}</span>
+				)}
+				<span>{script.length} lines</span>
+				<span>{camera.length} shots</span>
+				<span>{Object.keys(plates).length} plates</span>
+			</div>
+			{script.length > 0 && (
+				<>
+					<div className="sub-h">Voiceover</div>
+					<ol className="film-script">
+						{script.map((l, i) => (
+							<li key={i}>{l}</li>
+						))}
+					</ol>
+				</>
+			)}
+			{camera.length > 0 && (
+				<>
+					<div className="sub-h">Shots — camera moves</div>
+					<ol className="film-shots">
+						{camera.map((c, i) => (
+							<li key={i} className="film-shot">
+								<span className="shot-n">{i + 1}</span>
+								<span className="shot-plate">{String(c.plate ?? "—")}</span>
+								{c.at != null && <span className="shot-at">on “{String(c.at)}”</span>}
+								{(c.zoom != null || c.to_zoom != null) && <span className="muted">zoom {String(c.zoom ?? 1)}→{String(c.to_zoom ?? c.zoom ?? 1)}</span>}
+							</li>
+						))}
+					</ol>
+				</>
+			)}
 		</div>
 	)
 }
@@ -419,16 +840,56 @@ function ArtifactView({
 				<p className="muted">—</p>
 			) : raw || kind === "text" ? (
 				<pre className="raw">{content}</pre>
+			) : kind === "markdown" && looksLikePlan(content) ? (
+				// A plan/fan-out node (brainstorm-how, build-scenes, …) writes its children as a JSON array
+				// of {name, brief}. Those land in a .md artifact (markdown kind) but are not prose — render
+				// them as a board, like the storyboard, instead of dumping the raw ```json.
+				<StoryboardBoard content={content} />
 			) : kind === "markdown" ? (
 				<div className="md"><Markdown source={content} /></div>
 			) : kind === "script" ? (
 				<ScriptView content={content} />
 			) : kind === "storyboard" ? (
 				<StoryboardBoard content={content} />
+			) : kind === "card" ? (
+				<CardPlate content={content} />
 			) : (
 				<pre className="raw">{content}</pre>
 			)}
 		</>
+	)
+}
+
+// Card: the composed plate rendered in-app, so you see the beat as pixels — not the raw JSON. The card
+// artifact is JSON {id, vo_line, camera, plate_html} (sometimes fenced in ```json). We extract plate_html
+// and render it in a sandboxed iframe (no scripts — the plate is static HTML/CSS, the way the render
+// screenshots it as a still). Falls back to raw JSON if the shape is unexpected.
+function CardPlate({ content }: { content: string }) {
+	let html: string | null = null
+	let vo: string | undefined
+	try {
+		let t = content.trim()
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/) // tolerate ```json AND the two-backtick ``json producers sometimes emit
+		if (fenced?.[1]) t = fenced[1]
+		else {
+			const s = t.indexOf("{")
+			const e = t.lastIndexOf("}")
+			if (s >= 0 && e > s) t = t.slice(s, e + 1)
+		}
+		const card = JSON.parse(t) as { plate_html?: string; vo_line?: string }
+		html = card.plate_html ?? null
+		vo = card.vo_line
+	} catch {
+		html = null
+	}
+	if (!html) return <pre className="raw">{content}</pre>
+	return (
+		<figure className="card-plate">
+			<div className="plate-wrap">
+				<iframe className="plate-frame" title="card plate" sandbox="" srcDoc={html} />
+			</div>
+			{vo && <figcaption>“{vo}”</figcaption>}
+		</figure>
 	)
 }
 
@@ -451,17 +912,28 @@ function ScriptView({ content }: { content: string }) {
 // Storyboard: the word-anchored film.json shown as a visual beat board — theme swatches, voice, and
 // one card per beat. Falls back to raw JSON if the shape is unexpected.
 function StoryboardBoard({ content }: { content: string }) {
-	let data: Record<string, unknown>
+	let parsed: unknown
 	try {
-		data = JSON.parse(content) as Record<string, unknown>
+		let t = content.trim()
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/) // storyboard/plan artifacts are often fenced in ```json (sometimes a two-backtick ``json)
+		if (fenced?.[1]) t = fenced[1]
+		else {
+			const s = t.search(/[[{]/)
+			if (s > 0) t = t.slice(s)
+		}
+		parsed = JSON.parse(t)
 	} catch {
 		return <pre className="raw">{content}</pre>
 	}
-	const theme = (data.theme ?? {}) as Record<string, string>
-	const voice = (data.voice ?? {}) as Record<string, unknown>
-	const size = data.size as [number, number] | undefined
-	const beatsRaw = (Array.isArray(data.beats) ? data.beats : Array.isArray(data.scenes) ? data.scenes : Array.isArray(data.script) ? data.script : []) as unknown[]
+	// Two shapes: the card-PLAN — a top-level array of {name, brief}, i.e. the storyboard before any card
+	// renders — or a film.json object (theme/voice/beats). Normalize both to a beats list.
+	const obj = (Array.isArray(parsed) ? {} : (parsed ?? {})) as Record<string, unknown>
+	const theme = (obj.theme ?? {}) as Record<string, string>
+	const voice = (obj.voice ?? {}) as Record<string, unknown>
+	const size = obj.size as [number, number] | undefined
+	const beatsRaw = (Array.isArray(parsed) ? parsed : Array.isArray(obj.beats) ? obj.beats : Array.isArray(obj.scenes) ? obj.scenes : Array.isArray(obj.script) ? obj.script : []) as unknown[]
 	const beats = beatsRaw.map((b) => (typeof b === "string" ? { vo: b } : (b as Record<string, unknown>)))
+	if (beats.length === 0) return <pre className="raw">{content}</pre>
 	return (
 		<>
 			<div className="sb-theme">
@@ -481,17 +953,51 @@ function StoryboardBoard({ content }: { content: string }) {
 					<div key={i} className="beat">
 						<span className="t">beat {i + 1}</span>
 						<div>
-							{(b.beat != null || b.label != null || b.time != null) && (
-								<div className="bn">{String(b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
+							{(b.name ?? b.label ?? b.beat ?? b.time) != null && (
+								<div className="bn">{String(b.name ?? b.label ?? b.beat ?? "")}{b.time != null ? <span className="tag">{String(b.time)}</span> : null}</div>
 							)}
 							{(b.vo ?? b.line ?? b.text) != null && <div className="vo">{String(b.vo ?? b.line ?? b.text)}</div>}
-							{(b.capture ?? b.onscreen) != null && <div className="cap">{String(b.capture ?? b.onscreen)}</div>}
+							{(b.brief ?? b.capture ?? b.onscreen) != null && (
+								// Clamp the long brief to a few lines so a beat stays scannable; full text on hover.
+								<div className="cap" title={String(b.brief ?? b.capture ?? b.onscreen)}>{String(b.brief ?? b.capture ?? b.onscreen)}</div>
+							)}
 						</div>
 					</div>
 				))}
 			</div>
 		</>
 	)
+}
+
+// A plan/fan-out artifact is a JSON array of child seeds ({name, brief}) — the thing a plan node emits
+// before its children render. It arrives in a .md file (so its kind is "markdown"), often wrapped in a
+// code fence (```json, or a two-backtick ``json). Detect that shape so it renders as a board instead of
+// raw text — while leaving genuine prose markdown (e.g. a build-assets report) alone.
+function parsePlanArray(content: string): Record<string, unknown>[] | null {
+	try {
+		let t = content.trim()
+		const fenced = t.match(/`{2,}(?:json)?\s*([\s\S]*?)`{2,}/)
+		if (fenced?.[1]) t = fenced[1].trim()
+		else {
+			const s = t.search(/[[{]/)
+			if (s < 0) return null
+			t = t.slice(s)
+		}
+		const parsed = JSON.parse(t)
+		if (!Array.isArray(parsed)) return null
+		const objs = parsed.filter((x) => x != null && typeof x === "object" && !Array.isArray(x)) as Record<string, unknown>[]
+		if (objs.length === 0) return null
+		// Every item must name/brief itself (a concept or scene seed) — this is what keeps a prose report
+		// that merely contains a JSON snippet from being mistaken for a plan.
+		const planLike = objs.length === parsed.length && objs.every((o) => "name" in o || "brief" in o || "label" in o || "vo" in o)
+		return planLike ? objs : null
+	} catch {
+		return null
+	}
+}
+
+function looksLikePlan(content: string): boolean {
+	return parsePlanArray(content) != null
 }
 
 // One reviewer verdict, flat (no accordion): label + verdict chip. For a revise, the feedback shows
@@ -650,7 +1156,14 @@ function TelemGrid({ it }: { it: Interaction }) {
 	if (it.cacheReadTokens != null) rows.push(["cache read", fmtNum(it.cacheReadTokens)])
 	if (it.cacheCreationTokens != null) rows.push(["cache write", fmtNum(it.cacheCreationTokens)])
 	if (it.costUsd != null) rows.push(["cost", `$${it.costUsd.toFixed(4)}`])
-	if (it.durationMs != null) rows.push(["duration", fmtDur(it.durationMs)])
+	if (it.numTurns != null) rows.push(["turns", String(it.numTurns)])
+	if (it.durationMs != null) rows.push(["wall time", fmtDur(it.durationMs)])
+	if (it.apiDurationMs != null) rows.push(["API time", fmtDur(it.apiDurationMs)])
+	// wall − api is the time NOT spent calling the model: tool execution and rate-limit backoff. A big
+	// gap here (not a big API time) is why a run can take 31 minutes — the model waited, it didn't think.
+	if (it.durationMs != null && it.apiDurationMs != null && it.durationMs - it.apiDurationMs > 0) {
+		rows.push(["waiting (tools / rate-limit)", fmtDur(it.durationMs - it.apiDurationMs)])
+	}
 	return (
 		<dl className="telem-grid">
 			{rows.map(([k, v]) => (
@@ -830,10 +1343,11 @@ function Spinner({ label }: { label?: string }) {
 	)
 }
 
-function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "text" {
+function artifactKind(nodeType: string, path: string | null): "video" | "markdown" | "script" | "storyboard" | "card" | "text" {
 	if (isVideoPath(path)) return "video"
 	const t = nodeType.toLowerCase()
 	const ext = path ? path.split(".").pop()?.toLowerCase() : null
+	if (t === "card") return "card" // a composed card: its artifact carries plate_html we can render in-app
 	if (t.includes("storyboard") || ext === "json") return "storyboard"
 	if (t.includes("script")) return "script"
 	if (ext === "md" || ext === "markdown" || ["briefing", "moodboard", "brief", "review", "polish", "coverage", "craft"].some((k) => t.includes(k))) return "markdown"
@@ -869,26 +1383,33 @@ function Loop() {
 	return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
 }
 
-// The collapsed card's sub-line: version (vN of N), then the step's rolled-up telemetry — runs,
-// cost, duration — and, for a render, the finished file's size. Only the parts that have data show,
-// so a cheap fake-engine step stays short.
-function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[]): string {
-	if (!latest) return "Nothing produced yet."
-	const n = nv.versions.length
-	const parts = [n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`]
+// The collapsed card's sub-line: version (vN of N), then the step's telemetry — runs, cost, duration —
+// rolled up over the node AND its whole subtree, so a parent like storyboard or build reflects the
+// fanned-out cards/scenes beneath it (most of a production's time lives there). A "↳ N sub-steps" tail
+// flags that the figure is a subtree total and where to drill. Rolling up is also what makes the
+// top-level rows add up to the production's total duration. Only parts that have data show.
+function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] } | undefined, videos: VideoFile[], detail: ProductionDetail): string {
+	const u = subtreeUsage(detail.nodes, nv.node.id)
+	// An expand node (e.g. build) has no version of its own but holds work in its subtree — describe
+	// that instead of "Nothing produced yet"; a truly empty node keeps the empty state.
+	if (!latest && u.runs === 0) return "Nothing produced yet."
 
-	const runs = nv.interactions.length
-	if (runs > 0) parts.push(`${runs} run${runs === 1 ? "" : "s"}`)
-	const cost = nv.interactions.reduce((s, it) => s + (it.costUsd ?? 0), 0)
-	if (cost > 0) parts.push(`$${cost.toFixed(2)}`)
-	const dur = nv.interactions.reduce((s, it) => s + (it.durationMs ?? 0), 0)
-	if (dur > 0) parts.push(fmtDur(dur))
+	const parts: string[] = []
+	const n = nv.versions.length
+	if (latest) parts.push(n > 1 ? `v${latest.version.n} of ${n}` : `v${latest.version.n}`)
+
+	if (u.runs > 0) parts.push(`${u.runs} run${u.runs === 1 ? "" : "s"}`)
+	if (u.costUsd > 0) parts.push(`$${u.costUsd.toFixed(2)}`)
+	if (u.durationMs > 0) parts.push(fmtDur(u.durationMs))
 
 	// Step-specific fact: a render's finished file size, matched from the videos list by path.
-	if (latest.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
+	if (latest?.version.artifactPath && isVideoPath(latest.version.artifactPath)) {
 		const vid = findVideo(videos, latest.version.artifactPath)
 		if (vid) parts.push(fmtBytes(vid.sizeBytes))
 	}
+
+	// Flag that the figures above are a subtree roll-up, and where the time went.
+	if (u.descNodeCount > 0) parts.push(`↳ ${u.descNodeCount} sub-step${u.descNodeCount === 1 ? "" : "s"}`)
 	return parts.join(" · ")
 }
 

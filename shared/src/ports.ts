@@ -120,6 +120,8 @@ export interface SubagentResult {
 	engine?: string // the backend that ran it — stamped by the loop from the runner it resolved for the node
 	model?: string // the resolved model the engine actually used
 	usage?: SubagentUsage // tokens + cost for this interaction, when the engine reports it
+	numTurns?: number // agent turns the run took (assistant + tool round-trips), when the engine reports it
+	apiDurationMs?: number // of the run's wall time, the part spent in model API calls; wall − api ≈ tool exec + rate-limit backoff
 	raw?: unknown // transport-level detail, if the adapter wants to surface it
 }
 
