@@ -5,6 +5,7 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { JsonLogger, makeDbPool, PgStore } from "@core/shared"
+import type { SubagentRunner } from "@core/shared"
 import { makeRunner, runnerConfigFromEnv } from "../adapters/runner-factory.js"
 import { configFromEnv } from "../config.js"
 import { Engine } from "../loop.js"
@@ -28,10 +29,18 @@ const runnerConfig = runnerConfigFromEnv()
 
 async function main(): Promise<void> {
 	const dbPool = makeDbPool()
-	// The default runner (SUBAGENT_ENGINE). A node type may pin a different backend (TypeContract.engine);
-	// register each such backend here by name and the loop routes that node to it. Only the default is
-	// wired for now — a non-default pin throws until its runner is added to this map.
+	// The default runner (SUBAGENT_ENGINE), plus every other real engine registered by name so a node
+	// that pins a non-default backend (TypeContract.engine: claude | codex | gemini) routes to it
+	// (loop.runnerFor). Constructing a runner only reads env/bin — no key, no network — so building all
+	// of them is cheap; a key-less engine fails at call time only if a node actually uses it. The fake
+	// engine runs alone (fake mode bakes no CLIs).
 	const runner = makeRunner(runnerConfig)
+	const runners = new Map<string, SubagentRunner>([[runner.engine, runner]])
+	if (runnerConfig.engine !== "fake") {
+		for (const eng of ["claude", "codex", "gemini"]) {
+			if (!runners.has(eng)) runners.set(eng, makeRunner({ ...runnerConfig, engine: eng }))
+		}
+	}
 	const types = TypeRegistry.load(typesDir)
 
 	// 0008: a real `claude -p` subagent resolves craft skills from <craftRoot>/.claude/skills. A stale or
@@ -53,7 +62,7 @@ async function main(): Promise<void> {
 	const engine = new Engine({
 		store: new PgStore(dbPool),
 		runner,
-		runners: new Map([[runner.engine, runner]]),
+		runners,
 		types,
 		config,
 		logger,
