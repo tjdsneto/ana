@@ -16,6 +16,16 @@ export interface EngineConfig {
 	// instead of grinding to the redo cap. A weaker result (more than one dissent) resets the streak,
 	// so weak work still never converges — it escalates.
 	convergeAfter: number
+	// 0019: max independent leaves/nodes a single worker dispatches CONCURRENTLY per tick (a bounded pool
+	// of in-flight `claude -p` children). 1 = serial (default, unchanged behavior). Raise it to collapse
+	// the independent fan-out (cards/scenes) that dominates wall-clock — they are sibling leaves with no
+	// dependency on each other. Keep it bounded so the resource-limited host is not starved.
+	maxParallel: number
+	// 0020: no-progress escape. If a leaf's failing-review finding repeats UNCHANGED for this many
+	// consecutive redo rounds, the producer is not converging (a defect it structurally can't fix — e.g.
+	// a missing licensed font the card can't add). Escalate early with the finding instead of grinding to
+	// maxRedos and force-approving a known-bad version. Must be ≤ maxRedos to help.
+	noProgressAfter: number
 	pollIntervalMs: number
 	// Process-lifetime ceiling on REAL (non-fake) subagent calls, a spend guardrail. Once the worker
 	// has made this many real calls, it stops claiming new leaves (the in-flight one finishes) and
@@ -44,6 +54,8 @@ export function configFromEnv(env = process.env): EngineConfig {
 		agreementMaxRoundsAgent: num(env.AGREEMENT_MAX_ROUNDS_AGENT, 2),
 		maxGlobalRevisions: num(env.MAX_GLOBAL_REVISIONS, 2),
 		convergeAfter: num(env.CONVERGE_AFTER, 3),
+		maxParallel: num(env.ENGINE_MAX_PARALLEL, 1),
+		noProgressAfter: num(env.NO_PROGRESS_AFTER, 2),
 		pollIntervalMs: num(env.POLL_INTERVAL_MS, 3000),
 		maxSubagentCalls: optNum(env.SUBAGENT_MAX_CALLS),
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,

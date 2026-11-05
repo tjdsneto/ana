@@ -44,6 +44,8 @@ function makeConfig(over: Partial<EngineConfig> = {}): EngineConfig {
 		agreementMaxRoundsAgent: 2,
 		maxGlobalRevisions: 2,
 		convergeAfter: 99, // off by default; the convergence test sets it low
+		maxParallel: 1, // serial by default; the parallelism test raises it
+		noProgressAfter: 99, // off by default; the no-progress test sets it low
 		pollIntervalMs: 1000,
 		...over,
 	}
@@ -1434,5 +1436,66 @@ describe("0010 — high autonomy auto-approves leaf gates but keeps final-review
 		expect(outs.length).toBe(1)
 		expect(outs[0]?.type).toBe("present")
 		expect(outs[0]?.nodeId).toBe(fr?.id)
+	})
+})
+
+describe("0019 — independent fan-out leaves dispatch concurrently with maxParallel > 1", () => {
+	it("runs sibling leaves in parallel within one worker (peak in-flight > 1)", async () => {
+		let inFlight = 0
+		let peak = 0
+		const runner = new FakeSubagentRunner(async () => {
+			inFlight++
+			peak = Math.max(peak, inFlight)
+			await new Promise((r) => setTimeout(r, 5))
+			inFlight--
+			return { output: "draft" }
+		})
+		const T = TypeRegistry.fromContracts([
+			{
+				type: "video-project",
+				name: "Root",
+				checklist: [
+					{ id: "a", type: "leaf", deps: [] },
+					{ id: "b", type: "leaf", deps: [] },
+					{ id: "c", type: "leaf", deps: [] },
+				],
+			},
+			{ type: "leaf", name: "Leaf", produce: "make it" }, // no reviewers → auto-present
+		])
+		const engine = new Engine({ store, runner, types: T, config: makeConfig({ maxParallel: 3 }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 50; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(peak).toBeGreaterThanOrEqual(2) // the three independent leaves overlapped in-flight — not serialized one-per-tick
+	})
+})
+
+describe("0020 — no-progress escape: a repeated unfixable finding escalates instead of grinding to the cap", () => {
+	it("escalates early when the same finding repeats, not at MAX_REDOS", async () => {
+		const runner = new FakeSubagentRunner((input) =>
+			input.skill?.startsWith("review:")
+				? { output: "VERDICT: revise — the licensed font is not staged in plates/fonts; this node cannot add it" }
+				: { output: "draft" },
+		)
+		const T = TypeRegistry.fromContracts([
+			{ type: "video-project", name: "Root", checklist: [{ id: "leaf", type: "leaf", deps: [] }] },
+			{ type: "leaf", name: "Leaf", produce: "make it", reviews: [{ name: "q", kind: "craft" }] },
+		])
+		const engine = new Engine({ store, runner, types: T, config: makeConfig({ noProgressAfter: 2, maxRedos: 10 }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 100; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "leaf")!
+		expect(leaf.status).toBe("approved") // escalated-presented at the no-progress threshold, then approved by the gate
+		expect((await store.versionsFor(leaf.id)).length).toBe(2) // v1, v2 → escalated at v2, NOT ground to maxRedos=10
 	})
 })

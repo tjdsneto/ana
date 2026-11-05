@@ -45,6 +45,7 @@ export class Engine {
 	private parkedWarned = false // so the park guard logs once, not on every poll wake-up
 	private readonly globalRevisions = new Map<string, number>() // productionId → holistic-reopen passes used (per-process; v0 single worker)
 	private readonly nearPassStreak = new Map<string, number>() // nodeId → consecutive rounds a version passed all-but-one reviewer (convergence; per-process)
+	private readonly noProgressStreak = new Map<string, { sig: string; n: number }>() // nodeId → the repeated failing-finding signature + its consecutive-round count (0020 no-progress escape; per-process)
 	private readonly dispatchFailures = new Map<string, number>() // nodeId → consecutive dispatch throws (0001; per-process retry counter)
 
 	constructor(deps: EngineDeps) {
@@ -71,16 +72,33 @@ export class Engine {
 		}
 		const started = await this.startQueuedProductions()
 		const rolled = await this.rollupNodes()
-		const node = await this.store.claimReadyNode()
-		if (node) {
+		// 0019: claim up to maxParallel READY nodes and dispatch them CONCURRENTLY. Independent fan-out
+		// leaves (the N cards / N scenes under a plan node) have no dependency on each other, so running
+		// them serially — one node per tick — is what made a real production a 13h wall-clock when the busy
+		// time was the same 13h. The claim seam is `FOR UPDATE SKIP LOCKED`, so the sequential claims below
+		// each return a DISTINCT node (no double-claim), and dispatching different nodes concurrently is safe
+		// (the only per-node engine state — nearPassStreak / noProgressStreak — is keyed by node id).
+		// maxParallel = 1 keeps the original serial behaviour.
+		const cap = Math.max(1, this.config.maxParallel)
+		const claimed: Node[] = []
+		for (let i = 0; i < cap; i++) {
+			const n = await this.store.claimReadyNode()
+			if (!n) break
+			claimed.push(n)
+		}
+		if (claimed.length > 0) {
 			// A claimed node is already `in-progress`. If dispatch throws, nothing else would reset it and
 			// claimReadyNode only picks `pending`, so the node — and the whole production — would hang
-			// forever with no signal (0001). Catch, retry a few times, then fail the production loudly.
-			try {
-				await this.dispatch(node)
-			} catch (err) {
-				await this.onDispatchError(node, err)
-			}
+			// forever with no signal (0001). Catch per node, retry a few times, then fail the production loudly.
+			await Promise.all(
+				claimed.map(async (n) => {
+					try {
+						await this.dispatch(n)
+					} catch (err) {
+						await this.onDispatchError(n, err)
+					}
+				}),
+			)
 			return true
 		}
 		return started || rolled
@@ -677,10 +695,12 @@ export class Engine {
 				? new Set((await this.store.reviewsFor(latest.id)).filter((r) => r.verdict === "pass").map((r) => r.name))
 				: new Set<string>()
 		const verdicts: ("pass" | "revise")[] = []
+		const roundReviews: { name: string; verdict: "pass" | "revise"; body: string }[] = [] // 0020: each axis's verdict + body, to detect a repeated unfixable finding
 		for (const rv of contract.reviews ?? []) {
 			if (n > 1 && priorPassed.has(rv.name)) {
 				await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict: "pass", body: "[carried forward (0021): this axis passed on the prior version and its input was not re-reviewed on this redo]" })
 				verdicts.push("pass")
+				roundReviews.push({ name: rv.name, verdict: "pass", body: "" })
 				log.debug("review.carry_forward", { versionId: version.id, reviewer: rv.name, kind: rv.kind })
 				continue
 			}
@@ -699,12 +719,14 @@ export class Engine {
 			const verdict = parseVerdict(rres.output)
 			await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict, body: rres.output })
 			verdicts.push(verdict)
+			roundReviews.push({ name: rv.name, verdict, body: rres.output })
 			log.debug("review.verdict", { versionId: version.id, reviewer: rv.name, kind: rv.kind, verdict })
 		}
 
 		const advisory = contract.advisoryReview === true
 		if (advisory || verdicts.every((v) => v === "pass")) {
 			this.nearPassStreak.delete(node.id)
+			this.noProgressStreak.delete(node.id)
 			await this.present(node, contract, version.id, root, log)
 			return
 		}
@@ -720,6 +742,7 @@ export class Engine {
 			this.nearPassStreak.set(node.id, streak)
 			if (streak >= this.config.convergeAfter) {
 				this.nearPassStreak.delete(node.id)
+				this.noProgressStreak.delete(node.id)
 				log.info("node.converge", { versionId: version.id, passCount, of: verdicts.length, streak })
 				await this.present(node, contract, version.id, root, log)
 				return
@@ -731,6 +754,32 @@ export class Engine {
 		// a reviewer said revise — never shown to the user
 		await this.store.updateVersion(version.id, { status: "needs-work" })
 		const redosSoFar = priorVersions.filter((v) => v.status === "needs-work").length + 1
+
+		// 0020: no-progress escape. If the failing finding repeats UNCHANGED across rounds, the producer is
+		// not converging — a defect scoped above this node (e.g. a missing licensed font a card can't add).
+		// Escalate early with the finding rather than grind to maxRedos re-rendering the identical defect
+		// and force-approving a known-bad version at the cap. The signature is the failing axes + their
+		// normalized bodies; exact-match is deliberately strict (bias to NOT escalating a genuinely-changing
+		// finding — it fires only when the reviewer essentially repeats itself). The fuller fix (a reviewer
+		// "escalate" verdict + lever-gated auto-degrade per docs/lisa/font-resolution.md) is deferred with
+		// the 0010/0013 agent-ask channel; this is the engine backstop that stops the grind.
+		const failing = roundReviews.filter((r) => r.verdict === "revise")
+		const sig = failing
+			.map((r) => `${r.name}:${r.body.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 240)}`)
+			.sort()
+			.join("|")
+		const prevNP = this.noProgressStreak.get(node.id)
+		const npStreak = prevNP && prevNP.sig === sig ? prevNP.n + 1 : 1
+		this.noProgressStreak.set(node.id, { sig, n: npStreak })
+		if (sig !== "" && npStreak >= this.config.noProgressAfter) {
+			this.noProgressStreak.delete(node.id)
+			const axes = failing.map((r) => r.name).join(", ")
+			const reason = `no progress: the "${axes}" review finding repeated unchanged for ${npStreak} rounds and this node can't resolve it — escalated instead of grinding to the redo cap (0020)`
+			log.warn("node.no_progress", { versionId: version.id, streak: npStreak, axes: failing.map((r) => r.name) })
+			await this.present(node, contract, version.id, root, log, reason)
+			return
+		}
+
 		if (redosSoFar >= this.config.maxRedos) {
 			const reason = `couldn't fully satisfy the review set after ${this.config.maxRedos} attempts`
 			log.warn("node.escalate", { versionId: version.id, reason, attempt: redosSoFar })
