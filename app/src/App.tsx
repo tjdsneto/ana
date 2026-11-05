@@ -22,7 +22,6 @@ import {
 	mediaUrlByPath,
 	videoUrlByPath,
 	videoUrlByVersion,
-	voiceSourceFiles,
 	type ChatOutput,
 	type Interaction,
 	type NodeView,
@@ -36,6 +35,7 @@ import {
 } from "./api.js"
 import { Markdown } from "./markdown.js"
 import { fileViewKind, pairVoiceClips, prettyJson, splitScriptLines, type VoicePair } from "./media-view.js"
+import { type FileRef, nodeFileIO } from "./node-io.js"
 import { subtreeUsage } from "./rollup.js"
 import { useLive } from "./useLive.js"
 
@@ -279,8 +279,11 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 						))}
 					</div>
 				)}
-				{/* Media the node produced — shown AFTER its report/versions so the write-up reads first.
-				    build-voice gets a dedicated view: each small clip paired with the line it reads. */}
+				{/* What this step reads and writes: its Input (upstream deps + the board files it reads off
+				    disk) and Output (its own deliverable + the files it writes). Shown after the report. */}
+				<NodeIO nv={nv} detail={detail} />
+				{/* The produced media, experienced: build-voice pairs each clip with the line it reads;
+				    other build nodes get audio players / an image gallery. */}
 				{nv.node.type === "build-voice" ? (
 					<VoiceMedia productionId={detail.root.id} />
 				) : (
@@ -439,13 +442,12 @@ function NodeMedia({ productionId, nodeType }: { productionId: string; nodeType:
 	)
 }
 
-// build-voice produces per-scene voice clips (board/media/vo/piper/sNN.wav), the stitched narration,
-// its word timing, and the script. Instead of a flat list of eight anonymous clips, show each small
-// clip beside the small line it reads (script line N ↔ scene N), then expose the source files the
-// report cites (vo.wav, words.json, script.txt) as chips that open in the viewer modal.
+// build-voice stitches per-scene clips (board/media/vo/piper/sNN.wav), one per script line, into the
+// single narration. Instead of a flat list of anonymous clips, show each small clip beside the small
+// line it reads (script line N ↔ scene N). The source files it reads/writes live in the Input/Output
+// panel above (NodeIO); this is the produced voice, auditioned line by line.
 function VoiceMedia({ productionId }: { productionId: string }) {
 	const [pairs, setPairs] = useState<VoicePair[]>([])
-	const [open, setOpen] = useState<{ name: string; path: string } | null>(null)
 
 	useEffect(() => {
 		let alive = true
@@ -462,41 +464,98 @@ function VoiceMedia({ productionId }: { productionId: string }) {
 		}
 	}, [productionId])
 
-	const files = voiceSourceFiles(productionId)
+	if (pairs.length === 0) return null
 	return (
 		<div className="node-media">
-			{pairs.length > 0 && (
-				<>
-					<div className="sub-h">Script &amp; voice — line by line <span className="muted">{pairs.length}</span></div>
-					<ol className="vo-lines">
-						{pairs.map((p) => (
-							<li key={p.n} className="vo-line">
-								<span className="vo-n">{p.n}</span>
-								<span className="vo-text">{p.text || <em className="muted">(no line)</em>}</span>
-								{p.clip ? <audio controls preload="none" src={mediaUrlByPath(p.clip.path)} /> : <span className="muted vo-missing">no clip</span>}
-							</li>
-						))}
-					</ol>
-				</>
-			)}
-			<div className="sub-h">Source files</div>
-			<div className="file-chips">
-				{files.map((f) => (
-					<button key={f.path} type="button" className="file-chip" onClick={() => setOpen({ name: f.label, path: f.path })}>
-						{f.label}
-					</button>
+			<div className="sub-h">Script &amp; voice — line by line <span className="muted">{pairs.length}</span></div>
+			<ol className="vo-lines">
+				{pairs.map((p) => (
+					<li key={p.n} className="vo-line">
+						<span className="vo-n">{p.n}</span>
+						<span className="vo-text">{p.text || <em className="muted">(no line)</em>}</span>
+						{p.clip ? <audio controls preload="none" src={mediaUrlByPath(p.clip.path)} /> : <span className="muted vo-missing">no clip</span>}
+					</li>
 				))}
-			</div>
-			{open && <FileModal file={open} onClose={() => setOpen(null)} />}
+			</ol>
 		</div>
 	)
 }
 
-// A single produced file opened in a modal: audio/image/video play inline; json/text are fetched and
-// shown as text (JSON re-indented). "open raw" links straight to the streamed file for download.
-function FileModal({ file, onClose }: { file: { name: string; path: string }; onClose: () => void }) {
-	const kind = fileViewKind(file.name)
-	const needsText = kind === "json" || kind === "text"
+// The Input / Output panel for one node: what the step READS (its upstream deps as the DAG recorded
+// them, each opening that dep's deliverable; plus the board files it reads off disk) and what it WRITES
+// (its own captured deliverable; plus the side files it writes). Answers "what's the input, what's the
+// output of this step" on the card itself. Files open in the viewer modal; a dep/deliverable opens the
+// produced artifact. Renders nothing for a node with no inputs and no output of its own (e.g. a bare
+// expand node whose work is all in its sub-steps).
+function NodeIO({ nv, detail }: { nv: NodeView; detail: ProductionDetail }) {
+	const [open, setOpen] = useState<ViewerTarget | null>(null)
+	const io = nodeFileIO(nv.node.type, detail.root.id)
+
+	// Resolve each dep node-id to {label, versionId} — its type + latest version — so the Input chip
+	// opens the upstream's actual deliverable. Unknown/version-less deps are dropped.
+	const depRefs = (nv.node.deps ?? [])
+		.map((id) => {
+			const dn = detail.nodes.find((x) => x.node.id === id)
+			const v = dn?.versions[dn.versions.length - 1]?.version
+			return dn && v ? { label: titleCase(dn.node.type), versionId: v.id } : null
+		})
+		.filter((x): x is { label: string; versionId: string } => x != null)
+
+	// This node's own output = its latest version's artifact (the captured deliverable).
+	const ownLatest = nv.versions[nv.versions.length - 1]?.version
+	const hasInput = depRefs.length > 0 || io.reads.length > 0
+	const hasOutput = ownLatest != null || io.writes.length > 0
+	if (!hasInput && !hasOutput) return null
+
+	const fileChip = (f: FileRef) => (
+		<button key={f.path} type="button" className="file-chip" onClick={() => setOpen({ name: f.label, path: f.path })}>
+			{f.label}
+		</button>
+	)
+	return (
+		<div className="node-io">
+			{hasInput && (
+				<div className="io-row">
+					<span className="io-label io-in">Input</span>
+					<span className="io-chips">
+						{depRefs.map((d) => (
+							<button key={d.versionId} type="button" className="file-chip io-dep" onClick={() => setOpen({ name: d.label, versionId: d.versionId })}>
+								{d.label}
+							</button>
+						))}
+						{io.reads.map(fileChip)}
+					</span>
+				</div>
+			)}
+			{hasOutput && (
+				<div className="io-row">
+					<span className="io-label io-out">Output</span>
+					<span className="io-chips">
+						{ownLatest && (
+							<button type="button" className="file-chip io-deliver" onClick={() => setOpen({ name: `${titleCase(nv.node.type)} deliverable`, versionId: ownLatest.id })}>
+								deliverable
+							</button>
+						)}
+						{io.writes.map(fileChip)}
+					</span>
+				</div>
+			)}
+			{open && <FileViewer target={open} onClose={() => setOpen(null)} />}
+		</div>
+	)
+}
+
+// What the viewer modal shows: a produced file by artifacts-root path, or a node's deliverable by
+// version id (fetched + rendered as markdown).
+type ViewerTarget = { name: string; path: string } | { name: string; versionId: string }
+
+// A single input/output item opened in a modal. A file path: audio/image/video play inline, json/text
+// are fetched and shown as text (JSON re-indented), with an "open raw" link. A version id: the
+// deliverable's content, rendered as markdown.
+function FileViewer({ target, onClose }: { target: ViewerTarget; onClose: () => void }) {
+	const isFile = "path" in target
+	const kind = isFile ? fileViewKind(target.name) : "deliverable"
+	const needsText = !isFile || kind === "json" || kind === "text"
 	const [text, setText] = useState<string | null>(null)
 	const [err, setErr] = useState<string | null>(null)
 	const [loading, setLoading] = useState(needsText)
@@ -504,14 +563,17 @@ function FileModal({ file, onClose }: { file: { name: string; path: string }; on
 	useEffect(() => {
 		if (!needsText) return
 		let alive = true
-		void fetchMediaText(file.path)
-			.then((t) => alive && setText(kind === "json" ? prettyJson(t) : t))
-			.catch(() => alive && setErr("Couldn't load this file."))
+		const p = isFile
+			? fetchMediaText(target.path).then((t) => (kind === "json" ? prettyJson(t) : t))
+			: getDeliverable(target.versionId).then((d) => d.content ?? "")
+		void p
+			.then((t) => alive && setText(t))
+			.catch(() => alive && setErr("Couldn't load this."))
 			.finally(() => alive && setLoading(false))
 		return () => {
 			alive = false
 		}
-	}, [file.path, kind, needsText])
+	}, [isFile, needsText, kind, isFile ? target.path : target.versionId])
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -519,20 +581,29 @@ function FileModal({ file, onClose }: { file: { name: string; path: string }; on
 		return () => window.removeEventListener("keydown", onKey)
 	}, [onClose])
 
-	const url = mediaUrlByPath(file.path)
+	const url = isFile ? mediaUrlByPath(target.path) : null
 	return (
 		<div className="modal-backdrop" onClick={onClose}>
 			<div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-head">
-					<h3>{file.name}</h3>
-					<a className="modal-dl" href={url} target="_blank" rel="noreferrer">open raw ↗</a>
+					<h3>{target.name}</h3>
+					{url && <a className="modal-dl" href={url} target="_blank" rel="noreferrer">open raw ↗</a>}
 					<button className="modal-x" onClick={onClose} aria-label="Close">×</button>
 				</div>
 				<div className="modal-body">
-					{kind === "audio" && <audio className="file-audio" controls autoPlay src={url} />}
-					{kind === "image" && <img className="file-img" src={url} alt={file.name} />}
-					{kind === "video" && <video className="file-video" controls src={url} />}
-					{needsText && (loading ? <p className="muted">Loading…</p> : err ? <p className="muted">{err}</p> : <pre className="raw">{text}</pre>)}
+					{isFile && kind === "audio" && url && <audio className="file-audio" controls autoPlay src={url} />}
+					{isFile && kind === "image" && url && <img className="file-img" src={url} alt={target.name} />}
+					{isFile && kind === "video" && url && <video className="file-video" controls src={url} />}
+					{needsText &&
+						(loading ? (
+							<p className="muted">Loading…</p>
+						) : err ? (
+							<p className="muted">{err}</p>
+						) : !isFile ? (
+							<Markdown source={text ?? ""} />
+						) : (
+							<pre className="raw">{text}</pre>
+						))}
 				</div>
 			</div>
 		</div>

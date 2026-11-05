@@ -1494,6 +1494,50 @@ code {
 	font-style: italic;
 }
 
+/* ---- input / output panel ---- */
+.node-io {
+	margin: 10px 0 2px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--fg) 2%, transparent);
+}
+.io-row {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.io-label {
+	flex: 0 0 auto;
+	width: 54px;
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	font-weight: 600;
+}
+.io-in {
+	color: var(--muted);
+}
+.io-out {
+	color: var(--muted);
+}
+.io-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	flex: 1 1 auto;
+}
+.io-dep {
+	border-style: dashed;
+}
+.io-deliver {
+	font-family: inherit;
+}
+
 /* ---- source-file chips + file viewer modal ---- */
 .file-chips {
 	display: flex;

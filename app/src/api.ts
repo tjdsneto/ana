@@ -10,6 +10,7 @@ export interface Node {
 	status: string
 	autonomyLever: string | null
 	actorKind: string | null
+	deps: string[] // sibling prerequisite node ids — this node's upstream inputs (the DAG edges)
 	createdAt: string
 }
 
@@ -170,17 +171,6 @@ export async function fetchMediaText(path: string): Promise<string> {
 	const res = await fetch(mediaUrlByPath(path))
 	if (!res.ok) throw new Error(`HTTP ${res.status}`)
 	return res.text()
-}
-
-// The named source files a build-voice node produces, as {label, path} under the production root. These
-// are the craft's fixed conventions (the files the build-voice report cites), surfaced so the dashboard
-// can make them clickable: the full narration, its word timing, and the script it read.
-export function voiceSourceFiles(productionId: string): Array<{ label: string; path: string }> {
-	return [
-		{ label: "vo.wav", path: `${productionId}/board/media/vo.wav` },
-		{ label: "words.json", path: `${productionId}/board/media/words.json` },
-		{ label: "script.txt", path: `${productionId}/board/script.txt` },
-	]
 }
 
 // List the media a node produced, under <productionId>/<dir>. `kinds` filters (default audio+image).
