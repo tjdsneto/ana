@@ -2,8 +2,12 @@ import { describe, expect, test } from "vitest"
 import type { Interaction, NodeView } from "./api.js"
 import { descendantsOf, subtreeUsage } from "./rollup.js"
 
-// Minimal NodeView builder — only the fields the roll-up reads.
-function node(id: string, parentId: string | null, runs: Array<{ dur: number; cost: number }>): NodeView {
+const BASE = Date.parse("2026-11-05T00:00:00.000Z")
+const at = (offsetMs: number) => new Date(BASE + offsetMs).toISOString()
+
+// Minimal NodeView builder — only the fields the roll-up reads. `end` (ms offset from BASE) sets the
+// interaction's createdAt (≈ when the run finished); the run's interval is [end − dur, end].
+function node(id: string, parentId: string | null, runs: Array<{ dur: number; cost: number; end?: number }>): NodeView {
 	const interactions: Interaction[] = runs.map((r, i) => ({
 		id: `${id}-i${i}`,
 		nodeId: id,
@@ -21,7 +25,7 @@ function node(id: string, parentId: string | null, runs: Array<{ dur: number; co
 		numTurns: null,
 		apiDurationMs: null,
 		status: "done",
-		createdAt: "2026-11-05T00:00:00Z",
+		createdAt: r.end === undefined ? "2026-11-05T00:00:00Z" : at(r.end),
 		prompt: null,
 	}))
 	return {
@@ -75,6 +79,45 @@ describe("subtreeUsage", () => {
 	})
 	test("a node absent from the list yields zeros", () => {
 		const u = subtreeUsage(tree, "ghost")
-		expect(u).toEqual({ runs: 0, costUsd: 0, durationMs: 0, ownDurationMs: 0, descNodeCount: 0 })
+		expect(u).toEqual({ runs: 0, costUsd: 0, durationMs: 0, wallMs: 0, ownDurationMs: 0, descNodeCount: 0 })
+	})
+})
+
+describe("subtreeUsage wall-clock (wallMs)", () => {
+	test("sequential runs: elapsed equals the sum (no overlap)", () => {
+		const t = [node("x", null, [{ dur: 100, cost: 0, end: 100 }, { dur: 50, cost: 0, end: 150 }])]
+		const u = subtreeUsage(t, "x")
+		expect(u.durationMs).toBe(150) // summed compute
+		expect(u.wallMs).toBe(150) // 0..150 elapsed
+	})
+
+	test("overlapping runs under one node: elapsed is the span, less than the sum", () => {
+		// run A interval 0..100, run B interval 50..200
+		const t = [node("x", null, [{ dur: 100, cost: 0, end: 100 }, { dur: 150, cost: 0, end: 200 }])]
+		const u = subtreeUsage(t, "x")
+		expect(u.durationMs).toBe(250) // sum of subagent time
+		expect(u.wallMs).toBe(200) // max end (200) − min start (0)
+	})
+
+	test("a single run: elapsed equals its duration", () => {
+		const t = [node("x", null, [{ dur: 80, cost: 0, end: 80 }])]
+		expect(subtreeUsage(t, "x").wallMs).toBe(80)
+	})
+
+	test("concurrent children: parent elapsed is the union span, not the sum", () => {
+		// parent P (no runs); child A 0..100, child B 20..120 — produced in parallel by two workers
+		const t = [
+			node("P", null, []),
+			node("A", "P", [{ dur: 100, cost: 0, end: 100 }]),
+			node("B", "P", [{ dur: 100, cost: 0, end: 120 }]),
+		]
+		const u = subtreeUsage(t, "P")
+		expect(u.durationMs).toBe(200) // 100 + 100 compute
+		expect(u.wallMs).toBe(120) // 0..120 elapsed, not 200
+	})
+
+	test("no interactions: wallMs is zero", () => {
+		const t = [node("P", null, [])]
+		expect(subtreeUsage(t, "P").wallMs).toBe(0)
 	})
 })

@@ -1446,7 +1446,15 @@ function stageMeta(nv: NodeView, latest: { version: Version; reviews: Review[] }
 
 	if (u.runs > 0) parts.push(`${u.runs} run${u.runs === 1 ? "" : "s"}`)
 	if (u.costUsd > 0) parts.push(`$${u.costUsd.toFixed(2)}`)
-	if (u.durationMs > 0) parts.push(fmtDur(u.durationMs))
+	// Elapsed wall-clock first — the honest "how long it took". The subtree's summed subagent time
+	// (compute) is shown alongside only when concurrency made it clearly larger, so a parent whose fanned
+	// cards ran in parallel reads "4m 8s · 44m compute", not a misleading flat "44m".
+	if (u.wallMs > 0) {
+		parts.push(fmtDur(u.wallMs))
+		if (u.durationMs > u.wallMs * 1.25 && u.durationMs - u.wallMs > 30000) parts.push(`${fmtDur(u.durationMs)} compute`)
+	} else if (u.durationMs > 0) {
+		parts.push(fmtDur(u.durationMs))
+	}
 
 	// Step-specific fact: a render's finished file size, matched from the videos list by path.
 	if (latest?.version.artifactPath && isVideoPath(latest.version.artifactPath)) {

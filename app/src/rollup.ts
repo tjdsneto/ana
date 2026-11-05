@@ -24,7 +24,8 @@ export function descendantsOf(nodes: NodeView[], id: string): NodeView[] {
 export interface SubtreeUsage {
 	runs: number
 	costUsd: number
-	durationMs: number
+	durationMs: number // summed subagent time (compute) — how much machine time the subtree spent
+	wallMs: number // elapsed wall-clock span over the subtree's runs — concurrency-aware (parallel runs overlap, so this is ≤ durationMs), the honest "how long it took"
 	ownDurationMs: number // just this node's own interactions, so a caller can show the split
 	descNodeCount: number // descendant nodes that ran at least one interaction
 }
@@ -37,16 +38,27 @@ export function subtreeUsage(nodes: NodeView[], id: string): SubtreeUsage {
 	let runs = 0
 	let costUsd = 0
 	let durationMs = 0
+	// Wall-clock span: each run occupies [end − dur, end] with end ≈ its interaction.createdAt (the row is
+	// written when the run finishes). The elapsed time for the subtree is max(end) − min(start); parallel
+	// runs overlap in that window instead of adding up, so this reflects concurrency honestly.
+	let minStart = Number.POSITIVE_INFINITY
+	let maxEnd = Number.NEGATIVE_INFINITY
 	const tally = (nv: NodeView) => {
 		for (const it of nv.interactions) {
 			runs += 1
 			costUsd += it.costUsd ?? 0
 			durationMs += it.durationMs ?? 0
+			const end = Date.parse(it.createdAt)
+			if (Number.isNaN(end)) continue
+			const start = end - (it.durationMs ?? 0)
+			if (start < minStart) minStart = start
+			if (end > maxEnd) maxEnd = end
 		}
 	}
 	if (self) tally(self)
 	for (const nv of desc) tally(nv)
+	const wallMs = maxEnd > minStart ? maxEnd - minStart : 0
 	const ownDurationMs = self ? self.interactions.reduce((s, it) => s + (it.durationMs ?? 0), 0) : 0
 	const descNodeCount = desc.filter((nv) => nv.interactions.length > 0).length
-	return { runs, costUsd, durationMs, ownDurationMs, descNodeCount }
+	return { runs, costUsd, durationMs, wallMs, ownDurationMs, descNodeCount }
 }
