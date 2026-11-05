@@ -150,6 +150,7 @@ export interface ReviewContext {
 	draft: string
 	brief: string
 	upstream: UpstreamArtifact[]
+	nodeBrief?: string // the per-instance spec THIS node was assigned (a fanned-out card/scene's own beat spec); lets conformance check the deliverable against its assignment, not only the whole-video brief (0023)
 	revalidation?: boolean // true = the deliverable was already approved and an upstream has since changed; judge whether it still holds, don't re-review from scratch
 }
 
@@ -175,6 +176,12 @@ export function buildReviewerPrompt(contract: TypeContract, review: ReviewSpec, 
 	}
 	parts.push("Respond with exactly one line: `VERDICT: pass` or `VERDICT: revise`, then (if revise) the specific, actionable fixes.")
 	parts.push(`\n## Brief\n${ctx.brief}`)
+	if (ctx.nodeBrief) {
+		// 0023: a fanned-out leaf (a card/scene) was produced from its OWN beat spec, not just the
+		// whole-video brief. Give the reviewer that assignment so conformance can catch a leaf that drifts
+		// from the beat it was told to realize (the producer gets this; previously the reviewer did not).
+		parts.push(`\n## This node's assigned spec\nThe specific instruction THIS deliverable was produced from — check the deliverable against this, not only the whole-video brief above:\n${ctx.nodeBrief}`)
+	}
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## Approved upstream work")
 		for (const u of ctx.upstream) parts.push(`\n### ${u.type}\n${u.content}`)

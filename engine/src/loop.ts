@@ -685,7 +685,7 @@ export class Engine {
 				continue
 			}
 			const rt0 = Date.now()
-			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream })
+			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream, nodeBrief: node.description ?? undefined })
 			const rres = await this.runSubagent(
 				{
 					prompt: reviewPrompt,
@@ -1052,7 +1052,7 @@ export class Engine {
 		const revise: string[] = []
 		for (const rv of sensitive) {
 			const rt0 = Date.now()
-			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, revalidation: true })
+			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root?.description ?? "", upstream, nodeBrief: node.description ?? undefined, revalidation: true })
 			const rres = await this.runSubagent(
 				{
 					prompt: reviewPrompt,
