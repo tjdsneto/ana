@@ -78,6 +78,17 @@ export interface VideoFile {
 	mtimeMs: number
 }
 
+// One produced media file under a node's output dir — for the dashboard media strips (build-assets
+// gallery, build-voice / build-soundtrack audio players).
+export interface MediaFile {
+	path: string // relative to the artifacts root; the key /api/media takes as ?path=
+	name: string
+	dir: string
+	kind: "audio" | "image" | "video"
+	sizeBytes: number
+	mtimeMs: number
+}
+
 export interface ChatOutput {
 	id: string
 	type: string
@@ -146,6 +157,35 @@ export function videoUrlByPath(path: string): string {
 // Rendered storyboard board sheet for a version (404s for versions produced before boards existed).
 export function boardUrlByVersion(versionId: string): string {
 	return `/api/board?version_id=${encodeURIComponent(versionId)}`
+}
+
+// Stream URL for any produced media file (audio/image/video) by its artifacts-root-relative path.
+export function mediaUrlByPath(path: string): string {
+	return `/api/media?path=${encodeURIComponent(path)}`
+}
+
+// List the media a node produced, under <productionId>/<dir>. `kinds` filters (default audio+image).
+export async function listNodeMedia(productionId: string, dir: string, kinds?: Array<MediaFile["kind"]>): Promise<MediaFile[]> {
+	const q = new URLSearchParams({ production_id: productionId, dir })
+	if (kinds) q.set("kinds", kinds.join(","))
+	const { files } = await json<{ files: MediaFile[] }>(await fetch(`/api/media-list?${q.toString()}`))
+	return files
+}
+
+// Which output dir(s) a node type's produced media live in, relative to the production root. These are
+// the craft's conventions (build-* nodes write into the shared board/ + assets/ dirs), surfaced so the
+// dashboard can show what was made. Empty = this node type has no media strip.
+export function mediaDirsForNodeType(nodeType: string): Array<{ dir: string; kinds: Array<MediaFile["kind"]>; label: string }> {
+	switch (nodeType) {
+		case "build-assets":
+			return [{ dir: "assets", kinds: ["image"], label: "Assets" }]
+		case "build-soundtrack":
+			return [{ dir: "board/audio", kinds: ["audio"], label: "Soundtrack" }]
+		case "build-voice":
+			return [{ dir: "board/media/vo", kinds: ["audio"], label: "Voice" }]
+		default:
+			return []
+	}
 }
 
 export function emitsBoard(nodeType: string): boolean {

@@ -49,6 +49,71 @@ export async function listVideos(root: string): Promise<VideoFile[]> {
 	return out
 }
 
+// One produced media file (audio/image/video) under a node's output dir — for the dashboard media strips
+// (build-assets gallery, build-voice / build-soundtrack players).
+export interface MediaFile {
+	path: string // relative to the artifacts root; the key /api/media takes as ?path=
+	name: string
+	dir: string // containing folder relative to root
+	kind: "audio" | "image" | "video"
+	sizeBytes: number
+	mtimeMs: number
+}
+
+const MIME: Record<string, string> = {
+	mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mkv: "video/x-matroska",
+	wav: "audio/wav", mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac",
+	png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+}
+
+// The servable content-type for a filename by extension, or undefined for an unknown/non-media type.
+export function contentTypeFor(name: string): string | undefined {
+	const ext = name.split(".").pop()?.toLowerCase()
+	return ext ? MIME[ext] : undefined
+}
+
+// Classify a filename as audio / image / video for the media strips, or null if it is neither.
+export function mediaKind(name: string): MediaFile["kind"] | null {
+	const ct = contentTypeFor(name)
+	if (!ct) return null
+	if (ct.startsWith("audio")) return "audio"
+	if (ct.startsWith("image")) return "image"
+	if (ct.startsWith("video")) return "video"
+	return null
+}
+
+// Every audio/image/video file under `startAbs` (already resolved under root), capped. Walks
+// recursively; unreadable dirs are skipped. Paths are relative to root (the /api/media ?path= key).
+export async function listMedia(root: string, startAbs: string, kinds: Set<MediaFile["kind"]>): Promise<MediaFile[]> {
+	const out: MediaFile[] = []
+	const CAP = 300
+	async function walk(dir: string): Promise<void> {
+		if (out.length >= CAP) return
+		let entries: Dirent[]
+		try {
+			entries = await readdir(dir, { withFileTypes: true })
+		} catch {
+			return
+		}
+		for (const e of entries) {
+			if (out.length >= CAP) break
+			const full = join(dir, e.name)
+			if (e.isDirectory()) {
+				await walk(full)
+			} else if (e.isFile()) {
+				const k = mediaKind(e.name)
+				if (k && kinds.has(k)) {
+					const info = await stat(full)
+					out.push({ path: relative(root, full), name: e.name, dir: relative(root, dir), kind: k, sizeBytes: info.size, mtimeMs: info.mtimeMs })
+				}
+			}
+		}
+	}
+	await walk(startAbs)
+	out.sort((a, b) => (a.path < b.path ? -1 : 1))
+	return out
+}
+
 // Resolve a relative path under root, guarding against traversal. Returns null if it escapes root.
 // Accepts an already-absolute path too (e.g. a version's stored /data/artifacts/... path) by making
 // it relative to root first, so one guard covers both the gallery (?path=) and version_id lookups.

@@ -15,6 +15,10 @@ import {
 	getProductions,
 	getVideos,
 	isVideoPath,
+	listNodeMedia,
+	type MediaFile,
+	mediaDirsForNodeType,
+	mediaUrlByPath,
 	videoUrlByPath,
 	videoUrlByVersion,
 	type ChatOutput,
@@ -258,6 +262,7 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
 				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
 				{versions.length === 0 && kids.length > 0 && <p className="muted">No artifact of its own — expands into the sub-steps below.</p>}
+				<NodeMedia productionId={detail.root.id} nodeType={nv.node.type} />
 				{versions.length > 0 && (
 					<div className="revs">
 						{versions.map((vw, i) => (
@@ -341,6 +346,67 @@ function VersionBlock({
 					</div>
 				)}
 			</div>
+		</div>
+	)
+}
+
+// The media a node actually produced, surfaced so you can hear/see it in place: audio players for
+// build-voice / build-soundtrack, a thumbnail gallery for build-assets. Which dirs hold a node type's
+// media is a craft convention (mediaDirsForNodeType); this fetches them lazily and renders nothing when
+// a node type has no media or none was written. An image opens full-size in a new tab on click.
+function NodeMedia({ productionId, nodeType }: { productionId: string; nodeType: string }) {
+	const specs = mediaDirsForNodeType(nodeType)
+	const [files, setFiles] = useState<MediaFile[]>([])
+	useEffect(() => {
+		if (specs.length === 0) return
+		let alive = true
+		void Promise.all(specs.map((s) => listNodeMedia(productionId, s.dir, s.kinds).catch(() => [] as MediaFile[])))
+			.then((lists) => {
+				if (!alive) return
+				// de-dupe by path (a dir can be listed by more than one spec)
+				const seen = new Set<string>()
+				const merged: MediaFile[] = []
+				for (const f of lists.flat()) {
+					if (!seen.has(f.path)) {
+						seen.add(f.path)
+						merged.push(f)
+					}
+				}
+				setFiles(merged)
+			})
+		return () => {
+			alive = false
+		}
+	}, [productionId, nodeType, specs.length])
+
+	if (specs.length === 0 || files.length === 0) return null
+	const audio = files.filter((f) => f.kind === "audio")
+	const images = files.filter((f) => f.kind === "image")
+	const label = specs.map((s) => s.label).join(" · ")
+	return (
+		<div className="node-media">
+			<div className="sub-h">{label} — produced files <span className="muted">{files.length}</span></div>
+			{audio.length > 0 && (
+				<ul className="audio-list">
+					{audio.map((f) => (
+						<li key={f.path} className="audio-row">
+							<span className="audio-name">{f.name}</span>
+							<audio controls preload="none" src={mediaUrlByPath(f.path)} />
+							<span className="muted">{fmtBytes(f.sizeBytes)}</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{images.length > 0 && (
+				<div className="asset-grid">
+					{images.map((f) => (
+						<a key={f.path} className="asset-thumb" href={mediaUrlByPath(f.path)} target="_blank" rel="noreferrer" title={`${f.name} · ${fmtBytes(f.sizeBytes)}`}>
+							<img src={mediaUrlByPath(f.path)} alt={f.name} loading="lazy" />
+							<span className="asset-name">{f.name}</span>
+						</a>
+					))}
+				</div>
+			)}
 		</div>
 	)
 }
