@@ -18,6 +18,8 @@ function node(id: string, parentId: string | null, runs: Array<{ dur: number; co
 		cacheCreationTokens: 0,
 		costUsd: r.cost,
 		durationMs: r.dur,
+		numTurns: null,
+		apiDurationMs: null,
 		status: "done",
 		createdAt: "2026-11-05T00:00:00Z",
 		prompt: null,
