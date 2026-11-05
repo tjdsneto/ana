@@ -1503,6 +1503,22 @@ code {
 	font-style: italic;
 }
 
+/* ---- approved-by badge ---- */
+.approved-by {
+	font-size: 11px;
+	color: var(--muted);
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	white-space: nowrap;
+}
+.approved-by.human {
+	color: var(--fg);
+}
+.approved-by.agent-escalated {
+	color: var(--warn, #b26a00);
+}
+
 /* ---- step info (fixed per-type description) ---- */
 .step-info {
 	position: relative;

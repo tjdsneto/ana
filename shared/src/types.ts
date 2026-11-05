@@ -44,6 +44,13 @@ export type VersionStatus =
 	| "superseded"
 	| "stale" // an upstream was reopened; this version must be revalidated (kept if it still holds, else rebuilt) before it counts as approved again
 
+// Who approved a version, recorded when its status becomes "approved":
+// - "human": a person clicked approve on the gate (the approve service).
+// - "agent": the engine auto-approved on `high` autonomy after its reviewers passed — no human in the loop.
+// - "agent-escalated": the engine auto-approved despite unresolved review (forced at the redo/agreement cap).
+// null on versions approved before this was tracked.
+export type ApprovedBy = "human" | "agent" | "agent-escalated"
+
 export type ReviewKind = "craft" | "coverage" | "consistency" | "audio"
 export type ReviewVerdict = "pass" | "revise"
 

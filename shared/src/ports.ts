@@ -4,6 +4,7 @@
 
 import type {
 	Account,
+	ApprovedBy,
 	Asset,
 	Budget,
 	ChatInput,
@@ -26,13 +27,15 @@ import type {
 	VersionStatus,
 } from "./types.js"
 
-// Patch accepted by updateVersion — only the mutable columns.
+// Patch accepted by updateVersion — only the mutable columns. When `approvedBy` is set, the store also
+// stamps `approvedAt` from its clock, so callers record who approved without threading a timestamp.
 export interface VersionPatch {
 	status?: VersionStatus
 	artifactPath?: string
 	feedback?: string
 	subagent?: SubagentRef
 	builtFrom?: Record<string, string>
+	approvedBy?: ApprovedBy
 }
 
 // ── Store: all DB access ────────────────────────────────────────────────────────────────────

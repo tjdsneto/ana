@@ -192,6 +192,8 @@ export class FakeStore implements Store {
 			subagent: input.subagent ?? null,
 			feedback: null,
 			builtFrom: input.builtFrom ?? null,
+			approvedBy: null,
+			approvedAt: null,
 			createdAt: now,
 			updatedAt: now,
 		}
@@ -200,7 +202,10 @@ export class FakeStore implements Store {
 	}
 	async updateVersion(id: string, patch: VersionPatch): Promise<void> {
 		const v = this.versions.get(id)
-		if (v) this.versions.set(id, { ...v, ...patch, updatedAt: this.clock.now() })
+		if (v) {
+			const approvedAt = patch.approvedBy ? { approvedAt: this.clock.now() } : {}
+			this.versions.set(id, { ...v, ...patch, ...approvedAt, updatedAt: this.clock.now() })
+		}
 	}
 	async getVersion(id: string): Promise<Version | null> {
 		return this.versions.get(id) ?? null

@@ -31,7 +31,7 @@ export async function approve(store: Store, input: { outputId?: string; versionI
 			kind: "approve",
 		})
 		await store.resolveOutput(out.id)
-		if (out.versionId) await store.updateVersion(out.versionId, { status: "approved" })
+		if (out.versionId) await store.updateVersion(out.versionId, { status: "approved", approvedBy: "human" })
 		if (out.nodeId) await store.updateNodeStatus(out.nodeId, "approved")
 		return { ok: true }
 	}
@@ -42,7 +42,7 @@ export async function approve(store: Store, input: { outputId?: string; versionI
 		if (!node) throw new Error(`approve: node ${version.nodeId} not found`)
 		await assertProductionActive(store, node.productionId, "approve")
 		await store.recordInput({ productionId: node.productionId, nodeId: node.id, versionId: version.id, kind: "approve" })
-		await store.updateVersion(version.id, { status: "approved" })
+		await store.updateVersion(version.id, { status: "approved", approvedBy: "human" })
 		await store.updateNodeStatus(node.id, "approved")
 		return { ok: true }
 	}

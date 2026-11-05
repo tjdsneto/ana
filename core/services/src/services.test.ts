@@ -85,6 +85,14 @@ describe("approve", () => {
 		expect((await store.getVersion(version.id))?.status).toBe("approved")
 		expect((await store.getNode(node.id))?.status).toBe("approved")
 	})
+
+	it("stamps approvedBy=human and an approvedAt timestamp on a gate approval", async () => {
+		const { version } = await presentSomething()
+		await approve(store, { versionId: version.id })
+		const approved = await store.getVersion(version.id)
+		expect(approved?.approvedBy).toBe("human")
+		expect(approved?.approvedAt).toBeInstanceOf(Date)
+	})
 })
 
 describe("submitFeedback", () => {

@@ -344,6 +344,20 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 	)
 }
 
+// Who approved this version, shown on an approved version row only when it's recorded: a human via the
+// gate, or the engine auto-approving on high autonomy (agent), or the engine forcing it past unresolved
+// review (agent-escalated). Rendered only when `by` is set (pre-tracking rows just show the status chip).
+function ApprovedBadge({ by, at }: { by: "human" | "agent" | "agent-escalated"; at: string | null }) {
+	const label = by === "human" ? "approved by a human" : by === "agent" ? "auto-approved by the engine" : "force-approved by the engine"
+	const title = at ? `${label} · ${new Date(at).toLocaleString()}` : label
+	return (
+		<span className={`approved-by ${by}`} title={title}>
+			{by === "human" ? "👤" : "🤖"} {label}
+			{at && <span className="muted"> · {fmtTime(at)}</span>}
+		</span>
+	)
+}
+
 // One attempt in the timeline: the producer run, the artifact it produced, and the feedback it got.
 function VersionBlock({
 	vw,
@@ -370,6 +384,7 @@ function VersionBlock({
 					<StatusChip status={version.status} />
 					{active && <Spinner label={`producing v${version.n}`} />}
 					<span className="rev-time">{fmtTime(version.createdAt)}</span>
+					{version.status === "approved" && version.approvedBy && <ApprovedBadge by={version.approvedBy} at={version.approvedAt} />}
 					{producer && <RunButton interaction={producer} title={`${titleCase(nodeType)} · producer · v${version.n}`} versionId={version.id} />}
 				</div>
 				<div className="rev-art">
@@ -391,12 +406,21 @@ function VersionBlock({
 						<span>Handed to the producer to write <b>v{nextN}</b>.</span>
 					</div>
 				)}
-				{isLast && reviews.some((r) => r.verdict === "revise") && (
-					<div className="feeds">
-						<Loop />
-						<span>Open feedback — a <b>v{version.n + 1}</b> run will address it next.</span>
-					</div>
-				)}
+				{/* A revise on the last version only drives a v2 if the version is still OPEN. If it's already
+				    approved (e.g. an advisory reviewer on an agreement step, or a forced approval), no v2
+				    runs — say that instead of promising a redo that will never happen. */}
+				{isLast &&
+					reviews.some((r) => r.verdict === "revise") &&
+					(version.status === "approved" ? (
+						<div className="feeds">
+							<span>A reviewer suggested changes, but this step was approved anyway (advisory / forced) — no revision will run.</span>
+						</div>
+					) : (
+						<div className="feeds">
+							<Loop />
+							<span>Open feedback — a <b>v{version.n + 1}</b> run will address it next.</span>
+						</div>
+					))}
 			</div>
 		</div>
 	)

@@ -24,6 +24,8 @@ export interface Version {
 	status: string
 	artifactPath: string | null
 	feedback: string | null
+	approvedBy: "human" | "agent" | "agent-escalated" | null // who approved it; null = pre-tracking / not approved
+	approvedAt: string | null // when it was approved
 	createdAt: string
 	updatedAt: string
 }

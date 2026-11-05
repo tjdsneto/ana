@@ -878,7 +878,8 @@ export class Engine {
 		// EXCEPT the holistic final review, which stays a human gate on every lever, so the finished video
 		// never ships without human sight. `low`/`medium` present as before.
 		if (root.autonomyLever === "high" && !contract.holisticReview) {
-			await this.store.updateVersion(versionId, { status: "approved" })
+			// Auto-approved by the engine (no human). A caveat means it was forced past unresolved review.
+			await this.store.updateVersion(versionId, { status: "approved", approvedBy: caveat ? "agent-escalated" : "agent" })
 			await this.store.updateNodeStatus(node.id, "approved")
 			log.info("node.auto_approved", { versionId, lever: "high", escalation: Boolean(caveat) })
 			return

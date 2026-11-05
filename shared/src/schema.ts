@@ -5,6 +5,7 @@
 import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 import type {
 	ActorKind,
+	ApprovedBy,
 	AssetType,
 	AutonomyLever,
 	ChatInputKind,
@@ -67,6 +68,8 @@ export const versions = pgTable(
 		artifactPath: text("artifact_path"), // file on the shared volume (not in the DB)
 		subagent: jsonb("subagent").$type<SubagentRef>(), // attached subagent + state (idempotency)
 		feedback: text("feedback"),
+		approvedBy: text("approved_by").$type<ApprovedBy>(), // who approved this version (human | agent | agent-escalated); null until approved / for pre-tracking rows
+		approvedAt: timestamp("approved_at", { withTimezone: true }), // when it was approved; stamped by the store alongside approvedBy
 		builtFrom: jsonb("built_from").$type<Record<string, string>>(), // depNodeId → effective content hash of the upstream this version was produced from (revalidation: stale when an upstream's hash no longer matches)
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

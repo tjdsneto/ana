@@ -220,7 +220,9 @@ export class PgStore implements Store {
 	}
 
 	async updateVersion(id: string, patch: VersionPatch): Promise<void> {
-		await this.db.update(versions).set({ ...patch, updatedAt: this.clock.now() }).where(eq(versions.id, id))
+		// Stamp approvedAt from the clock whenever the caller records who approved it.
+		const approvedAt = patch.approvedBy ? { approvedAt: this.clock.now() } : {}
+		await this.db.update(versions).set({ ...patch, ...approvedAt, updatedAt: this.clock.now() }).where(eq(versions.id, id))
 		await this.touch()
 	}
 
