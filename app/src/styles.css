@@ -1445,3 +1445,94 @@ code {
 	color: var(--faint);
 	cursor: default;
 }
+
+/* ---- build-voice: script line ↔ per-scene clip ---- */
+.vo-lines {
+	list-style: none;
+	margin: 0 0 4px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.vo-line {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+}
+.vo-line .vo-n {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--fg) 8%, transparent);
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--muted);
+}
+.vo-line .vo-text {
+	flex: 1 1 220px;
+	min-width: 180px;
+	font-size: 13px;
+	color: var(--fg);
+}
+.vo-line audio {
+	height: 32px;
+	flex: 1 1 240px;
+}
+.vo-line .vo-missing {
+	flex: 1 1 240px;
+	font-size: 12px;
+	font-style: italic;
+}
+
+/* ---- source-file chips + file viewer modal ---- */
+.file-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.file-chip {
+	border: 1px solid var(--line);
+	background: var(--surface);
+	color: var(--fg);
+	border-radius: 6px;
+	padding: 4px 10px;
+	font-family: var(--mono);
+	font-size: 12px;
+	cursor: pointer;
+}
+.file-chip:hover {
+	border-color: var(--line-strong);
+}
+.modal-dl {
+	font-size: 12px;
+	color: var(--muted);
+	text-decoration: none;
+	white-space: nowrap;
+}
+.modal-dl:hover {
+	color: var(--fg);
+}
+.file-audio {
+	width: 100%;
+}
+.file-img {
+	display: block;
+	max-width: 100%;
+	margin: 0 auto;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.file-video {
+	width: 100%;
+	border-radius: 6px;
+}
