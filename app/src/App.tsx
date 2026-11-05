@@ -291,10 +291,16 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 	const isLeaf = kids.length === 0
 	const phase = isLeaf ? stepPhase(nv) : null
 	const chipStatus = phase ?? nv.node.status
+	// Visual weight follows the derived phase, not the raw node.status — otherwise a leaf parked back to
+	// `pending` between redo rounds reads as dimmed "not started" while its chip says "revising". Dim only
+	// what truly isn't moving (queued / waiting); accent what a worker holds (producing); leave the rest
+	// (reviewing / revising / approved) at full strength.
+	const activeEdge = phase ? phase === "producing" : isActive(nv.node.status)
+	const dim = phase ? phase === "queued" || phase === "waiting" : isPending(nv.node.status)
 	const spinning = phase ? phase === "producing" : isActive(nv.node.status)
 
 	return (
-		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""} ${isActive(nv.node.status) ? "active" : ""} ${isPending(nv.node.status) ? "pending" : ""}`}>
+		<section className={`stage ${open ? "open" : ""} ${depth > 0 ? "nested" : ""} ${activeEdge ? "active" : ""} ${dim ? "pending" : ""}`}>
 			<button className="stage-head" onClick={() => setOpen((o) => !o)}>
 				<span className="stage-ico" aria-hidden="true"><StageIcon type={nv.node.type} /></span>
 				<span className="stage-main">
