@@ -121,6 +121,17 @@ engine `dist` + `engine/types/` are COPYed in, not bind-mounted — so `docker c
 docker compose up -d --no-deps engine-worker`. Confirm the new build is live by checking `buildSha` in
 the `worker.up` log matches HEAD.
 
+**Scaling the fan-out across workers (issue 0009).** The claim seam is `FOR UPDATE SKIP LOCKED`
+(`shared/src/store/pg.ts` `claimReadyNode`), so N worker processes never double-claim a node — run
+more to produce fanned-out leaves (cards/scenes) concurrently instead of serially:
+`docker compose up -d --scale engine-worker=<N>` (the service sets no `container_name`, so scaling
+works out of the box). Each replica polls + `LISTEN`s independently; SKIP LOCKED hands each a different
+ready node. Caveats: **(1)** a replica that dies mid-node strands that node until the self-heal reaper
+lands (issue 0011, deferred) — more replicas = more restart exposure; **(2)** `SUBAGENT_MAX_CALLS` is a
+per-process guard, so the effective spend cap ≈ N × the per-worker cap; **(3)** the cheaper/faster
+half of the throughput problem landed separately (issue 0021: carried-forward passes + Sonnet-tiered
+mechanical reviewers). Measure the real speedup on a live N-worker run before relying on it.
+
 ## Testing seam — ports and adapters (bake in from the start)
 
 An interface (port) at every external edge; core logic depends on the interface, never the concrete:
