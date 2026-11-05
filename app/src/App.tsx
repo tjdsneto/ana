@@ -1285,12 +1285,16 @@ function Gate({ inbox, productionId, budget, onAction, cancelled }: { inbox: Cha
 		await fn()
 		onAction()
 	}
-	if (inbox.length === 0 && !(budget && !budget.approved)) return null
+	// The unapproved render budget is a gate item that waits on the user just like a present — it renders
+	// inside the inbox, so count it in the badge too (otherwise the badge reads 1 while two actions wait).
+	const pendingBudget = budget && !budget.approved ? 1 : 0
+	const count = inbox.length + pendingBudget
+	if (count === 0) return null
 	// A cancelled production is terminal: its gate items are leftovers, not live asks. Keep them visible
 	// for the record but disable every action — approving/feeding back a cancelled production does nothing.
 	return (
 		<div className="gate">
-			<div className="gate-head">Inbox <span className="badge">{inbox.length}</span></div>
+			<div className="gate-head">Inbox <span className="badge">{count}</span></div>
 			{cancelled && <div className="gate-note">Production cancelled — these items are closed; no action can be taken.</div>}
 			{inbox.map((o) => (
 				<div key={o.id} className="out">
