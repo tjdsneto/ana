@@ -37,7 +37,14 @@ async function main(): Promise<void> {
 	const runner = makeRunner(runnerConfig)
 	const runners = new Map<string, SubagentRunner>([[runner.engine, runner]])
 	if (runnerConfig.engine !== "fake") {
-		for (const eng of ["claude", "codex", "gemini"]) {
+		// claude + codex are verified working. gemini is DISABLED by default: the only key on hand returns
+		// 402 RESOURCE_EXHAUSTED (prepaid credits depleted) on generateContent, though the key is valid
+		// (models.list → 200) and the adapter is correct. Re-enable with SUBAGENT_GEMINI_ENABLED=1 once a
+		// credited Gemini key is in .engine_env. While disabled, a node that pins engine "gemini" fails
+		// loud in loop.runnerFor (no runner registered) rather than burning a redo loop on 402s.
+		const engines = ["claude", "codex"]
+		if (process.env.SUBAGENT_GEMINI_ENABLED === "1") engines.push("gemini")
+		for (const eng of engines) {
 			if (!runners.has(eng)) runners.set(eng, makeRunner({ ...runnerConfig, engine: eng }))
 		}
 	}

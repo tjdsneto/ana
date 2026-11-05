@@ -56,3 +56,7 @@ SUBAGENT_ENGINE=fake
 # 1Password, inject here; never baked. Read when a node pins engine "gemini" (TypeContract.engine) or
 # SUBAGENT_ENGINE=gemini. Same key as the gemini image-gen provider above (IMAGE_PROVIDER=gemini).
 # GEMINI_API_KEY=
+#
+# Gemini subagent engine is DISABLED by default: the current key 402s (RESOURCE_EXHAUSTED, prepaid
+# credits depleted) though it is valid. Once a credited Gemini key is set above, re-enable the engine:
+# SUBAGENT_GEMINI_ENABLED=1
