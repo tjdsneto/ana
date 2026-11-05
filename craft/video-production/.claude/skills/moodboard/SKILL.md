@@ -35,3 +35,5 @@ Decide six fields; each MUST trace to THIS brand's own material (its real produc
 ## Output
 
 A concise moodboard: the mood in one line, then the six fields with hexes, type stack + weights, the layout primitive, the surface rules, and the signature — each with its brand-sourced reason. Keep it buildable: the storyboard must be able to turn it into inline-HTML cards directly. Honesty: approximate hexes/fonts are tagged as approximate (tune on render); nothing invented as fact.
+
+Also name the **voice** (it carries into `film.json` `voice.id`): the narration is ElevenLabs. **Default `rachel`** (warm, neutral). If the brief asks for a **masculine** voice use `adam` (or `antoni`); if it names a **specific** ElevenLabs voice (a friendly name `rachel`/`adam`/`antoni`/`domi`, or a raw voice_id), use that. State the choice + a one-line reason tied to the brand/audience, and give a `speed` (≈0.95–1.05). The voice id binds the ElevenLabs voice; local fallback engines ignore it.
