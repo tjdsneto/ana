@@ -7,6 +7,9 @@ node_modules
 # Not needed at build / must not leak in.
 .git
 .env
+.engine_env
+.common_env
 *.log
 server/data
+engine/data
 tmp
