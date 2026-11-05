@@ -20,7 +20,7 @@ You assemble the finished board's `film.json` from the **approved cards** (one p
 
 ## Steps
 
-1. For each card, write its `plate_html` to `<boardDir>/plates/<id>.html`. If a card's `@font-face` points anywhere else, rewrite it to `<boardDir>/fonts/<name>.woff2`. Place the sourced font file once at `<boardDir>/fonts/<name>.woff2` (if it is not available offline, note that and let the plates fall back to the moodboard's fallback face — do not fabricate a font).
+1. For each card, write its `plate_html` to `<boardDir>/plates/<id>.html`. If a card's `@font-face` points anywhere else, rewrite it to `<boardDir>/fonts/<name>.woff2`. Stage the one sourced font once at `<boardDir>/fonts/<name>.woff2`, resolving it in this order (issue 0017 / `docs/lisa/font-resolution.md`): **(a)** the moodboard's declared **primary** face when its file is present in the font store — `craft/video-production/assets/fonts/<Face>.woff2` (or `.ttf`) — copy it into `<boardDir>/fonts/`; **(b)** otherwise the moodboard's declared **substitute** (a free, sourced webfont), `@font-face`d by its real `src` URL and cached into `fonts/` when fetchable. Never fabricate a font and never fall back to a system face: a missing licensed primary degrades to the declared substitute (a provisioning gap, not a quality fail) and must not block the render.
 2. Compose `film.json`:
    - `voice`: `{id, speed, lead, gap}` from the moodboard.
    - `script`: the VO lines in order, **verbatim, each once**. Keep the close the storyboard planned for this video's §B type — a B-launch ends on its CTA line, a B-teaser on a deferred tease, a demo/explainer on its next-step/resolve. Do **not** force a CTA to the end if the plan doesn't end on one.

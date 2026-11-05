@@ -91,6 +91,10 @@ services:
       # (craft/video-production/tools/…) are /repo-relative.
       - ./craft/video-production/.claude/skills:/repo/.claude/skills
       - ./craft/video-production/tools:/repo/craft/video-production/tools
+      # Brand/licensed font store (issue 0017): fonts dropped here are readable by the worker (baked +
+      # live-mounted), so a moodboard's declared primary face can be staged into the board instead of
+      # only the free substitute. See docs/lisa/font-resolution.md + the store's README.
+      - ./craft/video-production/assets/fonts:/repo/craft/video-production/assets/fonts
     depends_on:
       db:
         condition: service_healthy
