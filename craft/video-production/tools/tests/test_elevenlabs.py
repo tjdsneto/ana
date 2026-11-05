@@ -41,6 +41,20 @@ def test_build_payload():
     assert m.build_payload("x", "m", 0.1)["voice_settings"]["speed"] == 0.7
 
 
+def test_build_payload_voice_settings():
+    m = _load()
+    # defaults: speaker boost on, a style key present, a dynamic (not flat 0.5) default stability
+    vs = m.build_payload("x", "m", 1.0)["voice_settings"]
+    assert vs["use_speaker_boost"] is True
+    assert "style" in vs and "stability" in vs
+    # explicit values pass through
+    vs = m.build_payload("x", "m", 1.0, stability=0.2, style=0.6, speaker_boost=False)["voice_settings"]
+    assert vs["stability"] == 0.2 and vs["style"] == 0.6 and vs["use_speaker_boost"] is False
+    # stability/style clamped to 0.0-1.0
+    assert m.build_payload("x", "m", 1.0, stability=2.0)["voice_settings"]["stability"] == 1.0
+    assert m.build_payload("x", "m", 1.0, style=-1.0)["voice_settings"]["style"] == 0.0
+
+
 def test_resolve_key():
     m = _load()
     assert m.resolve_key("v", None, "EL_UNSET_X") == "v"
@@ -60,6 +74,7 @@ if __name__ == "__main__":
     try:
         test_pick_voice()
         test_build_payload()
+        test_build_payload_voice_settings()
         test_resolve_key()
     except AssertionError as e:
         print(f"ELEVENLABS FAIL: {e}")

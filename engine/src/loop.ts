@@ -814,8 +814,13 @@ export class Engine {
 		const n = (latest?.n ?? 0) + 1
 		const upstream = await this.collectUpstream(node)
 
+		// When a human submits feedback on this review's present, gate.ts denies the version + stores the
+		// feedback and re-dispatches us. Thread it in as a directive so the critic reopens the step the
+		// feedback is about instead of re-grading the same render to a pass (issue 0037).
+		const feedback = latest?.status === "denied" ? (latest.feedback ?? undefined) : undefined
+
 		const t0 = Date.now()
-		const holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream })
+		const holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream, feedback })
 		const result = await this.runSubagent(
 			{
 				prompt: holisticPrompt,

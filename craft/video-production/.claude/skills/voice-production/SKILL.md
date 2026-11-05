@@ -32,6 +32,13 @@ Each engine is a local, keyless tool the worker can run. Know what each is for:
 
 **Picking:** **if `$ELEVENLABS_API_KEY` is present, default to `elevenlabs`** — it is the most natural voice and the house default. Use a friendly voice id (`rachel`/`adam`/`antoni`/`domi`) or a raw voice_id; an unknown/Kokoro `voice.id` (e.g. `af_heart`) falls back to `rachel`, so a board that still carries a local id is fine. Only when there is **no** ElevenLabs key: final/hero cut → `kokoro` if its model is present at `$KOKORO_HOME`, otherwise `piper`; draft/preview, a resource/time crunch, or a language/voice the others lack → `piper`. A brand that supplies its own keyed service (e.g. `openai-tts`) and asks for it overrides the default. **Fall back to whichever engine is actually available** — try `elevenlabs` → `kokoro` → `piper` in that order, dropping to the next only when the current one's key/model/binary is missing or its call fails; stop and report only if none works — never fabricate audio. Provider tools (`openai-tts`, …) are the voice seam: adding one is a tool + a registry entry in `vo.py`, never engine code.
 
+## Expressivity — audio tags + voice settings (the anti-flat lever)
+
+A flat read is the AI tell; `elevenlabs` (eleven v4) is expressive and the way you get a dynamic, alive read:
+
+- **Inline audio tags.** v4 reads bracketed performance cues in the line itself — `[excited]`, `[curious]`, `[warm]`, `[reassuring]`, `[whispers]`, `[laughs]` — as direction, not speech. They are authored in `script.txt` (the `script`/`storyboard` steps own that; season the beats that want emotion, don't tag every line). vo.py sends the tagged line to a tag-aware engine but **times + captions only the spoken words** (tags are stripped before alignment), and a non-tag engine (kokoro/piper) gets the stripped line so it never speaks a literal "excited". So tags are always safe to leave in the script whatever engine runs.
+- **Voice settings** (`film.json` `voice{}`): `stability` (0-1, **lower = more varied/expressive** — the flat default is the tell), `style` (0-1 expressiveness), `speaker_boost`. Defaults are already lively (stability 0.4, style 0.35); set them in the voice block to push a beat further. Only expressive engines use them; kokoro/piper ignore them.
+
 ## When the narration is a real clip, not TTS (align.py)
 
 Sometimes the voice is **not** synthesized — a human recorded the take, or it rides an avatar / cinematic render (HeyGen / Higgsfield), a screen recording, or a selfie clip. Then you don't synthesize; you **word-time the existing clip** onto the same timeline so build / mix / render / captions read it unchanged:

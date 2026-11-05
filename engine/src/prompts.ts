@@ -226,7 +226,10 @@ export function parseReopen(output: string): ReopenTarget[] {
 // The final-review producer prompt: the critic watches the finished (polished) video and either passes
 // the whole production or names the steps to redo. The engine owns the output contract; the reviewer
 // skill owns the good-video rubric.
-export function buildHolisticPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+export function buildHolisticPrompt(
+	contract: TypeContract,
+	ctx: { brief: string; upstream: UpstreamArtifact[]; feedback?: string },
+): string {
 	const parts: string[] = []
 	parts.push(
 		`You are the final whole-video reviewer for this ${contract.type}. Judge the finished video as a whole against your reviewer skill's good-video rubric — pacing, clarity, does it deliver the brief, do the parts play well together.`,
@@ -234,6 +237,14 @@ export function buildHolisticPrompt(contract: TypeContract, ctx: { brief: string
 	parts.push(
 		"Respond with `VERDICT: pass` if it is ready for the human, or `VERDICT: revise` if a specific earlier step must be redone. On revise, add one line per fix: `REOPEN: <step> — <reason>` (step = the pipeline node to redo, e.g. moodboard, script, storyboard, render, polish). When a step has fanned out into numbered units, target just the bad one with `REOPEN: <step>[<n>] — <reason>` (e.g. `scene[3]`, 1-based) so its siblings are left alone. Name only the steps that must change — each reopen rebuilds everything downstream of it.",
 	)
+	if (ctx.feedback) {
+		// Human feedback on the finished video is a DIRECTIVE, not optional grading context. Without this,
+		// the critic re-grades the same render on its own rubric and passes — ignoring what the human asked
+		// (issue 0037). Force it to act: translate the feedback into the step that implements it and reopen.
+		parts.push(
+			`\n## The human reviewer's feedback — a directive you MUST act on\n${ctx.feedback}\n\nThis is explicit human direction on the finished video. Even if the video would otherwise pass your rubric, you MUST emit \`VERDICT: revise\` and \`REOPEN:\` the upstream step(s) that implement this request — do not pass with it unaddressed. Map it to the right step: wording / voiceover lines / voice expressivity or audio tags → \`script\`; the spoken voice choice or voice settings → the step that sets them (moodboard/storyboard); visual look → \`moodboard\`/\`storyboard\`; timing, captions, audio levels → \`polish\`. Put the request in the \`REOPEN\` reason so the reopened step knows exactly what to change.`,
+		)
+	}
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## The finished video + its inputs")
