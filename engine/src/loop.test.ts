@@ -323,27 +323,31 @@ describe("type registry", () => {
 		expect(disk.get("briefing").agreement).toBe(true)
 		expect(disk.get("final-review").holisticReview).toBe(true)
 		// storyboard is now a PLANNER that fans out one `card` per beat and exposes the cards to its
-		// dependents (assemble-board); the per-card craft reviewers live on the `card` type.
+		// dependents (assemble-board); the per-card axis reviewers live on the `card` type.
 		expect(disk.get("storyboard").planner).toBe(true)
 		expect(disk.get("storyboard").childType).toBe("card")
 		expect(disk.get("storyboard").exposeChildrenToDependents).toBe(true)
+		// 0018 collapse: the per-(deliverable×axis) review skills were merged into 4 generic axis
+		// reviewers (review-craft/-conformance/-consistency/-audio); card keeps all three axes, now
+		// pointing at the generics (each loads the per-deliverable rubric from references/craft-bar/review).
 		expect(disk.get("card").reviews?.map((r) => r.skill)).toEqual(
-			expect.arrayContaining(["review-card-quality", "review-card-conformance", "review-card-consistency"]),
+			expect.arrayContaining(["review-craft", "review-conformance", "review-consistency"]),
 		)
 		// the composed board fan-out: storyboard(planner) → card[] → assemble-board, then build realizes.
 		// These are no longer STATIC checklist steps — brainstorm-how-select (plansProduction) materializes
 		// them as siblings — but the types still load and keep their structure (fan-out + deps now ride in
 		// the materialized DAG, asserted by the two-phase + production-plan tests).
 		for (const t of ["storyboard", "assemble-board", "build"]) expect(disk.has(t)).toBe(true)
-		// every step owns its reviewer rubric (no generic lenses): moodboard gets the pair, polish +
-		// briefing their single axis. moodboard's conformance axis is what lets revalidation keep it.
+		// every step carries its axis set via the generic axis reviewers (0018 collapse): moodboard the
+		// pair (craft+coverage), polish + briefing a single axis. moodboard's coverage axis is what lets
+		// revalidation keep it. The per-deliverable rubric each generic loads lives in references/craft-bar/review.
 		expect(disk.get("moodboard").reviews?.map((r) => r.skill)).toEqual(
-			expect.arrayContaining(["review-moodboard-quality", "review-moodboard-conformance"]),
+			expect.arrayContaining(["review-craft", "review-conformance"]),
 		)
-		expect(disk.get("polish").reviews?.[0]?.skill).toBe("review-polish-quality")
-		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-briefing-coverage")
+		expect(disk.get("polish").reviews?.[0]?.skill).toBe("review-craft")
+		expect(disk.get("briefing").reviews?.[0]?.skill).toBe("review-conformance")
 		// the whole-film audio/sync gate the retired render node carried now lives on assemble
-		expect(disk.get("assemble").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-render-audio")
+		expect(disk.get("assemble").reviews?.find((r) => r.kind === "audio")?.skill).toBe("review-audio")
 		// the monolithic render node stays retired — in neither the static checklist nor the type set
 		const vp = disk.get("video-project").checklist?.map((e) => e.type) ?? []
 		expect(vp).not.toContain("render")
@@ -396,9 +400,10 @@ describe("type registry", () => {
 		for (const t of ["build-assets", "build-voice", "build-soundtrack"]) expect((disk.get(t).reviews ?? []).length).toBeGreaterThan(0)
 		// a scene realizes its beat into a clip — a file-output leaf (authored render, or keyless spec)
 		expect(disk.get("scene").produces).toBe("file")
-		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate
+		// a scene is reviewed on all three axes — quality, conformance, and the consistency gate (0018: the
+		// generic axis reviewers, each loading the scene rubric from references/craft-bar/review)
 		expect(disk.get("scene").reviews?.map((r) => r.skill)).toEqual(
-			expect.arrayContaining(["review-scene-quality", "review-scene-conformance", "review-scene-consistency"]),
+			expect.arrayContaining(["review-craft", "review-conformance", "review-consistency"]),
 		)
 	})
 
@@ -424,8 +429,8 @@ describe("reviewer skills — two axes (quality + conformance)", () => {
 				name: "Script",
 				produce: "script",
 				reviews: [
-					{ name: "quality", kind: "craft", skill: "review-script-quality" },
-					{ name: "conformance", kind: "coverage", skill: "review-script-conformance" },
+					{ name: "quality", kind: "craft", skill: "review-craft" },
+					{ name: "conformance", kind: "coverage", skill: "review-conformance" },
 				],
 			},
 		]
@@ -441,9 +446,9 @@ describe("reviewer skills — two axes (quality + conformance)", () => {
 		}
 
 		const skills = runner.calls.map((c) => c.skill)
-		// each axis dispatched its declared reviewer skill (not the generic review:<kind> label)
-		expect(skills).toContain("review-script-quality")
-		expect(skills).toContain("review-script-conformance")
+		// each axis dispatched its declared (generic) reviewer skill (not the generic review:<kind> label)
+		expect(skills).toContain("review-craft")
+		expect(skills).toContain("review-conformance")
 		expect(skills).toContain("script") // the producer still ran under the script producer skill
 		// reviewer skills pass via the fake default (review-* ⇒ VERDICT: pass), so the leaf rolled up
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
