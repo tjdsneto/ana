@@ -10,6 +10,10 @@ description: Produce the visual direction for the video — a brand-sourced look
 
 Define the **look** the whole video is built in. This is the brand/look gate — do it well and the composed cards inherit a premium, specific direction; do it lazily and every card reads as AI slop. Read `craft/video-production/.claude/references/CRAFT-BAR.md` §A3 (the tell cluster) and `craft/video-production/.claude/references/COMPOSED-CARDS.md` §1 first.
 
+## Execute the concept's committed style (if your upstream carries one)
+
+If the approved brainstorm concept in your upstream commits to a **STYLE / look direction** (chosen upstream to fit the video's goal — issue 0026), **execute that style**: the six fields below *realize* it, they do not reinvent a different look. The style is a property of the concept, decided in the brainstorm, not something you invent here. Honour any brand / colour / asset / tone constraint the briefing carries (user-imposed constraints bind over the concept's style). Only when **no** committed style reaches your upstream do you derive the look from the brief + research from scratch (the original behaviour). Either way, the six-field method and the anti-slop tests below still apply.
+
 ## The method — source every choice, no defaults
 
 Decide six fields; each MUST trace to THIS brand's own material (its real product, palette, era, audience, content from the briefing/research), with the reason stated. "Clean / modern / readable / lets it breathe" is not a reason.

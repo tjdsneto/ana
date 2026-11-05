@@ -16,6 +16,7 @@ You review a **moodboard** on the **conformance** axis — does the visual direc
 - **Audience fit.** The direction suits who the video is for (a developer tool vs. a consumer app read differently).
 - **Brand constraints.** Any brand colours, logo, or asset rules the brief gives are honoured — not overridden by an invented palette.
 - **Serves this brief.** The direction supports the specific messages/product the brief names, not a generic pretty board.
+- **Matches the committed style (0026).** If the brainstorm concept in the upstream committed to a STYLE / look direction, the board must EXECUTE that style — a board that invents a different look than the concept's committed style is a conformance miss, however nice the look. (If no style was committed upstream, judge against the brief's tone/audience above.)
 
 ## Revalidation
 
