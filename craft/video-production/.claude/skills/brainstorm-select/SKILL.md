@@ -14,7 +14,7 @@ Before judging, read `craft/video-production/.claude/references/CRAFT-BAR.md`: h
 ## How to judge
 
 - **Goal fit first.** Which concept best delivers the brief's goal for its audience — not the cleverest, the most *effective*.
-- **Buildable.** It must be makeable by the engine's capabilities (capture-based / mockup / generative scenes, VO, chips, tail clip). Discount a concept that leans on something the craft can't render.
+- **Buildable (check the registry).** Each concept names the techniques it leans on (ids in `craft/video-production/.claude/references/techniques.json`). Confirm they are feasible: `now` / `now-keyed` / `needs-user-footage` build today; a `roadmap:<service>` technique (`generative-video-clip`, `avatar-presenter`) is acceptable ONLY if the concept flagged it and the lever permits that reach — otherwise discount it. Discount a concept leaning on anything the registry doesn't cover or marks unbuildable.
 - **Grounded.** Prefer a concept whose claims trace to VERIFIED research facts. A concept resting on UNVERIFIED claims or unresolved `OPEN QUESTION`s is weaker unless the question is cheap to resolve (note it for research).
 - **Clears the craft bar.** The winner must clear §A + its §B profile. Down-rank a concept that opens on a logo/title card (§A4), lacks the §B-profile's close/CTA, or lacks a legible capability-proof beat (§A2) — however clever the angle is.
 - **Weigh the peer votes** as signal, not as the decision — the idea agents saw each other's work. A concept the peers converged on is a strong prior, but judge for yourself.

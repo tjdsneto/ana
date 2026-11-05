@@ -17,13 +17,14 @@ Before seeding concepts, read `craft/video-production/.claude/references/CRAFT-B
 
 The node's creativity lever sets how many concepts to seed (default **3**). Honor it: more agents = wider divergence (and more cost — that is the lever's job to decide). Seed exactly N distinct concepts.
 
-## Capabilities — know what you can propose
+## Capabilities — draw from the technique registry (not a fixed short list)
 
-Concepts must be buildable by this engine. Diverge within what the craft can render:
-- **Real-UI-capture** scenes: screenshot a real site/app and animate a word-anchored camera over it (Ken-Burns). Grounded, frame-exact. (Dossier marks give you the real elements to feature.)
-- **Generated-asset / kinetic** scenes: hand-built SVG animated with GSAP as composed cards (the kinetic lane) — a legible hero number counting up, a graphic that builds, a motion-graphic beat the loop renders where no real capture exists. Propose concepts that lean on this lane, not only on real-UI-capture.
-- An appended produced clip (`tail_clip`) as a payoff.
-- Voiceover, on-screen chips, rings, title/outro cards.
+Concepts must be buildable by this engine. Your palette is the **technique registry** at `craft/video-production/.claude/references/techniques.json` — READ IT and diverge across it. Each entry carries its `backingCapability`, a `feasibility` tag, and `combinesWith` / `clashesWith` affinities.
+
+- **Each concept you seed names the 1–2 techniques it leans on** (by their registry `id`) and builds its angle on them — e.g. a `kinetic-typography` + `colour-per-beat` hook, a `real-UI-capture` + `receipt-proof-card` demo, a `metric-hero` + `count-up-reveal` payoff.
+- **Filter to feasibility `now` / `now-keyed` / `needs-user-footage` by default.** A technique tagged `roadmap:<service>` (`generative-video-clip`, `avatar-presenter`) is only proposable when the node's creativity/autonomy lever permits a roadmap reach — and then the concept MUST flag it as "needs <service>" in its brief, so the HOW phase surfaces it honestly instead of silently discounting it as unbuildable.
+- **Combine coherently, commit to ONE signature.** Stack only techniques whose affinities fit (`combinesWith`); never the 4+ signature-grade cluster (`clashesWith` / the §A3 slop cluster). Seed the N concepts from *different* technique families where you can (one camera-driven, one kinetic-type, one morph/transition) so the divergence is real, not three rephrasings of one idea.
+- A concept may still lean on an appended produced clip (`tail_clip`) as a payoff, plus voiceover / captions / sfx from the registry.
 
 A concept may **re-call research**: if your angle needs knowledge the dossier doesn't have, say so in its brief (an `OPEN QUESTION: …` line) — the phase can loop back to research to gather it before the concept is developed.
 
