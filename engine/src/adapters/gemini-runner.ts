@@ -40,7 +40,10 @@ export class GeminiSubagentRunner implements SubagentRunner {
 	async run(input: SubagentInput): Promise<SubagentResult> {
 		const model = input.model ?? this.defaultModel
 		const prompt = composePrompt(input.skill, input.systemPrompt, input.prompt, input.cwd)
-		const args = ["-p", HEADLESS_TAIL, "-o", "json", "--approval-mode", "yolo"]
+		// --skip-trust: gemini refuses headless tool use in an "untrusted" folder and silently downgrades
+		// --approval-mode to "default" (verified: rc=55, no output). The worker container is the sandbox,
+		// so the workspace is trusted by construction.
+		const args = ["-p", HEADLESS_TAIL, "-o", "json", "--approval-mode", "yolo", "--skip-trust"]
 		if (model) args.push("-m", model)
 		const { stdout, code, stderr } = await spawnCollect("gemini", this.bin, args, input.cwd, stripNull(prompt), input.signal)
 		const { output, usage } = parseGeminiJson(stdout)
