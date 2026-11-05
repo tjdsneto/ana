@@ -930,6 +930,8 @@ export class Engine {
 			cacheCreationTokens: result.usage?.cacheCreationTokens,
 			costUsd: result.usage?.costUsd,
 			durationMs,
+			numTurns: result.numTurns,
+			apiDurationMs: result.apiDurationMs,
 			status: "done",
 		})
 	}

@@ -401,6 +401,8 @@ export class PgStore implements Store {
 				cacheCreationTokens: input.cacheCreationTokens ?? null,
 				costUsd: input.costUsd ?? null,
 				durationMs: input.durationMs ?? null,
+				numTurns: input.numTurns ?? null,
+				apiDurationMs: input.apiDurationMs ?? null,
 				status: input.status,
 				createdAt: this.clock.now(),
 			})

@@ -49,7 +49,9 @@ export interface Interaction {
 	cacheReadTokens: number | null
 	cacheCreationTokens: number | null
 	costUsd: number | null
-	durationMs: number | null
+	durationMs: number | null // engine-measured wall time for the whole run
+	numTurns: number | null // agent turns the run took (assistant + tool round-trips)
+	apiDurationMs: number | null // of durationMs, the part spent in model API calls; wall − api ≈ tool exec + rate-limit backoff
 	status: string
 	createdAt: string
 	prompt: string | null // the full prompt sent to the subagent; null on old rows / pre-prompt failures

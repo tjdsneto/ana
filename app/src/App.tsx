@@ -254,7 +254,10 @@ function StageCard({ nv, detail, videos, depth = 0 }: { nv: NodeView; detail: Pr
 				</span>
 			</button>
 			<div className="stage-body">
-				{versions.length === 0 && <p className="muted">Nothing produced yet.</p>}
+				{/* An expand node (e.g. build) has no artifact of its own — don't claim "nothing produced"
+				    when it fanned into the sub-steps shown below; only a truly empty node gets that line. */}
+				{versions.length === 0 && kids.length === 0 && <p className="muted">Nothing produced yet.</p>}
+				{versions.length === 0 && kids.length > 0 && <p className="muted">No artifact of its own — expands into the sub-steps below.</p>}
 				{versions.length > 0 && (
 					<div className="revs">
 						{versions.map((vw, i) => (
@@ -733,7 +736,14 @@ function TelemGrid({ it }: { it: Interaction }) {
 	if (it.cacheReadTokens != null) rows.push(["cache read", fmtNum(it.cacheReadTokens)])
 	if (it.cacheCreationTokens != null) rows.push(["cache write", fmtNum(it.cacheCreationTokens)])
 	if (it.costUsd != null) rows.push(["cost", `$${it.costUsd.toFixed(4)}`])
-	if (it.durationMs != null) rows.push(["duration", fmtDur(it.durationMs)])
+	if (it.numTurns != null) rows.push(["turns", String(it.numTurns)])
+	if (it.durationMs != null) rows.push(["wall time", fmtDur(it.durationMs)])
+	if (it.apiDurationMs != null) rows.push(["API time", fmtDur(it.apiDurationMs)])
+	// wall − api is the time NOT spent calling the model: tool execution and rate-limit backoff. A big
+	// gap here (not a big API time) is why a run can take 31 minutes — the model waited, it didn't think.
+	if (it.durationMs != null && it.apiDurationMs != null && it.durationMs - it.apiDurationMs > 0) {
+		rows.push(["waiting (tools / rate-limit)", fmtDur(it.durationMs - it.apiDurationMs)])
+	}
 	return (
 		<dl className="telem-grid">
 			{rows.map(([k, v]) => (

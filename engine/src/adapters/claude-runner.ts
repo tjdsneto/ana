@@ -15,6 +15,9 @@ interface ClaudeJson {
 	result?: string
 	session_id?: string
 	total_cost_usd?: number
+	num_turns?: number // how many agent turns the run took (assistant message + tool round-trips)
+	duration_ms?: number // the CLI's own total wall time for the run
+	duration_api_ms?: number // of that wall, the time spent in model API calls (excludes tool exec + rate-limit backoff)
 	usage?: {
 		input_tokens?: number
 		output_tokens?: number
@@ -84,13 +87,27 @@ export class ClaudeSubagentRunner implements SubagentRunner {
 		if (!producedResult && code !== 0) {
 			throw new Error(`claude exited ${code}${json.is_error ? " (is_error)" : ""} with no result: ${(stderr || stdout).slice(0, 500)}`)
 		}
+		const meta = runMetaOf(json)
 		return {
 			output: result,
 			sessionId: json.session_id,
 			model: modelOf(json) ?? model,
 			usage: toUsage(json),
+			numTurns: meta.numTurns,
+			apiDurationMs: meta.apiDurationMs,
 			raw: json,
 		}
+	}
+}
+
+// Per-run shape from `claude -p --output-format json`: how many agent turns, and how much wall time was
+// in API calls. The engine stores its own measured wall duration; (wall − api) is time the run spent NOT
+// calling the model — tool execution and, notably, rate-limit backoff. That gap is what explained a
+// 31-minute single run (two ~15-min 429 backoffs), so surfacing it makes a slow run self-explanatory.
+export function runMetaOf(json: Pick<ClaudeJson, "num_turns" | "duration_api_ms">): { numTurns?: number; apiDurationMs?: number } {
+	return {
+		numTurns: typeof json.num_turns === "number" ? json.num_turns : undefined,
+		apiDurationMs: typeof json.duration_api_ms === "number" ? json.duration_api_ms : undefined,
 	}
 }
 
