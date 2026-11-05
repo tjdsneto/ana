@@ -321,7 +321,9 @@ code {
 
 .usage {
 	display: grid;
-	grid-template-columns: repeat(7, 1fr);
+	/* 8 stats — keep the column count a divisor of 8 at every breakpoint so the last row never leaves
+	   empty grey tracks (the 1px gap over the --line background is what draws the separators). */
+	grid-template-columns: repeat(8, 1fr);
 	gap: 1px;
 	margin-top: 14px;
 	background: var(--line);
@@ -330,9 +332,15 @@ code {
 	overflow: hidden;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
 	.usage {
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+@media (max-width: 460px) {
+	.usage {
+		grid-template-columns: repeat(2, 1fr);
 	}
 }
 
