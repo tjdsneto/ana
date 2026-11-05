@@ -4,8 +4,8 @@
 	"description": "Defines the visual direction — palette, typography, imagery references, motion feel — consistent with the brief's tone.",
 	"produce": "Define the visual direction: palette, typography, imagery references, and the motion feel. Keep it consistent with the brief's tone.",
 	"reviews": [
-		{ "name": "quality", "kind": "craft", "skill": "review-moodboard-quality" },
-		{ "name": "conformance", "kind": "coverage", "skill": "review-moodboard-conformance" }
+		{ "name": "quality", "kind": "craft", "skill": "review-craft" },
+		{ "name": "conformance", "kind": "coverage", "skill": "review-conformance" }
 	],
 	"skill": "moodboard"
 }

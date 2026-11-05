@@ -6,7 +6,7 @@
 	"skill": "assemble-scenes",
 	"collectArtifacts": { "type": "scene", "into": "scenes" },
 	"reviews": [
-		{ "name": "consistency", "kind": "consistency" },
-		{ "name": "audio", "kind": "audio", "skill": "review-render-audio" }
+		{ "name": "consistency", "kind": "consistency", "skill": "review-consistency" },
+		{ "name": "audio", "kind": "audio", "skill": "review-audio" }
 	]
 }

@@ -4,5 +4,5 @@
 	"description": "Leaf that produces the assets the scenes draw from — captured real-UI plates, images, characters, or 3D assets the storyboard calls for.",
 	"skill": "build-assets",
 	"produce": "Produce the assets the scenes draw from: capture the real-UI plates (one plate-capture can yield several plates) and generate or specify the images, characters, or 3D assets the storyboard calls for. Output the asset set, not a scene.",
-	"reviews": [{ "name": "quality", "kind": "craft", "skill": "review-build-assets" }]
+	"reviews": [{ "name": "quality", "kind": "craft", "skill": "review-craft" }]
 }

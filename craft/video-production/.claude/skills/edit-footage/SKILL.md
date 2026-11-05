@@ -46,7 +46,7 @@ The derived asset path (the `.mp4`/`.wav` the tool wrote). Nothing else — do n
 
 ## Hold to the bar
 
-The derived clip is reviewed against `craft/video-production/.claude/references/CRAFT-BAR.md` by `review-edit-quality`. Keep the cut clean: ranges land on sensible boundaries (no half-words, no black frames at a join), the crop keeps the subject framed, audio stays intact and level. Iterate on a `revise` — adjust the EDL, re-apply, re-check.
+The derived clip is reviewed against `craft/video-production/.claude/references/CRAFT-BAR.md` by the generic `review-craft` reviewer (clip craft rubric). Keep the cut clean: ranges land on sensible boundaries (no half-words, no black frames at a join), the crop keeps the subject framed, audio stays intact and level. Iterate on a `revise` — adjust the EDL, re-apply, re-check.
 
 ## If a step fails
 

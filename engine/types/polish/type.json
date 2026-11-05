@@ -4,7 +4,7 @@
 	"description": "Tightens timing, captions, and audio levels; fixes the rough edges from the render pass.",
 	"produce": "Tighten timing, captions, and audio levels; fix the rough edges from the render pass.",
 	"reviews": [
-		{ "name": "quality", "kind": "craft", "skill": "review-polish-quality" }
+		{ "name": "quality", "kind": "craft", "skill": "review-craft" }
 	],
 	"skill": "self"
 }

@@ -63,7 +63,7 @@ Pick the generator that fits the scene's spec, call it with the scene's prompt +
 
 ## Consistency is the point
 
-Generative clips drift in style between scenes — that is the whole reason scenes are reviewed against each other. Match the storyboard's established look exactly: same palette, type treatment, motion energy, and framing discipline (fill the frame; no dead space; readable text) as the sibling scenes. The `review-scene-consistency` reviewer will reopen this scene if it clashes.
+Generative clips drift in style between scenes — that is the whole reason scenes are reviewed against each other. Match the storyboard's established look exactly: same palette, type treatment, motion energy, and framing discipline (fill the frame; no dead space; readable text) as the sibling scenes. The generic `review-consistency` reviewer will reopen this scene if it clashes.
 
 ## Output
 

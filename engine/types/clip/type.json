@@ -7,6 +7,6 @@
 	"produces": "file",
 	"skill": "edit-footage",
 	"reviews": [
-		{ "name": "edit-quality", "kind": "craft", "skill": "review-edit-quality" }
+		{ "name": "edit-quality", "kind": "craft", "skill": "review-craft" }
 	]
 }

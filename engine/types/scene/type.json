@@ -11,8 +11,8 @@
 	"produces": "file",
 	"produce": "Produce this one scene from its spec, consistent with the storyboard's visual direction. Realize it by the spec's method (authored-composite / authored-continuous / whole-clip-generative / edit-footage / motion-graphics) — render, generate, cut, or animate the clip for exactly this scene, not the whole video.",
 	"reviews": [
-		{ "name": "quality", "kind": "craft", "skill": "review-scene-quality" },
-		{ "name": "conformance", "kind": "coverage", "skill": "review-scene-conformance", "model": "claude-sonnet-5-5" },
-		{ "name": "consistency", "kind": "consistency", "skill": "review-scene-consistency", "model": "claude-sonnet-5-5" }
+		{ "name": "quality", "kind": "craft", "skill": "review-craft" },
+		{ "name": "conformance", "kind": "coverage", "skill": "review-conformance", "model": "claude-sonnet-5-5" },
+		{ "name": "consistency", "kind": "consistency", "skill": "review-consistency", "model": "claude-sonnet-5-5" }
 	]
 }
