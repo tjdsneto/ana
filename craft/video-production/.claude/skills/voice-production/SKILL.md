@@ -14,7 +14,7 @@ You own the **voice** step of the pipeline: turn the approved script into narrat
 
 **Flat, first-generation TTS with true silence in every gap is an immediate AI tell.** Steer away from it:
 
-- **Engine choice is the first lever.** Prefer **`kokoro`** for any final/hero cut — its prosody is the point; a flat robotic read is exactly the tell. `piper` is for drafts and for voices/languages Kokoro lacks (see the table below).
+- **Engine choice is the first lever.** Prefer **`elevenlabs`** whenever its key is available — it is the most natural voice and the house default. Without the key, prefer **`kokoro`** for any final/hero cut — its prosody is the point; a flat robotic read is exactly the tell. `piper` is the lightweight fallback, for drafts and for voices/languages the others lack (see the table below).
 - **Lead / gap / tail (`film.json` `voice{lead,gap}` + `tail`).** Keep the inter-line `gap` natural, not a dead beat. Above all, **trim the `tail`** — its default is **3.0s** of trailing room after the last line, which lands as a dead tail (the §A5 fail and the thing `review-build-voice` checks). Set it to ~0.3–0.6s unless a beat genuinely needs the room; the piece ends on its last meaningful word.
 - **The gaps get filled downstream.** True silence under the VO is what reads as AI; the ducked **music bed** (built in `build-soundtrack`) is what fills it. Produce a clean VO; don't try to fake liveliness with padding.
 - **Spell product / brand names phonetically** in the script lines you synthesize so the engine pronounces them right (e.g. a respelling the TTS will say correctly) — a mangled product name is its own tell. Do not change the words themselves, only the pronunciation hint.
@@ -25,12 +25,12 @@ Each engine is a local, keyless tool the worker can run. Know what each is for:
 
 | Engine | Use it for | Notes |
 |--------|-----------|-------|
-| `kokoro` (default) | The final / hero render — highest naturalness and prosody. | Local, keyless. Heavier; narrower voice + language set today. Needs the Kokoro model under `$KOKORO_HOME`. |
-| `piper` | Drafts and previews, tight time/resource budgets, or a language/voice Kokoro does not cover. | Local, keyless. Fast, lightweight, huge voice + language catalogue. Needs the `piper` binary + a `.onnx` voice (`$VOICE_MODEL`). |
+| `elevenlabs` (default when keyed) | The house default for any cut — the most natural / branded / cloned voices. | API provider tool (`craft/video-production/tools/tts/elevenlabs.py`). Needs `$ELEVENLABS_API_KEY` at runtime (never baked; or an `--api-key-file` the skill passes). The film's `voice.id` must be an **ElevenLabs** voice — a friendly name (`rachel`/`adam`/`antoni`/`domi`) or a raw voice_id; an unknown / Kokoro id (e.g. `af_heart`) falls back to `rachel`. |
+| `kokoro` | Final / hero render **when there is no ElevenLabs key** — highest-quality local voice. | Local, keyless. Heavier; narrower voice + language set. Needs the Kokoro model under `$KOKORO_HOME`. |
+| `piper` | The lightweight fallback — drafts/previews, tight time/resource budgets, or a language/voice the others lack. | Local, keyless. Fast, huge voice + language catalogue. Needs the `piper` binary + a `.onnx` voice (`$VOICE_MODEL`). |
 | `openai-tts` | A brand that prefers / already pays for OpenAI voices (BYO-key). | API provider tool (`craft/video-production/tools/tts/openai-tts.py`). Needs `$OPENAI_API_KEY` at runtime (never baked). The film's `voice.id` must be an **OpenAI** voice (alloy, nova, …); a Kokoro id falls back to `alloy`. |
-| `elevenlabs` | Premium / branded / cloned voices a brand wants (BYO-key). | API provider tool (`craft/video-production/tools/tts/elevenlabs.py`). Needs `$ELEVENLABS_API_KEY` at runtime (never baked; or an `--api-key-file` the skill passes). The film's `voice.id` must be an **ElevenLabs** voice — a friendly name (`rachel`/`adam`/`antoni`/`domi`) or a raw voice_id; an unknown / Kokoro id falls back to `rachel`. |
 
-**Picking:** final or hero cut → `kokoro` **only if its model is present** at `$KOKORO_HOME`; otherwise `piper`. Draft/preview, a resource/time crunch, or a language/voice Kokoro lacks → `piper`. A brand that wants a specific keyed service (and supplies the key) → that provider tool (e.g. `openai-tts` or `elevenlabs`). **Fall back to whichever engine is actually available** — if the Kokoro model is missing, use `piper` (NOT the other way round); only if neither a Kokoro model nor the `piper` binary + its `$VOICE_MODEL` voice exists do you stop and report — never fabricate audio. (A worker provisioned with only `piper` — e.g. the engine container — uses `piper`.) Provider tools (`openai-tts`, …) are the voice seam: adding one is a tool + a registry entry in `vo.py`, never engine code.
+**Picking:** **if `$ELEVENLABS_API_KEY` is present, default to `elevenlabs`** — it is the most natural voice and the house default. Use a friendly voice id (`rachel`/`adam`/`antoni`/`domi`) or a raw voice_id; an unknown/Kokoro `voice.id` (e.g. `af_heart`) falls back to `rachel`, so a board that still carries a local id is fine. Only when there is **no** ElevenLabs key: final/hero cut → `kokoro` if its model is present at `$KOKORO_HOME`, otherwise `piper`; draft/preview, a resource/time crunch, or a language/voice the others lack → `piper`. A brand that supplies its own keyed service (e.g. `openai-tts`) and asks for it overrides the default. **Fall back to whichever engine is actually available** — try `elevenlabs` → `kokoro` → `piper` in that order, dropping to the next only when the current one's key/model/binary is missing or its call fails; stop and report only if none works — never fabricate audio. Provider tools (`openai-tts`, …) are the voice seam: adding one is a tool + a registry entry in `vo.py`, never engine code.
 
 ## When the narration is a real clip, not TTS (align.py)
 
@@ -51,7 +51,7 @@ A **work dir** that already holds `script.txt` (one VO line per line) and `film.
 1. Choose the engine per the table above for what this render needs.
 2. Produce the narration + word timing:
    ```
-   "$KOKORO_PY" craft/video-production/tools/vo.py --script <workDir>/script.txt --film <workDir>/film.json --out <workDir>/media --engine <kokoro|piper>
+   "$KOKORO_PY" craft/video-production/tools/vo.py --script <workDir>/script.txt --film <workDir>/film.json --out <workDir>/media --engine <elevenlabs|kokoro|piper>
    ```
 3. Confirm `<workDir>/media/vo.wav` and `<workDir>/media/words.json` exist and are non-empty.
 
