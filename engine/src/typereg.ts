@@ -17,6 +17,7 @@ export interface ReviewSpec {
 	name: string
 	kind: "craft" | "coverage" | "consistency" | "audio" // the axis: craft = quality, coverage = conformance-to-params, consistency = matches siblings, audio = deterministic VO/sync check
 	skill?: string // reviewer skill that owns this axis's per-step rubric; omitted → generic kind lens (prompts.ts)
+	model?: string // per-axis subagent model override (0021: run mechanical axes — coverage/consistency — on a cheaper model); falls back to the node's contract model, then SUBAGENT_MODEL
 }
 
 export interface InputSpec {

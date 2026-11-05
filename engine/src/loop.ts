@@ -666,15 +666,31 @@ export class Engine {
 		if (producerResult) await this.logInteraction(node, version.id, "producer", producerResult, producerMs, producerPrompt)
 		log.info("node.produce", { versionId: version.id, n, produces: contract.produces ?? "text", ms: producerMs })
 
-		// internal quality gate — independent specialist reviewers
+		// internal quality gate — independent specialist reviewers.
+		// 0021: on a redo, carry forward an axis that already PASSED on the prior version instead of
+		// re-spending a reviewer call to re-confirm an input that did not change — run only the axes that
+		// were failing. The prior verdicts are read from the DB (the prior version's review rows), so this
+		// is restart-safe and needs no in-memory loop state (each redo is a fresh dispatchLeaf call). The
+		// carried pass is recorded on THIS version too, so a further redo can carry it again.
+		const priorPassed =
+			latest && latest.status === "needs-work"
+				? new Set((await this.store.reviewsFor(latest.id)).filter((r) => r.verdict === "pass").map((r) => r.name))
+				: new Set<string>()
 		const verdicts: ("pass" | "revise")[] = []
 		for (const rv of contract.reviews ?? []) {
+			if (n > 1 && priorPassed.has(rv.name)) {
+				await this.store.addReview({ nodeId: node.id, versionId: version.id, name: rv.name, kind: rv.kind, verdict: "pass", body: "[carried forward (0021): this axis passed on the prior version and its input was not re-reviewed on this redo]" })
+				verdicts.push("pass")
+				log.debug("review.carry_forward", { versionId: version.id, reviewer: rv.name, kind: rv.kind })
+				continue
+			}
 			const rt0 = Date.now()
 			const reviewPrompt = buildReviewerPrompt(contract, rv, { draft, brief: root.description ?? "", upstream })
 			const rres = await this.runSubagent(
 				{
 					prompt: reviewPrompt,
 					skill: rv.skill ?? `review:${rv.kind}`, // a reviewer skill (per-step rubric) if declared, else the kind label (generic lens, no directive)
+					model: rv.model, // 0021: per-axis model override (cheaper model for mechanical axes); undefined → the node model (runSubagent)
 					cwd: this.config.craftRoot,
 				},
 				contract,

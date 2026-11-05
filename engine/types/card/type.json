@@ -9,7 +9,7 @@
 	"produce": "Produce THIS one card from its spec: write its plate HTML file (plates/<id>.html) and its camera params, per the moodboard + the craft bar. Not the whole board — just this beat's card. A reopen re-does only this card; its siblings are untouched.",
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-card-quality" },
-		{ "name": "conformance", "kind": "coverage", "skill": "review-card-conformance" },
-		{ "name": "consistency", "kind": "consistency", "skill": "review-card-consistency" }
+		{ "name": "conformance", "kind": "coverage", "skill": "review-card-conformance", "model": "claude-sonnet-5-5" },
+		{ "name": "consistency", "kind": "consistency", "skill": "review-card-consistency", "model": "claude-sonnet-5-5" }
 	]
 }
