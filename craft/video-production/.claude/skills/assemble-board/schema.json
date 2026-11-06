@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "film.json — the GSAP render contract",
+  "description": "The composition the render consumer (tools/build.py → render.mjs/assemble.mjs) turns into the seekable GSAP film. Emitted by assemble-board (board lane) and build-scene/assemble (scene lane). The contract is DELIBERATELY flexible and method-dependent, so this schema is permissive: `additionalProperties` is open and only the always-present keys are required — it documents the known keys and their shapes, it does not lock the set. Times are seconds (12.4) OR a voiceover-word anchor (\"Save\" = first spoken, \"Save#2\" = second). A full real example lives under server/data/artifacts/<node>/.../film.json; example.json here is a compact valid board.",
+  "type": "object",
+  "required": ["size", "duration", "theme"],
+  "additionalProperties": true,
+  "properties": {
+    "size": {
+      "type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+      "description": "[width, height] in px (e.g. [1080,1080] square, [1920,1080] 16:9, [1080,1920] 9:16)."
+    },
+    "duration": {"type": "number", "description": "Total film length in seconds."},
+    "theme": {
+      "type": "object", "additionalProperties": true,
+      "description": "Look tokens the composition reads.",
+      "properties": {
+        "bg": {"type": "string", "description": "Background hex."},
+        "font": {"type": "string", "description": "CSS font-family name (the moodboard's sourced face)."},
+        "fontCss": {"type": "string", "description": "file:// (or http) URL to the @font-face stylesheet staging that face."},
+        "accent": {"type": "string", "description": "Accent hex (captions / rings)."}
+      }
+    },
+    "camera": {
+      "type": "array",
+      "description": "The camera tour: one entry per beat/move, in playback order. The board lane's primary composition key.",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["plate"],
+        "properties": {
+          "plate": {"type": "string", "description": "Plate id/key this beat shows (resolves to plates.<id> or a capture)."},
+          "target": {"description": "Focal point: [x,y] in plate space, or a selector string the build centres on."},
+          "focus": {"type": "array", "items": {"type": "number"}, "description": "[x,y] focal centre (alt to target)."},
+          "zoom": {"type": "number", "description": "Scale at this beat (1.0 = fit). Scale the focal element to dominate the safe area."},
+          "at": {"description": "When this move starts: seconds (number) or a VO-word anchor (string)."}
+        }
+      }
+    },
+    "plates": {
+      "type": "object",
+      "description": "Map of plate id -> {file, url, steps[]} — the HTML plates the camera references. Scene-lane composites key frames here.",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": true,
+        "properties": {
+          "file": {"type": "string"}, "url": {"type": "string"},
+          "steps": {"type": "array", "description": "Per-frame timing steps (e.g. {wait: ms})."}
+        }
+      }
+    },
+    "audio": {
+      "type": "object", "additionalProperties": true,
+      "description": "The mix: voice / music / sfx tracks + levels. assemble-board maps the storyboard's SOUND/SFX cues here (a <sound>@<anchor> cue -> an sfx entry); free text never reaches the render.",
+      "properties": {
+        "voice": {"description": "VO track ref + lead/gap/tail timing."},
+        "music": {"description": "Music bed: source/file + gain (below 0 dB, ducked under the voice)."},
+        "sfx": {"type": "array", "description": "Deliberate hits: {sound from click·tick·pop·hit·whoosh·swish, at: VO-word|seconds, gain}."}
+      }
+    },
+    "script": {"type": "array", "items": {"type": "string"}, "description": "The VO lines, in order — the anchor source for word-timed `at` values."},
+    "layers": {"type": "array", "description": "Overlay layers composited on top of the plates (chips, captions, character layers)."},
+    "outro": {"type": "object", "description": "End card: {at} when it starts (the film ends on the last meaningful beat, no dead tail)."},
+    "captions": {"description": "Caption config: false/absent = off; true | \"karaoke\" | \"block\" opts in (tools/captions.py reads it, gated)."},
+    "fullbleed": {"type": "boolean", "description": "Plate fills the frame edge-to-edge."},
+    "capture": {"type": "object", "description": "Real-UI capture context: {width, base (plate dir URL), clean}."},
+    "rings": {"type": "array", "description": "Highlight rings: {target, color, at ranges}."},
+    "scene": {"type": "object", "description": "Scene-lane metadata (index/of/name/method/master_in/master_out/continues_from/note) when this film.json is one scene of the unified pipeline."}
+  }
+}

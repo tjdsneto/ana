@@ -1,0 +1,40 @@
+{
+  "size": [1080, 1080],
+  "duration": 15.0,
+  "fullbleed": true,
+  "theme": {
+    "bg": "#0B1020",
+    "font": "\"Museo Sans\"",
+    "fontCss": "file:///data/artifacts/example/board/src/fonts.css",
+    "accent": "#83C11F"
+  },
+  "script": [
+    "What if your launch video made itself?",
+    "It builds every beat — script, board, render.",
+    "One brief in. A finished film out.",
+    "Start free today."
+  ],
+  "plates": {
+    "hook":   {"file": "board/plates/card-hook.html",   "url": "file:///data/artifacts/example/board/plates/card-hook.html"},
+    "reveal": {"file": "board/plates/card-reveal.html", "url": "file:///data/artifacts/example/board/plates/card-reveal.html"},
+    "proof":  {"file": "board/plates/card-proof.html",  "url": "file:///data/artifacts/example/board/plates/card-proof.html"},
+    "cta":    {"file": "board/plates/card-cta.html",    "url": "file:///data/artifacts/example/board/plates/card-cta.html"}
+  },
+  "camera": [
+    {"plate": "hook",   "at": 0.0,  "target": [540, 540], "zoom": 1.0,  "focus": [540, 540]},
+    {"plate": "reveal", "at": "builds", "target": [540, 520], "zoom": 1.1},
+    {"plate": "proof",  "at": "out",  "target": [540, 540], "zoom": 1.0},
+    {"plate": "cta",    "at": "free", "target": [540, 600], "zoom": 1.15}
+  ],
+  "audio": {
+    "voice": {"file": "media/vo.wav", "lead": 0.2, "gap": 0.25, "tail": 0.4},
+    "music": {"source": "mood:calm-build", "gain": -18},
+    "sfx": [
+      {"sound": "whoosh", "at": "itself", "gain": -8},
+      {"sound": "hit",    "at": "out",    "gain": -5},
+      {"sound": "pop",    "at": "free",   "gain": -6}
+    ]
+  },
+  "outro": {"at": 14.6},
+  "captions": false
+}

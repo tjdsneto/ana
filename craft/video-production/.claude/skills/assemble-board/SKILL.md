@@ -10,6 +10,8 @@ description: Assemble the final film.json from the approved cards — materializ
 
 You assemble the finished board's `film.json` from the **approved cards** (one per beat, already reviewed) + the **script** + the **moodboard**. You do **not** create or edit cards — you stitch what the card nodes produced, in playback order.
 
+> **Output contract:** the `film.json` keys, the time formats (seconds or VO-word anchors), and the `audio` / `camera` / `plates` / `theme` shapes are documented in `schema.json` beside this skill, with a valid board in `example.json` — conform your output to it.
+
 ## Inputs
 
 - The approved **cards** (each a JSON object `{id, vo_line, camera, plate_html}`) — staged in playback order under `<workDir>/cards/` as `NN-<name>.<ext>` (`01-…`, `02-…`, …). Read them **in that order** — the `NN` prefix IS the beat order. One file per card; they are not inlined in the prompt.
