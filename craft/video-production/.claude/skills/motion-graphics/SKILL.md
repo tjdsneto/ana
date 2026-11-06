@@ -6,7 +6,10 @@ description: Produce programmatic motion graphics as a clip — an animated titl
 # motion-graphics
 
 > ## Hold to the craft bar
-> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the matching §B profile). The clip is judged against it like any render.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the matching §B profile) and `MOTION-VOCAB.md` for the motion techniques. The clip is judged against them like any render.
+
+> ## Reference the catalog
+> The HyperFrames backend you render with has a published catalog of 448 motion templates — `https://hyperframes.heygen.com/catalog` (Text & captions · Cursors · Transitions · Data & charts · Motion & effects · 3D · Carousels). Use it as the pattern library: find the nearest template to the beat (a word-by-word caption, a count-up chart, a cursor interaction, a push/zoom transition) and author your GSAP composition in that shape. Borrow the motion, match the look to the moodboard — never the catalog's flashy 3D chrome on a clean brand.
 
 You produce a **motion-graphics clip** (animated title/lower-third/caption/overlay) by authoring an **HTML composition** and rendering it with the `motion-graphics` tool. The backend is swappable — `HyperFrames` (default, local OSS) or `Remotion` (reserved) — chosen by `$MOTION_GFX_BACKEND`; your composition and the command are the same either way. This is a craft tool driving a skill, no engine port (spec-09 Decision #5).
 

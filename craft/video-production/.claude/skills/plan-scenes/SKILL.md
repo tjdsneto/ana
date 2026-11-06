@@ -6,7 +6,7 @@ description: Planner for the build step — read the approved storyboard and fan
 # plan-scenes
 
 > ## Hold to the craft bar
-> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`; for the per-beat motion you assign, `MOTION-VOCAB.md`. Judged against all.
 
 You plan the **build** step of a generative video. The storyboard upstream already defined the scenes; your job is to turn each one into a self-contained unit the engine will produce as its own node. You do **not** generate any clip here — you only emit the plan.
 
@@ -35,14 +35,23 @@ The method decides *how* the scene's clip is produced. The pipeline spine (brief
 
 When unsure, prefer `authored-composite` for mixed/overlay scenes, `authored-continuous` for a pure real-UI beat, `whole-clip-generative` only when the scene is inherently a generated clip (avatar/cinematic), `edit-footage` when the beat is cut from a provided video, and `motion-graphics` for a pure designed-motion/title beat.
 
+### Motion is the point — do not plan a slideshow (§A1, MOTION-VOCAB)
+
+A plate under a slow camera pan is **not** motion; a run of those is the slideshow §A1 fails. Plan motion into every beat:
+
+- **Route text / caption / title / stat / chart beats to `motion-graphics`** (GSAP comps that reveal text word-by-word, count a number up, draw a chart) rather than a static plate with the text burned in.
+- **An `authored-composite` beat must carry *animated* `layers`** — a cursor that glides and clicks the real UI, a callout that staggers in, a presenter that shrinks to a corner — not a static overlay. A real-UI beat where "it does X" is shown is the place for a **cursor** layer (MOTION-VOCAB → Cursors).
+- **Every scene `brief` names a motion verb + a transition.** State how the focal element *arrives* (reveal / count-up / cursor-click / scale-in / draw-in) and the transition into the next beat (push / zoom-through / match-cut / a cut landed on a VO stress with a whoosh). A brief that says only "show the dashboard, slow push-in" is a slideshow beat — add the verb.
+- **No two consecutive scenes are both static-plate-under-a-pan.** If the plan is drifting that way, convert one to `motion-graphics` or add animated layers.
+
 Example:
 
 ```json
 [
-  { "name": "Hook", "method": "authored-continuous", "brief": "0:00–0:03. Open on the product's result screen, slow push-in. VO: 'Ship your launch video in minutes.' Bright palette per the moodboard." },
-  { "name": "Walkthrough", "method": "authored-composite", "brief": "0:03–0:10. Real dashboard plate; a presenter PiP shrinks to the top-right corner as the VO explains. VO: '…and it does the work for you.'" },
-  { "name": "Vibe", "method": "whole-clip-generative", "brief": "0:10–0:12. Cinematic b-roll mood shot, no UI. VO: (music swell)." },
-  { "name": "CTA", "method": "authored-composite", "brief": "0:12–0:15. End card with the brand mark + one CTA; a character layer waves. VO: 'Start free at <domain>.'" }
+  { "name": "Hook", "method": "motion-graphics", "brief": "0:00–0:03. Kinetic title: the line reveals word-by-word, the hero word 'minutes' punches on its stress. VO: 'Ship your launch video in minutes.' Moodboard palette + sourced face. MOTION: word-by-word reveal + kinetic emphasis. TRANSITION out: zoom-through 'minutes' into the dashboard." },
+  { "name": "Walkthrough", "method": "authored-composite", "brief": "0:03–0:10. Real dashboard plate; a CURSOR glides to the Generate button and clicks (click SFX), the result panel scales in. VO: '…and it does the work for you.' MOTION: cursor-click + scale-in. TRANSITION out: push left to the proof beat." },
+  { "name": "Proof", "method": "motion-graphics", "brief": "0:10–0:12. The hero stat counts up 0→10,000 as a bar grows in. VO: 'Ten thousand creators already shipped.' MOTION: count-up + bar draw-in. TRANSITION out: match-cut the bar into the CTA pill." },
+  { "name": "CTA", "method": "authored-composite", "brief": "0:12–0:15. End card, brand mark + a 'Start free' pill that pops in and holds readable; cursor rests on it. VO: 'Start free at <domain>.' MOTION: pill pop-in. Signature move carried here." }
 ]
 ```
 

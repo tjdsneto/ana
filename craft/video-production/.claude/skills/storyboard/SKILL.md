@@ -7,7 +7,7 @@ description: Plan the video's board and fan it into one card per beat. Owns whol
 
 ## Hold to the craft bar
 
-Before producing, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`. Judged against both.
+Before producing, read `craft/video-production/.claude/references/CRAFT-BAR.md`: apply **§A** in full + the **§B profile** for this video's type. For the composed/board path also read `COMPOSED-CARDS.md`; for the motion you plan per beat, `MOTION-VOCAB.md`. Judged against all.
 
 You **plan** the board and fan it into one `card` per beat. You do **not** write plate HTML here — each card node does that from the spec you give it. Read the approved **script** + **moodboard**, and `craft/video-production/.claude/references/CRAFT-BAR.md` (§A frame craft + the §B profile for this type) + `craft/video-production/.claude/references/COMPOSED-CARDS.md`.
 
@@ -28,7 +28,7 @@ One object per card, in playback order:
 
 ```
 [
-  {"name":"hook","brief":"VO line (spoken): \"<the line>\". On-screen text: <the focal phrase to show, e.g. \\\"three campaigns?\\\" — or \"the full line\" when it must be read>. SOUND/SFX: <the music-bed feel for this beat; and, if this beat takes a deliberate hit, the SFX as a structured cue \\\"<sound>@<anchor>\\\" — sound from click·tick·pop·hit·whoosh·swish, anchor = the VO word it lands on or a timecode, e.g. whoosh@\\\"Monster\\\"; else — for a quiet beat>. Timecode: <start–end, ~<n>s for this beat>. Role: hook. Focal element that must dominate the safe area: <…>. Signature move: <does THIS card carry the board's one signature device? if so, how; else —>. Hero-number/receipt card: <if THIS beat owns the single strongest number or the proof receipt full-frame (§A1/§A2), the number/receipt; else —>. Ground/colour: <…>. Font: <the moodboard's sourced face>. Camera intent: frame <…>, zoom ~<n>."},
+  {"name":"hook","brief":"VO line (spoken): \"<the line>\". On-screen text: <the focal phrase to show, e.g. \\\"three campaigns?\\\" — or \"the full line\" when it must be read>. SOUND/SFX: <the music-bed feel for this beat; and, if this beat takes a deliberate hit, the SFX as a structured cue \\\"<sound>@<anchor>\\\" — sound from click·tick·pop·hit·whoosh·swish, anchor = the VO word it lands on or a timecode, e.g. whoosh@\\\"Monster\\\"; else — for a quiet beat>. Timecode: <start–end, ~<n>s for this beat>. Role: hook. Focal element that must dominate the safe area: <…>. Signature move: <does THIS card carry the board's one signature device? if so, how; else —>. Hero-number/receipt card: <if THIS beat owns the single strongest number or the proof receipt full-frame (§A1/§A2), the number/receipt; else —>. Ground/colour: <…>. Font: <the moodboard's sourced face>. Camera intent: frame <…>, zoom ~<n>. Motion: <how the focal element ARRIVES — a MOTION-VOCAB verb: word-by-word reveal / count-up / cursor-click / scale-in / draw-in / kinetic emphasis — NOT just a camera zoom>. Transition to next beat: <push / zoom-through / match-cut / cut-on-stress + SFX>."},
   {"name":"<id>","brief":"<same shape>"}
 ]
 ```
@@ -36,5 +36,6 @@ One object per card, in playback order:
 Rules:
 - One card per beat. **Beat count keys off the §B length band, not a fixed number:** a 9:16 ≤~15s social cut ~4–6 beats; a 15–40s teaser ~5–8; a 30–90s 16:9 hero ~6–12. Pick what fits this video's target within its band — don't pad to a number.
 - Each card has a **distinct** focal subject — no two near-identical cards (that renders as a slideshow).
+- **Every card names a `Motion` verb + a `Transition` (§A1, MOTION-VOCAB).** The focal element arrives with real motion (text reveals, a number counts up, a cursor clicks, a chart draws) and the beat connects to the next with a deliberate transition — a camera zoom on a static plate is NOT motion. No two consecutive cards are both static-plate-under-a-pan.
 - Every `brief` is self-contained: the card node sees only its brief + the brief/moodboard + the craft bar.
 - Keep VO lines verbatim from the script, in order; mark which card is the hook and which is the close (the close's form follows the §B profile — a CTA for a launch, a deferred tease for a teaser, a next step for a demo).
