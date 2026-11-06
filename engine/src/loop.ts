@@ -269,11 +269,17 @@ export class Engine {
 		const idByKey = new Map<string, string>() // checklist-local key → created node id
 		let position = 0
 		for (const entry of contract.checklist) {
-			const deps = (entry.deps ?? []).map((k) => {
+			const sibling = (entry.deps ?? []).map((k) => {
 				const id = idByKey.get(k)
 				if (!id) throw new Error(`expandNode: dep "${k}" referenced before it was declared`)
 				return id
 			})
+			// Inherit the expand node's OWN upstream deps too (mirrors dispatchPlan's fan-out, loop.ts ~407):
+			// a child is built in the context of the parent's upstream, so it must list that upstream as a
+			// dep — otherwise its builtFrom is empty and revalidation can never see an upstream change, so a
+			// changed board never rebuilds build-voice/soundtrack/assets (issue 0039). The root's own deps are
+			// empty, so its phase-1 children are unaffected.
+			const deps = [...new Set([...node.deps, ...sibling])]
 			const name = this.types.has(entry.type) ? (this.types.get(entry.type).name ?? entry.type) : entry.type
 			const [child] = await this.store.createChildNodes(node.id, [{ type: entry.type, name, deps, position }])
 			if (!child) throw new Error("expandNode: createChildNodes returned no row")

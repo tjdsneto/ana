@@ -501,6 +501,58 @@ describe("holistic final review — reopen + revalidation cascade (rebuild only 
 	})
 })
 
+// A checklist-EXPAND `build` (not a planner) with a leaf child `build-voice`, downstream of a `board`
+// leaf. Regression for issue 0039: reopening the board must rebuild build-voice. build-voice has no
+// sibling deps, so unless the expand's children inherit the parent's upstream deps, build-voice's
+// builtFrom is empty, revalidation sees "upstream unchanged", and the voice never rebuilds on a board
+// change — the bug that made an expressive-voice redo silently ship the old audio.
+const EXPAND_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "board", type: "board", deps: [] },
+			{ id: "build", type: "build", deps: ["board"] },
+			{ id: "final-review", type: "final-review", deps: ["build"] },
+		],
+	},
+	{ type: "board", name: "Board", produce: "board" },
+	{ type: "build", name: "Build", checklist: [{ id: "voice", type: "build-voice", deps: [] }] },
+	{ type: "build-voice", name: "Build voice", produces: "file", skill: "voice" },
+	{ type: "final-review", name: "Final review", holisticReview: true },
+]
+const expandTypes = TypeRegistry.fromContracts(EXPAND_CONTRACTS)
+
+describe("expand-child cascade — a build-leaf rebuilds when the board upstream changes (0039)", () => {
+	it("reopening the board rebuilds build-voice (its deps inherit the build node's upstream)", async () => {
+		let critiques = 0
+		let draftN = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: board — rebuild the board" } : { output: "VERDICT: pass" }
+			}
+			if (/^review[:-]/.test(input.skill ?? "")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` } // unique → a re-produced node genuinely changes
+		})
+		const engine = new Engine({ store, runner, types: expandTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const nodes = await store.nodesFor(root.id)
+		const vcount = (t: string) => store.versionsFor(nodes.find((n) => n.type === t)!.id).then((v) => v.length)
+		const buildVoice = nodes.find((n) => n.type === "build-voice")!
+		expect(buildVoice.deps).toContain(nodes.find((n) => n.type === "board")!.id) // inherited the build node's upstream
+		expect(await vcount("board")).toBeGreaterThanOrEqual(2) // named target re-produced
+		expect(await vcount("build-voice")).toBeGreaterThanOrEqual(2) // the board changed → voice rebuilt
+	})
+})
+
 // A video-project whose `build` step is a PLANNER that fans out one `scene` leaf per unit, then an
 // `assemble` leaf depends on the whole build. Exercises the three recursion primitives at once:
 // non-root dispatch of a plan node, dynamic fan-out, and rollup from scene → build → root.
