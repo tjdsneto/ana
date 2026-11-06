@@ -1603,3 +1603,17 @@ describe("0027 — per-node model diversity across a diverseChildren planner's f
 		expect(ideas.every((i) => i.model === null)).toBe(true) // no mix applied → inherit the type's model
 	})
 })
+
+describe("film manifest — seeded at production start (Option B #1)", () => {
+	it("creates board/film.json with the empty skeleton when the production starts", async () => {
+		const { readFileSync } = await import("node:fs")
+		const { join } = await import("node:path")
+		const cfg = makeConfig()
+		const runner = new FakeSubagentRunner(() => ({ output: "draft" }))
+		const engine = new Engine({ store, runner, types, config: cfg })
+		const root = await newProduction(store)
+		await engine.tick() // startQueuedProductions runs on the first tick
+		const manifest = JSON.parse(readFileSync(join(cfg.artifactsDir, root.id, "board", "film.json"), "utf8"))
+		expect(manifest).toEqual({ script: [], camera: [], plates: {} })
+	})
+})

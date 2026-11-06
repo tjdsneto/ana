@@ -14,6 +14,7 @@ import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { parseProductionPlanOutput } from "./plan-dag.js"
+import { seedManifest } from "./film-manifest.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
@@ -233,6 +234,10 @@ export class Engine {
 				continue // held until the required inputs are provided — does NOT count as progress (a held
 				// production must not keep runUntilIdle draining, or the tick safety valve trips every poll)
 			}
+			// Option B: the shared film.json is created at production start and edited in place by each
+			// contributing node as it approves (docs/lisa/progressive-film-json-design.md). Idempotent —
+			// a restart/reopen never wipes slices already written.
+			seedManifest(join(this.config.artifactsDir, root.id, "board", "film.json"))
 			// A production is a root node of ANY type, not only an expand video-project. Route it by kind:
 			// an expand root fans its checklist; a planner/leaf root (a standalone capability — a scene, a
 			// clip, a one-shot sfx) is dispatched directly, marked in-progress first (the claim a non-root
