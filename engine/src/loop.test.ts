@@ -1630,7 +1630,7 @@ const MANIFEST_CONTRACTS: TypeContract[] = [
 		],
 	},
 	{ type: "script", name: "Script", produce: "script", owns: ["script"] },
-	{ type: "voice", name: "Voice", produces: "file", skill: "voice" },
+	{ type: "voice", name: "Voice", produces: "file", skill: "voice", reads: ["script"] },
 ]
 const manifestTypes = TypeRegistry.fromContracts(MANIFEST_CONTRACTS)
 
@@ -1664,5 +1664,8 @@ describe("film manifest — a manifest-owning leaf writes its slice + per-key bu
 		const voice = nodes.find((n) => n.type === "voice")!
 		const voiceVersion = (await store.versionsFor(voice.id)).at(-1)!
 		expect(voiceVersion.builtFrom?.[scriptId]).toBe(`manifest:${sliceHash(manifest, ["script"])}`)
+		// 3) voice declares `reads: ["script"]`, so builtFrom ALSO carries a per-key read entry — this is
+		// what lets a node with no dep edge to the owner still rebuild when the slice it reads changes.
+		expect(voiceVersion.builtFrom?.["manifest:script"]).toBe(sliceHash(manifest, ["script"]))
 	})
 })

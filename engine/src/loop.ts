@@ -1073,7 +1073,8 @@ export class Engine {
 	// revalidation compares these against the current upstream: unchanged hash = a no-op, changed = a
 	// real change the dependent must react to.
 	private async computeBuiltFrom(node: Node): Promise<Record<string, string>> {
-		if (node.deps.length === 0) return {}
+		const selfReads = this.types.get(node.type).reads ?? []
+		if (node.deps.length === 0 && selfReads.length === 0) return {}
 		const tree = await this.store.nodesFor(node.productionId)
 		const childrenOf = new Map<string, Node[]>()
 		for (const n of tree) {
@@ -1096,6 +1097,13 @@ export class Engine {
 			} else {
 				out[depId] = await this.effectiveHash(dep, childrenOf)
 			}
+		}
+		// Option B: hash the manifest keys this node READS, independent of its node deps — so a consumer
+		// (e.g. build-voice reads ["script","voice"]) goes stale when a slice it reads changes even without
+		// a dep edge to the owner (docs/lisa/progressive-film-json-design.md).
+		if (selfReads.length > 0) {
+			const m = readManifest(join(this.config.artifactsDir, node.productionId, "board", "film.json"))
+			for (const key of selfReads) out[`manifest:${key}`] = sliceHash(m, [key])
 		}
 		return out
 	}
