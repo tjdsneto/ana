@@ -2,7 +2,9 @@
 
 The moodboard's own grading criteria — the look the whole video is built in. Builds on `a1-frame.md` (the signature) and `a3-slop.md` (the cluster + swap test). **This is the moodboard's own rubric, not the north-star 8-check** (that is a whole-video/ship rubric, not a moodboard one).
 
-Six fields, each must be present AND traced to THIS brand's own material with a stated reason:
+Two layers, checked in order. **Structure first** (`structure-moodboard.md`): all six fields present and the output shape filled — a missing field fails conformance on its own, no taste judgement needed. **Taste second** (below): whether the six that are present are *good* — sourced, specific, slop-free. Don't let a strong taste read paper over a dropped field, and don't fail a complete moodboard only because one field's reason is thin.
+
+Six fields — each must be **present** (structure) AND **traced** to THIS brand's own material with a stated reason (taste):
 
 - **Ground.** The base surface/colour the video sits on, named with a hex, chosen for the brand (not "clean / modern" — those are non-reasons).
 - **Palette.** Named hexes (≥3), one dominant hue, sourced to the brand's real product/era/audience.

@@ -14,9 +14,11 @@ Define the **look** the whole video is built in. This is the brand/look gate —
 
 If the approved brainstorm concept in your upstream commits to a **STYLE / look direction** (chosen upstream to fit the video's goal — issue 0026), **execute that style**: the six fields below *realize* it, they do not reinvent a different look. The style is a property of the concept, decided in the brainstorm, not something you invent here. Honour any brand / colour / asset / tone constraint the briefing carries (user-imposed constraints bind over the concept's style). Only when **no** committed style reaches your upstream do you derive the look from the brief + research from scratch (the original behaviour). Either way, the six-field method and the anti-slop tests below still apply.
 
-## The method — source every choice, no defaults
+## Structure contract — all six fields, always (the non-negotiable layer)
 
-Decide six fields; each MUST trace to THIS brand's own material (its real product, palette, era, audience, content from the briefing/research), with the reason stated. "Clean / modern / readable / lets it breathe" is not a reason.
+Fill **all six** fields below plus the output shape — the canonical, taste-free contract is `craft/video-production/.claude/references/craft-bar/structure-moodboard.md`. This **structure** layer is non-negotiable and holds even when the taste bar is relaxed: a moodboard missing any of the six is incomplete regardless of how good the rest is. The **taste bar** (next section) decides whether the six are *good*; this contract decides whether they are *there*.
+
+Sourcing is taste, not structure: each field should trace to THIS brand's own material (its real product, palette, era, audience, content from the briefing/research), with the reason stated. "Clean / modern / readable / lets it breathe" is not a reason.
 
 1. **Ground** — the dominant background. Prefer a **flat, saturated colour field** (or a considered near-black / off-white chosen for the brand), NOT gradients. Gradients-everywhere is the biggest AI tell.
 2. **Palette** — background / text / one accent / a semantic hue or two. Name the hexes; keep one dominant hue per beat (colour-per-beat is a strong device).
@@ -26,7 +28,9 @@ Decide six fields; each MUST trace to THIS brand's own material (its real produc
 5. **Surface** — how elements sit (flat, a single hairline, one soft vignette). Restraint; no gradient stacks, no rounded-card-on-everything.
 6. **Signature** — one memorable device unique to THIS video (a recurring motif, a motion idea, a transition). Every good launch video has one. Never reuse a signature from a past video.
 
-## Tests before you output
+## Taste bar — how to make the six good (the strippable quality layer)
+
+These are quality gates on the structure above, not extra fields. They decide whether the six are *good*; they never excuse dropping one.
 
 - **Swap test:** put a different product's name on this look — if it still fits, it's generic. Redo it.
 - **Tell count (CRAFT-BAR §A3):** gradients-everywhere + card-for-everything + one-bright-accent + a default font = a 4-tell slop cluster. Keep to **0–1 tells**. If you're over, name the specific sourced swap.
