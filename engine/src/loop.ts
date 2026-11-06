@@ -14,7 +14,7 @@ import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { parseProductionPlanOutput } from "./plan-dag.js"
-import { seedManifest } from "./film-manifest.js"
+import { parseSliceJson, pickKeys, readManifest, seedManifest, sliceHash, writeSlice } from "./film-manifest.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
@@ -682,8 +682,20 @@ export class Engine {
 				},
 				contract,
 			)
-			draft = producerResult.output
-			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			if (contract.owns && contract.owns.length > 0) {
+				// Option B: a manifest-owning leaf emits its slice as JSON. Write those keys into the shared
+				// board/film.json (edited in place as the pipeline runs) and snapshot the owned keys as THIS
+				// node's artifact, so revalidation + builtFrom work on the slice (docs/lisa/progressive-film-json-design.md).
+				const boardPath = join(this.config.artifactsDir, node.productionId, "board", "film.json")
+				seedManifest(boardPath)
+				const slice = pickKeys(parseSliceJson(producerResult.output), contract.owns)
+				writeSlice(boardPath, slice)
+				draft = JSON.stringify(slice, null, 2)
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			} else {
+				draft = producerResult.output
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			}
 		}
 		const producerMs = Date.now() - t0
 		const version = await this.store.createVersion({
@@ -1073,7 +1085,17 @@ export class Engine {
 		const out: Record<string, string> = {}
 		for (const depId of node.deps) {
 			const dep = tree.find((n) => n.id === depId)
-			if (dep) out[depId] = await this.effectiveHash(dep, childrenOf)
+			if (!dep) continue
+			const dc = this.types.get(dep.type)
+			if (dc.owns && dc.owns.length > 0) {
+				// Option B: a manifest-owning dep is tracked by the hash of JUST its slice keys in the shared
+				// film.json (per-key), so this node is stale only when the slice it consumes changed — not when
+				// some unrelated slice did (docs/lisa/progressive-film-json-design.md).
+				const m = readManifest(join(this.config.artifactsDir, node.productionId, "board", "film.json"))
+				out[depId] = `manifest:${sliceHash(m, dc.owns)}`
+			} else {
+				out[depId] = await this.effectiveHash(dep, childrenOf)
+			}
 		}
 		return out
 	}
