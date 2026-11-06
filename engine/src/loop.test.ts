@@ -147,6 +147,41 @@ describe("boardDir file producer — the engine captures the written file, not t
 	})
 })
 
+describe("in-flight draft visibility", () => {
+	it("records a producing version with a live subagent BEFORE the producer returns", async () => {
+		// The observability gap: the version row was created only AFTER the producer subagent returned, so
+		// while a node drafted (minutes for a scene/polish) it had no in-flight row — stepPhase saw the
+		// prior superseded version and rendered the card as "queued", looking idle. A producing row with
+		// subagent.status "running" must exist AT producer-call time so the UI can show "producing".
+		const C: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "s", type: "script", deps: [] }] },
+			{ type: "script", name: "Script", produce: "lines" },
+		]
+		const t = TypeRegistry.fromContracts(C)
+		const root = await newProduction(store)
+		let seen: { status?: string; sub?: string | null } | undefined
+		const runner: SubagentRunner = {
+			engine: "fake",
+			async run(input: SubagentInput): Promise<SubagentResult> {
+				if (!input.skill?.startsWith("review:")) {
+					const leaf = (await store.nodesFor(root.id)).find((n) => n.type === "script")!
+					const v = await store.latestVersion(leaf.id)
+					seen = { status: v?.status, sub: v?.subagent?.status ?? null }
+				}
+				return { output: "a draft", sessionId: "s1" }
+			},
+		}
+		const engine = new Engine({ store, runner, types: t, config: makeConfig() })
+		for (let guard = 0; guard < 20 && !seen; guard++) {
+			await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+		}
+		expect(seen).toBeDefined()
+		expect(seen?.status).toBe("producing")
+		expect(seen?.sub).toBe("running")
+	})
+})
+
 describe("internal review fail → redo cap → escalate (F3)", () => {
 	it("redoes up to maxRedos then presents with a caveat, never spinning", async () => {
 		// every reviewer says revise; producers still return drafts

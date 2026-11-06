@@ -582,6 +582,20 @@ export class Engine {
 
 		const upstream = await this.collectUpstream(node)
 
+		// Record the in-flight draft BEFORE the producer runs, so the dashboard shows "producing" for the
+		// minutes a scene/polish actually drafts — not just the brief review window after it returns. The
+		// row starts status "producing" with a live subagent; the producer result then updates it with the
+		// real artifact + session (builtFrom computed then, after any manifest write), and the reviewers flip
+		// it to needs-work/presentable. Keeping the same version id means the review loop below is unchanged.
+		const runId = randomUUID()
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest?.id,
+			status: "producing",
+			subagent: { runId, status: "running" },
+		})
+
 		// produce — always via a subagent: a rendered leaf runs the render-film skill (which owns its
 		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. A redo
 		// does NOT resume the prior provider session: the producer prompt already carries the prior
@@ -698,15 +712,11 @@ export class Engine {
 			}
 		}
 		const producerMs = Date.now() - t0
-		const version = await this.store.createVersion({
-			nodeId: node.id,
-			n,
-			prevVersionId: latest?.id,
-			status: "producing",
+		await this.store.updateVersion(version.id, {
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
 			subagent: {
-				runId: randomUUID(),
+				runId,
 				status: "done",
 				...(producerResult ? { sessionId: producerResult.sessionId, engine: producerResult.engine ?? this.runner.engine, model: producerResult.model } : {}),
 			},
