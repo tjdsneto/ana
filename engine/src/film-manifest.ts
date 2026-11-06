@@ -50,6 +50,31 @@ export function writeSlice(path: string, slice: Partial<FilmManifest>): FilmMani
 	return next
 }
 
+// Keep only the named keys that are present in `obj` — a node's slice is just its owned keys.
+export function pickKeys(obj: Record<string, unknown>, keys: string[]): Partial<FilmManifest> {
+	const out: Record<string, unknown> = {}
+	for (const k of keys) if (k in obj) out[k] = obj[k]
+	return out
+}
+
+// Parse a slice object from a manifest-owning producer's output: a bare JSON object, or the first fenced
+// ```json block in prose. Returns {} when there is no JSON object (or the JSON isn't an object), so a
+// malformed produce degrades to "wrote no slice" instead of throwing.
+export function parseSliceJson(output: string): Record<string, unknown> {
+	const fenced = output.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+	const candidates = [fenced?.[1], output]
+	for (const c of candidates) {
+		if (!c) continue
+		try {
+			const v = JSON.parse(c.trim())
+			if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>
+		} catch {
+			// try the next candidate
+		}
+	}
+	return {}
+}
+
 // A stable 16-hex hash of ONLY the named keys — the per-slice builtFrom primitive (sub-plan 2). Keys are
 // sorted so arg order doesn't matter; keys outside the set never affect the hash.
 export function sliceHash(m: FilmManifest, keys: string[]): string {

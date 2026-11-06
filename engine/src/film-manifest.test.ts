@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, test } from "vitest"
-import { emptyManifest, readManifest, seedManifest, sliceHash, writeSlice } from "./film-manifest.js"
+import { emptyManifest, parseSliceJson, pickKeys, readManifest, seedManifest, sliceHash, writeSlice } from "./film-manifest.js"
 
 const tmp = () => mkdtempSync(join(tmpdir(), "fm-"))
 
@@ -38,6 +38,26 @@ describe("film-manifest", () => {
 		expect(merged.voice).toEqual({ id: "rachel" }) // untouched by the second write
 		expect(merged.script).toEqual(["line one"])
 		expect(JSON.parse(readFileSync(p, "utf8")).voice).toEqual({ id: "rachel" })
+	})
+
+	test("pickKeys keeps only the named keys that are present", () => {
+		expect(pickKeys({ script: ["a"], voice: { id: "x" }, camera: [] }, ["script", "voice"])).toEqual({ script: ["a"], voice: { id: "x" } })
+		expect(pickKeys({ script: ["a"] }, ["script", "voice"])).toEqual({ script: ["a"] }) // absent key skipped
+		expect(pickKeys({ script: ["a"] }, ["voice"])).toEqual({})
+	})
+
+	test("parseSliceJson parses a bare JSON object", () => {
+		expect(parseSliceJson('{"script":["a","b"]}')).toEqual({ script: ["a", "b"] })
+	})
+
+	test("parseSliceJson extracts a fenced ```json block from prose", () => {
+		const out = 'Here is my slice:\n```json\n{"voice":{"id":"rachel"}}\n```\nDone.'
+		expect(parseSliceJson(out)).toEqual({ voice: { id: "rachel" } })
+	})
+
+	test("parseSliceJson returns {} for no JSON object or a non-object", () => {
+		expect(parseSliceJson("no json here")).toEqual({})
+		expect(parseSliceJson("[1,2,3]")).toEqual({}) // an array is not a slice object
 	})
 
 	test("sliceHash depends only on the named keys and is order-independent", () => {
