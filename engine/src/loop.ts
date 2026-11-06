@@ -923,15 +923,25 @@ export class Engine {
 		}
 		if (named.size === 0) return []
 
-		// invalid = named ∪ forward-deps-closure ∪ ancestor-closure (to fixpoint)
+		// invalid = named ∪ forward-deps-closure ∪ ancestor-closure ∪ manifest-reads-closure (to fixpoint).
+		// The reads closure (Option B, issue 0039): a node that READS a film.json key owned by an invalid
+		// node is itself stale, even with no dep edge to that owner — so build-voice (reads ["script"]),
+		// nested far from the script node, rebuilds when the script slice changes. Without this the cascade
+		// only followed deps/child edges and a reads-only consumer was never reopened.
+		const owns = (n: Node) => this.types.get(n.type).owns ?? []
+		const reads = (n: Node) => this.types.get(n.type).reads ?? []
 		const invalid = new Set(named.keys())
 		for (let changed = true; changed; ) {
 			changed = false
+			// keys owned by something already invalid = the slices this reopen is changing
+			const changedKeys = new Set<string>()
+			for (const n of tree) if (invalid.has(n.id)) for (const k of owns(n)) changedKeys.add(k)
 			for (const node of tree) {
 				if (invalid.has(node.id)) continue
 				const dependsOnInvalid = node.deps.some((d) => invalid.has(d))
 				const hasInvalidChild = (childrenOf.get(node.id) ?? []).some((c) => invalid.has(c.id))
-				if (dependsOnInvalid || hasInvalidChild) {
+				const readsChanged = reads(node).some((k) => changedKeys.has(k))
+				if (dependsOnInvalid || hasInvalidChild || readsChanged) {
 					invalid.add(node.id)
 					changed = true
 				}

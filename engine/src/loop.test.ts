@@ -501,6 +501,57 @@ describe("holistic final review — reopen + revalidation cascade (rebuild only 
 	})
 })
 
+// A reader reachable ONLY via `reads` (no dep edge to the slice owner) must still rebuild when a
+// holistic reopen changes the slice it reads (Option B / issue 0039 follow-up). This is the gap that
+// left build-voice at v1 on a reopen: the cascade followed deps/child edges but ignored `reads`.
+const READS_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "script", type: "script", deps: [] },
+			{ id: "voice", type: "voice", deps: [] }, // NO dep on script — reachable only through `reads`
+			{ id: "join", type: "join", deps: ["script", "voice"] },
+			{ id: "final-review", type: "final-review", deps: ["join"] },
+		],
+	},
+	{ type: "script", name: "Script", produce: "s", owns: ["script"] },
+	{ type: "voice", name: "Voice", produces: "file", skill: "voice", reads: ["script"] },
+	{ type: "join", name: "Join", produce: "j" },
+	{ type: "final-review", name: "Final review", holisticReview: true },
+]
+const readsTypes = TypeRegistry.fromContracts(READS_CONTRACTS)
+
+describe("reopen honors `reads` — a reader with no dep edge rebuilds when its slice changes (0039)", () => {
+	it("reopening script rebuilds voice, which only READS the script slice", async () => {
+		let scriptN = 0
+		let crit = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "final-review") {
+				crit++
+				return crit === 1 ? { output: "VERDICT: revise\nREOPEN: script — change the words" } : { output: "VERDICT: pass" }
+			}
+			if (input.skill === "script") {
+				scriptN++
+				return { output: scriptN === 1 ? '{"script":["a"]}' : '{"script":["a","b"]}' }
+			}
+			return { output: "draft" }
+		})
+		const engine = new Engine({ store, runner, types: readsTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 300; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		const nodes = await store.nodesFor(root.id)
+		const voice = nodes.find((n) => n.type === "voice")!
+		expect((await store.versionsFor(voice.id)).length).toBeGreaterThanOrEqual(2) // rebuilt via reads, not a dep edge
+	})
+})
+
 // A checklist-EXPAND `build` (not a planner) with a leaf child `build-voice`, downstream of a `board`
 // leaf. Regression for issue 0039: reopening the board must rebuild build-voice. build-voice has no
 // sibling deps, so unless the expand's children inherit the parent's upstream deps, build-voice's
