@@ -3,7 +3,8 @@
 	"name": "Script",
 	"description": "Writes the short, tight video script that delivers the brief's messages in the target length, hook first and lines speakable.",
 	"model": "claude-haiku-5-5",
-	"produce": "Write a short, tight video script that delivers the brief's messages in the target length. Lead with the hook; keep lines speakable.",
+	"owns": ["script"],
+	"produce": "Write a short, tight video script that delivers the brief's messages in the target length. Lead with the hook; keep lines speakable. Output ONLY a JSON object {\"script\": [\"line one\", \"line two\", …]} — one spoken line per array entry, inline audio tags allowed (see the script skill). This is the film.json `script` slice.",
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-script-quality" },
 		{ "name": "conformance", "kind": "coverage", "skill": "review-script-conformance" }

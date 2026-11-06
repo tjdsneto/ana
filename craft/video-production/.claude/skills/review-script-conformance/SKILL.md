@@ -11,6 +11,8 @@ Before reviewing, read `craft/video-production/.claude/references/CRAFT-BAR.md` 
 
 You review a **script** on the **conformance** axis — does it match what was asked? You do **not** judge writing quality here (that is the quality reviewer's axis); check the script against the **brief** and the **approved upstream work** you were given.
 
+The script arrives as a JSON object `{"script": ["line one", "line two", …]}` — one spoken line per entry. Judge the lines. Entries may carry inline audio tags (e.g. `[excited]`, `[warm]`) — these are TTS performance cues, not spoken words; ignore them when checking coverage/wording.
+
 ## Rubric
 
 Check every sent param made it in:

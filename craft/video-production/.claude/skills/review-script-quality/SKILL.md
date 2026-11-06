@@ -11,6 +11,8 @@ Before reviewing, read `craft/video-production/.claude/references/CRAFT-BAR.md` 
 
 You review a **script** on the **quality** axis — is it well-written craft? You do **not** check brief coverage here (that is the conformance reviewer's axis); judge the writing itself.
 
+The script arrives as a JSON object `{"script": ["line one", "line two", …]}` — one spoken line per entry. Judge the lines. Entries may carry inline audio tags (e.g. `[excited]`, `[warm]`) — TTS performance cues, not spoken words; ignore them when judging wording/pace (do not penalise a line for carrying a tag, and don't count the tag toward density).
+
 **Judge against §A + the §B profile at the ship test:** a hook that earns the first 1–5s and is not a logo/brand line (§A4); one idea per beat; density ≤ ~2.5 wps (§A4). The **arc and the close are type-dependent — judge them against the §B profile for this video's type**, not a fixed launch shape: a **B-launch** script with no explicit CTA line, or a **B-demo** with no next-step close, or a **B-teaser** that blurts a hard CTA it should defer, is a revise; so is a flat logo/brand open in any type. Name the weak line and give the rewrite — bump it up, don't just grade it.
 
 ## Rubric
