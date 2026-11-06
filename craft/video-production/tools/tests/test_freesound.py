@@ -39,6 +39,12 @@ def test_build_search_params():
     assert p["sort"] == "rating_desc" and p["page_size"] == "15"
     # no duration -> no duration clause
     assert "duration:[" not in m.build_search_params("x", "Creative Commons 0", 0)["filter"]
+    # instrumental is the default — a vocal bed competes with the VO, so vocal tags are excluded
+    assert "-tag:vocals" in p["filter"]
+    assert "-tag:singing" in p["filter"]
+    # opt out for a deliberately vocal track
+    flt2 = m.build_search_params("anthem", "Creative Commons 0", 30, instrumental=False)["filter"]
+    assert "-tag:vocals" not in flt2
 
 
 def test_pick_result():

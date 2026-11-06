@@ -45,12 +45,20 @@ def resolve_key(value: "str | None", key_file: "str | None", env_name: str) -> "
     return os.environ.get(env_name)
 
 
-def build_search_params(query: str, license: str, duration: float) -> dict:
+# Vocal tags excluded by default — a bed with singing/lyrics competes with the voiceover (CRAFT-BAR §A5).
+VOCAL_TAGS = ("vocals", "vocal", "voice", "singing", "lyrics", "speech", "acappella", "choir", "rap")
+
+
+def build_search_params(query: str, license: str, duration: float, instrumental: bool = True) -> dict:
     """Freesound text-search params (token added separately). Filter pins the licence and, when a
-    duration is given, requires a track at least that long (`duration:[d TO *]`)."""
+    duration is given, requires a track at least that long (`duration:[d TO *]`). `instrumental`
+    (default) excludes vocal-tagged tracks so the bed never fights the VO; pass False for a
+    deliberately vocal piece."""
     flt = f'license:"{license}"'
     if duration and duration > 0:
         flt += f" duration:[{duration} TO *]"
+    if instrumental:
+        flt += "".join(f" -tag:{t}" for t in VOCAL_TAGS)
     return {
         "query": query,
         "filter": flt,
@@ -104,6 +112,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--manifest", default=None, help="manifest.json to append the fetched track's row to (for reuse + audit)")
     p.add_argument("--api-key", default=None, help="key by value (visible in `ps`; prefer --api-key-file or $FREESOUND_API_KEY)")
     p.add_argument("--api-key-file", default=None, help="read the key from this file (not visible in `ps`)")
+    p.add_argument("--allow-vocals", action="store_true", help="keep vocal-tagged tracks (default excludes them so the bed never fights the VO)")
     return p.parse_args()
 
 
@@ -124,7 +133,7 @@ def main() -> None:
     if not key:
         sys.exit("freesound: no key (set $FREESOUND_API_KEY, or pass --api-key-file / --api-key; it is never baked)")
 
-    params = build_search_params(a.query, a.license, a.duration)
+    params = build_search_params(a.query, a.license, a.duration, instrumental=not a.allow_vocals)
     url = f"{SEARCH_URL}?{urllib.parse.urlencode(params)}&token={urllib.parse.quote(key)}"
     data = _get_json(url)
     pick = pick_result(data.get("results", []), a.duration)
