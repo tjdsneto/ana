@@ -13,6 +13,7 @@ import { basename, extname, join } from "node:path"
 import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
+import { validateJsonArtifact } from "./conformance.js"
 import { parseProductionPlanOutput } from "./plan-dag.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
@@ -47,6 +48,7 @@ export class Engine {
 	private readonly nearPassStreak = new Map<string, number>() // nodeId → consecutive rounds a version passed all-but-one reviewer (convergence; per-process)
 	private readonly noProgressStreak = new Map<string, { sig: string; n: number }>() // nodeId → the repeated failing-finding signature + its consecutive-round count (0020 no-progress escape; per-process)
 	private readonly dispatchFailures = new Map<string, number>() // nodeId → consecutive dispatch throws (0001; per-process retry counter)
+	private readonly planSchemas = new Map<string, object>() // schema path → parsed JSON Schema (0018 planner conformance gate; loaded once per path)
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -355,6 +357,17 @@ export class Engine {
 	// and are immediately ready) and carry their unit spec in `description`. The node stays in-progress
 	// and rolls up when every child is approved. The engine never parses the upstream's own schema; the
 	// planner skill does. (Reopen later re-runs this node, re-planning against the revised upstream.)
+	// 0018: load + cache a planner's JSON Schema, resolved under craftRoot (the craft tree the worker
+	// runs skills from). A declared-but-missing/unparseable schema is a misconfiguration — fail loud.
+	private loadPlanSchema(rel: string): object {
+		let schema = this.planSchemas.get(rel)
+		if (!schema) {
+			schema = JSON.parse(readFileSync(join(this.config.craftRoot ?? process.cwd(), rel), "utf8")) as object
+			this.planSchemas.set(rel, schema)
+		}
+		return schema
+	}
+
 	private async dispatchPlan(node: Node, contract: TypeContract): Promise<void> {
 		const root = await this.store.getProduction(node.productionId)
 		if (!root) throw new Error(`dispatchPlan: production ${node.productionId} missing`)
@@ -368,16 +381,47 @@ export class Engine {
 		const n = (latest?.n ?? 0) + 1
 
 		const t0 = Date.now()
-		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream })
+		const feedback = latest?.status === "needs-work" ? (latest.feedback ?? undefined) : undefined // 0018: a prior off-schema attempt's violations, fed back to the same planner
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream, feedback })
 		const result = await this.runSubagent(
 			{
 				prompt: plannerPrompt,
 				skill: contract.skill ?? node.type,
 				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
+				resumeSessionId: feedback ? undefined : latest?.subagent?.sessionId, // 0018: a conformance redo runs FRESH (avoid the resume trap); the errors ride in the prompt instead
 			},
 			contract,
 		)
+
+		// 0018 conformance gate: a planner that declares a schema must emit schema-valid output before any
+		// fan-out. Off-schema → record the rejected plan, feed the concrete violations back to the SAME
+		// planner (redo) up to maxRedos, then escalate — never fan out off-schema (which would strand a
+		// dropped required field, e.g. plan-scenes' `method`, past the generic {name,brief} parse).
+		if (contract.schema) {
+			const check = validateJsonArtifact(result.output, this.loadPlanSchema(contract.schema))
+			if (!check.ok) {
+				const rejectedPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, result.output)
+				const rejected = await this.store.createVersion({
+					nodeId: node.id,
+					n,
+					prevVersionId: latest?.id,
+					status: "needs-work",
+					artifactPath: rejectedPath,
+					builtFrom: await this.computeBuiltFrom(node),
+					subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
+				})
+				await this.store.updateVersion(rejected.id, { feedback: check.errors.join("\n") })
+				await this.logInteraction(node, rejected.id, "producer", result, Date.now() - t0, plannerPrompt)
+				const redosSoFar = priorVersions.filter((v) => v.status === "needs-work").length + 1
+				if (redosSoFar >= this.config.maxRedos) {
+					throw new Error(`dispatchPlan: planner "${node.type}" output failed schema conformance after ${this.config.maxRedos} attempts — ${check.errors.join("; ")}`)
+				}
+				log.info("node.plan_redo", { versionId: rejected.id, attempt: redosSoFar, errors: check.errors })
+				await this.store.updateNodeStatus(node.id, "pending")
+				return
+			}
+		}
+
 		const planned = parsePlan(result.output)
 		if (planned.length === 0) throw new Error(`dispatchPlan: planner "${node.type}" returned no children — ${result.output.slice(0, 200)}`)
 

@@ -1556,3 +1556,101 @@ describe("0027 — per-node model diversity across a diverseChildren planner's f
 		expect(ideas.every((i) => i.model === null)).toBe(true) // no mix applied → inherit the type's model
 	})
 })
+
+// Planner conformance gate (0018): a planner whose output must match a JSON Schema. On an off-schema
+// plan the engine does NOT fan out — it redoes the SAME planner fed the concrete violations, up to
+// maxRedos, then stops (never ships off-schema). The scene schema requires a `method` enum that the
+// generic {name,brief} fan-out parse would otherwise drop unvalidated.
+const SCENE_SCHEMA_JSON = JSON.stringify({
+	type: "array",
+	minItems: 1,
+	items: {
+		type: "object",
+		additionalProperties: false,
+		required: ["name", "brief", "method"],
+		properties: {
+			name: { type: "string", minLength: 1 },
+			brief: { type: "string", minLength: 1 },
+			method: { type: "string", enum: ["authored-composite", "edit-footage", "motion-graphics"] },
+		},
+	},
+})
+
+function gateConformanceSetup() {
+	const craftRoot = mkdtempSync(join(tmpdir(), "craft-"))
+	writeFileSync(join(craftRoot, "scene-schema.json"), SCENE_SCHEMA_JSON)
+	const CONTRACTS: TypeContract[] = [
+		{
+			type: "video-project",
+			name: "Video project",
+			checklist: [
+				{ id: "storyboard", type: "storyboard", deps: [] },
+				{ id: "build", type: "build", deps: ["storyboard"] },
+				{ id: "assemble", type: "assemble", deps: ["build"] },
+			],
+		},
+		{ type: "storyboard", name: "Storyboard", produce: "board" },
+		{ type: "build", name: "Build", planner: true, childType: "scene", skill: "plan-scenes", schema: "scene-schema.json", produce: "plan scenes" },
+		{ type: "scene", name: "Scene", produce: "scene", reviews: [{ name: "craft", kind: "craft" }] },
+		{ type: "assemble", name: "Assemble", produce: "assemble" },
+	]
+	return { craftRoot, types: TypeRegistry.fromContracts(CONTRACTS) }
+}
+
+describe("planner conformance gate (0018)", () => {
+	it("redoes the planner fed the schema errors, then fans out on the valid retry", async () => {
+		const { craftRoot, types: t } = gateConformanceSetup()
+		let planCalls = 0
+		const prompts: string[] = []
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				prompts.push(input.prompt)
+				planCalls++
+				if (planCalls === 1) return { output: '```json\n[{"name":"Hook","brief":"the hook"}]\n```' } // missing required `method`
+				return { output: '```json\n[{"name":"Hook","brief":"the hook","method":"edit-footage"}]\n```' }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const engine = new Engine({ store, runner, types: t, config: makeConfig({ craftRoot }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 200; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect(planCalls).toBe(2) // one off-schema attempt, one valid retry
+		const all = await store.nodesFor(root.id)
+		const build = all.find((n) => n.type === "build")!
+		const buildVersions = await store.versionsFor(build.id)
+		expect(buildVersions.some((v) => v.status === "needs-work")).toBe(true) // the rejected plan is recorded
+		expect(buildVersions.at(-1)!.status).toBe("approved")
+		const scenes = all.filter((n) => n.type === "scene")
+		expect(scenes).toHaveLength(1) // fanned out only on the valid plan
+		// come-back-to-the-model: the retry prompt carried the concrete violation
+		expect(prompts[1]).toMatch(/method/)
+	})
+
+	it("never fans out while the planner stays off-schema", async () => {
+		const { craftRoot, types: t } = gateConformanceSetup()
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") return { output: '```json\n[{"name":"Hook","brief":"no method"}]\n```' }
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${input.skill}` }
+		})
+		const engine = new Engine({ store, runner, types: t, config: makeConfig({ craftRoot, maxRedos: 2 }) })
+		const root = await newProduction(store)
+		for (let g = 0; g < 80; g++) {
+			try {
+				await engine.tick()
+			} catch {
+				// at the redo cap the planner escalates by throwing — the dispatch retry wrapper absorbs it
+			}
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+		}
+		expect((await store.nodesFor(root.id)).filter((n) => n.type === "scene")).toHaveLength(0) // off-schema never fanned out
+		expect((await store.getProduction(root.id))?.status).not.toBe("approved")
+	})
+})

@@ -38,6 +38,7 @@ export interface TypeContract {
 	childType?: string
 	diverseChildren?: boolean // 0027: a planner whose fanned children get the config's FANOUT_MODEL_MIX rotated across them (per-node model diversity); off → children inherit this type's model
 	plansProduction?: boolean // a planner that MATERIALIZES the production's sibling DAG (parseProductionDag) rather than fanning children of a childType
+	schema?: string // planner only (0018): path (relative to craftRoot) to a JSON Schema the planner's output MUST satisfy before fan-out. Off-schema output is fed back to the same planner as a redo directive (up to maxRedos), never fanned out. Generic: JSON Schema (draft-07) is domain-agnostic; the schema itself lives in craft.
 	produce?: string // producer instruction (the prompt seed)
 	reviews?: ReviewSpec[] // the specialist reviewer set
 	advisoryReview?: boolean // rollup/review never blocks (agreement types)

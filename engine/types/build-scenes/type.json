@@ -4,6 +4,7 @@
 	"description": "Planner that breaks the approved storyboard (film.json) into one independent scene per storyboard scene, in playback order, fanned out.",
 	"planner": true,
 	"childType": "scene",
+	"schema": ".claude/skills/plan-scenes/schema.json",
 	"skill": "plan-scenes",
 	"model": "claude-sonnet-5-5",
 	"produce": "Read the approved storyboard (film.json) and break it into one independent scene per storyboard scene, in playback order, each with its realization method. Output the generic scene list the engine fans out."

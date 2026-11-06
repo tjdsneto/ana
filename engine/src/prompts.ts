@@ -56,7 +56,7 @@ export interface PlanChild {
 // playback order. The engine stays domain-agnostic: it parses only this generic shape, never the
 // upstream's own schema (e.g. a storyboard's film.json). Each entry becomes one child of childType,
 // and its "brief" rides into the child's producer prompt as that unit's spec.
-export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[]; feedback?: string }): string {
 	const parts: string[] = []
 	parts.push(
 		contract.produce ??
@@ -65,6 +65,13 @@ export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string;
 	parts.push(
 		'Output ONLY a fenced ```json block: an array of objects {"name": string, "brief": string}, one per unit, in playback order. "brief" is the self-contained spec that unit\'s producer needs.',
 	)
+	// 0018: on a redo after a failed schema check, the exact violations come back here so the planner
+	// corrects THIS output rather than regenerating blind (come-back-to-the-model).
+	if (ctx.feedback) {
+		parts.push(
+			`\n## Fix these schema-conformance errors from your previous attempt\nYour previous output did not satisfy the required schema. Correct exactly these and re-emit the FULL corrected JSON (every required field on every entry):\n${ctx.feedback}`,
+		)
+	}
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## Approved upstream work")

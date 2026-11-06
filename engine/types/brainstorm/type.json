@@ -4,6 +4,7 @@
 	"description": "Planner that seeds the distinct video concepts to explore (default 3) from the briefing + research, fanned out into parallel idea agents.",
 	"planner": true,
 	"childType": "idea",
+	"schema": ".claude/skills/brainstorm/schema.json",
 	"diverseChildren": true,
 	"exposeChildrenToDependents": true,
 	"skill": "brainstorm",

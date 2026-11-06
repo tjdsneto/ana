@@ -4,6 +4,7 @@
 	"description": "Planner that lays out the board beats (one card per beat) from the approved script + moodboard, owning whole-board coherence; fanned out into card nodes.",
 	"planner": true,
 	"childType": "card",
+	"schema": ".claude/skills/storyboard/schema.json",
 	"exposeChildrenToDependents": true,
 	"skill": "storyboard",
 	"model": "claude-opus-5-5",
