@@ -13,7 +13,7 @@ Before developing your concept, read `craft/video-production/.claude/references/
 
 ## 1. Develop your concept
 
-From your seed brief + the briefing + the research dossier, write a treatment:
+From your seed brief + the briefing + the research dossier, write a treatment. **Lead with the concept's exact title, verbatim, as a `CONCEPT: "<title>"` line** — use the title you were seeded with (your node's name), quoted exactly, NOT a new label you invent. Everything downstream (peer critique, the judge, the dashboard) refers to your concept by this one string, so it must match what the human sees. Then:
 - **Angle & hook** — the one idea, and the opening that earns attention.
 - **Beat arc** — the rough shot sequence, each beat tied to what it shows and says.
 - **Capability fit** — name the **techniques** your treatment commits to by their `craft/video-production/.claude/references/techniques.json` `id`, with their `backingCapability` and feasibility (flag any `roadmap:<service>` reach). Which scenes are **real-UI-capture** (name the dossier marks you'd feature), which are **generated-asset** (kinetic / composed), whether a `tail_clip` payoff applies. Only propose techniques the registry marks buildable (or a flagged roadmap reach the lever permits).
@@ -25,7 +25,7 @@ Keep it a treatment, not a storyboard — enough for a judge to compare concepts
 
 ## 2. Peer critique + vote
 
-When you are given the sibling concepts (the other N−1 treatments), critique each briefly — its strongest and weakest point against the goal — then name which of **all N** (including your own, honestly) you judge strongest, and why in one line. Be a fair critic, not an advocate for your own: the phase works only if the vote is honest.
+When you are given the sibling concepts (the other N−1 treatments), critique each briefly — its strongest and weakest point against the goal — then name which of **all N** (including your own, honestly) you judge strongest, and why in one line. Be a fair critic, not an advocate for your own: the phase works only if the vote is honest. **Refer to every concept — yours and the siblings — by its exact title in quotes, never a shortened or invented nickname**, so the human can trace which concept you mean.
 
 ## Output
 
@@ -33,7 +33,7 @@ Your treatment (section 1). When peer critique is requested, append:
 
 ```
 PEER CRITIQUE
-- <concept name>: <strength> / <weakness>
+- "<exact concept title>": <strength> / <weakness>
   ...
-BEST: <concept name> — <one-line why>
+BEST: "<exact concept title>" — <one-line why>
 ```

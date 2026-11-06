@@ -30,10 +30,12 @@ You are **not** limited to choosing one treatment as-is. If the strongest result
 The **winning concept** as the approved brainstorm deliverable — restate the chosen treatment in full (angle, hook, beat arc, capability fit, grounding), so `script` has a self-contained spec to write from. Lead with two lines:
 
 ```
-WINNER: <concept name, or "Merge: <A> + <B>" for a synthesis> — <one-line why it won / what the merge takes from where>
+WINNER: "<exact concept title>", or Merge: "<exact title A>" + "<exact title B>" for a synthesis — <one-line why it won / what the merge takes from where>
 STYLE: <the committed look / visual-style direction the moodboard must EXECUTE — carried from the winning (or merged) concept; 0026>
 EMPHASIS: <weight> (dominant)[ — <phrase of why the idea leans there>][; <weight> (secondary)]
 ```
+
+**Name every concept by its EXACT title, verbatim, in quotes — the title the idea carries (its `CONCEPT:` line / its node name, what the human sees on the dashboard). Do NOT invent, shorten, or paraphrase a new label for it.** Renaming "One ask, live: the over-the-shoulder build" to "One Unbroken Ask" breaks the human's ability to trace your winner back to the three ideas they approved — the single most confusing thing this step can do. For a merge, quote each source concept's exact title and say what you took from each ("the spine from \"A\", the strike from \"B\""). This applies everywhere you refer to a concept, not just the `WINNER:` line.
 
 then the full chosen treatment. If the winner carries an unresolved `OPEN QUESTION` that must be answered before scripting, end with `NEEDS RESEARCH: <question>` so the phase can loop back.
 
