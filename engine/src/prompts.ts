@@ -56,7 +56,7 @@ export interface PlanChild {
 // playback order. The engine stays domain-agnostic: it parses only this generic shape, never the
 // upstream's own schema (e.g. a storyboard's film.json). Each entry becomes one child of childType,
 // and its "brief" rides into the child's producer prompt as that unit's spec.
-export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[] }): string {
+export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[]; feedback?: string }): string {
 	const parts: string[] = []
 	parts.push(
 		contract.produce ??
@@ -65,6 +65,13 @@ export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string;
 	parts.push(
 		'Output ONLY a fenced ```json block: an array of objects {"name": string, "brief": string}, one per unit, in playback order. "brief" is the self-contained spec that unit\'s producer needs.',
 	)
+	if (ctx.feedback) {
+		// This is a RE-PLAN: the step was reopened with a directive (a human/critic reason on the finished
+		// work). Without threading it in, the planner re-plans blind and reproduces the very thing the reopen
+		// asked to change (issue: a named-planner reopen that ignored "lose the hook strike"). Act on it: keep
+		// unit NAMES stable where the directive doesn't ask otherwise, so the engine reconciles in place.
+		parts.push(`\n## Directive to address (this is a re-plan)\n${ctx.feedback}\n\nRe-plan to satisfy this directive. Keep each unit's "name" the same as before unless the directive requires adding, dropping, or renaming a unit — stable names let the engine keep the units that did not change instead of rebuilding the whole set.`)
+	}
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {
 		parts.push("\n## Approved upstream work")

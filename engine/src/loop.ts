@@ -349,6 +349,17 @@ export class Engine {
 			return
 		}
 		if (contract.planner) {
+			// A planner that ALREADY has children is being re-entered — reopened by name (version "denied"),
+			// or a worker restart mid-fan. It must RECONCILE its existing children (keep/skip/add by name),
+			// never blind re-fan: dispatchPlan appends a whole second set of same-named children (the live
+			// 18-cards-for-9-beats duplicate bug). Only the FIRST plan (no children yet) runs dispatchPlan.
+			// (The cascade path — a planner marked "stale" by an upstream change — already reconciles via
+			// revalidate→replan above and returned before here.)
+			const hasChildren = (await this.store.nodesFor(node.productionId)).some((n) => n.parentId === node.id)
+			if (hasChildren && latest) {
+				await this.replan(node, contract, latest)
+				return
+			}
 			await this.dispatchPlan(node, contract)
 			return
 		}
@@ -1211,7 +1222,9 @@ export class Engine {
 		const root = await this.store.getProduction(node.productionId)
 		const upstream = await this.collectUpstream(node)
 		const t0 = Date.now()
-		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream })
+		// A named reopen carries the critic/human directive as denial feedback — thread it in so the re-plan
+		// obeys it (otherwise the planner re-plans blind and reproduces what the reopen asked to change).
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream, feedback: latest.feedback ?? undefined })
 		const result = await this.runSubagent(
 			{
 				prompt: plannerPrompt,

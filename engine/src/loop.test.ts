@@ -1060,6 +1060,51 @@ describe("planner re-plan — reopen the storyboard, reconcile scenes by name", 
 	})
 })
 
+// A planner named DIRECTLY by the holistic review (REOPEN: <planner>) must reconcile its children, not
+// blind re-fan. Regression for the live duplicate-cards bug: a named planner's version goes "denied"
+// (not "stale"), so it skipped the revalidate→replan route and fell through to dispatchPlan, which
+// appended a SECOND full set of same-named children (18 cards for a 9-beat board). The named reopen must
+// also reconcile, AND thread the critic's directive into the planner prompt so the re-plan obeys it.
+describe("planner reopened BY NAME — reconcile, never blind re-fan (duplicate-set regression)", () => {
+	it("re-plans in place (no duplicate children) and threads the reopen directive into the planner prompt", async () => {
+		let plans = 0
+		let critiques = 0
+		let draftN = 0
+		const planPrompts: string[] = []
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				plans++
+				planPrompts.push(input.prompt)
+				// same three beats both times — reconcile must KEEP them, not create A,B,C a second time
+				return { output: '```json\n[{"name":"A","brief":"a"},{"name":"B","brief":"b"},{"name":"C","brief":"c"}]\n```' }
+			}
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: build — restructure the beats, keep their names" } : { output: "VERDICT: pass" }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` }
+		})
+		const engine = new Engine({ store, runner, types: replanTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(plans).toBe(2) // planned once, re-planned once after the NAMED reopen
+		const scenes = (await store.nodesFor(root.id)).filter((n) => n.type === "scene")
+		expect(scenes).toHaveLength(3) // reconciled in place — NOT 6 (the blind-re-fan duplicate bug)
+		expect(scenes.map((s) => s.name).sort()).toEqual(["A", "B", "C"])
+		// the critic's directive reached the re-plan (so a real re-plan would obey "restructure the beats")
+		expect(planPrompts[1]).toMatch(/restructure the beats/)
+	})
+})
+
 // Convergence: a leaf can sit at all-but-one-pass round after round and never get a unanimous pass.
 // After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it instead of grinding to
 // the redo cap. A weak leaf (more than one dissent) never sustains the streak. (Under carry-forward,
