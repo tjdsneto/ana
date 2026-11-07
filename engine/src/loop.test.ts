@@ -1,7 +1,7 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
 // tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -102,6 +102,35 @@ describe("happy path — produce → present → approve, end to end", () => {
 		// loop records (the fake runner drops a placeholder file — spec 09 skills+tools, no stub client)
 		const render = children.find((c) => c.type === "render")!
 		expect((await store.latestVersion(render.id))?.artifactPath?.endsWith(".mp4")).toBe(true)
+	})
+})
+
+describe("artifact layout — per-step version dirs + a deliverable folder", () => {
+	it("writes text artifacts under steps/<step>/v<n>/ and copies a deliverable render to deliverable/<name>-v<n>.<ext>", async () => {
+		const LAYOUT: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "briefing", type: "briefing", deps: [] }, { id: "render", type: "render", deps: ["briefing"] }] },
+			{ type: "briefing", name: "Briefing", produce: "brief" },
+			{ type: "render", name: "Render", produces: "file", skill: "render-film", deliverable: "film" },
+		]
+		const t = TypeRegistry.fromContracts(LAYOUT)
+		const cfg = makeConfig()
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: t, config: cfg })
+		const root = await newProduction(store)
+		for (let g = 0; g < 80; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) break
+		}
+		const A = cfg.artifactsDir
+		// each step gets its own dir with versions as subdirs; the text artifact lives inside the version dir
+		expect(existsSync(join(A, root.id, "steps", "briefing", "v1", "artifact.md"))).toBe(true)
+		// the deliverable render is copied to a deliverable/ folder, version in the filename
+		const deliv = readdirSync(join(A, root.id, "deliverable"))
+		expect(deliv.some((f) => /^film-v\d+\.mp4$/.test(f))).toBe(true)
+		// nothing is dumped flat at the production root as <base>-v<n>.md anymore
+		const rootEntries = readdirSync(join(A, root.id))
+		expect(rootEntries.some((f) => /-v\d+\.md$/.test(f))).toBe(false)
 	})
 })
 
@@ -1303,8 +1332,7 @@ describe("file-leaf output contract (produces: file)", () => {
 			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
 		}
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
-		const assemble = (await store.nodesFor(root.id)).find((n) => n.type === "assemble")!
-		const scenesDir = join(config.artifactsDir, root.id, `assemble-${assemble.id}-v1`, "scenes")
+		const scenesDir = join(config.artifactsDir, root.id, "steps", "assemble", "v1", "scenes")
 		expect(readdirSync(scenesDir).sort()).toEqual(["01-Hook.mp4", "02-CTA.mp4"])
 	})
 })
