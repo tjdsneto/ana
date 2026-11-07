@@ -3,7 +3,7 @@
 
 import { FakeStore } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
-import { approve, approveBudget, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
+import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
 
 const TYPES_DIR = new URL("../../../engine/types", import.meta.url).pathname
 const CAPS_DIR = new URL("../../../engine/capabilities", import.meta.url).pathname
@@ -110,6 +110,46 @@ describe("submitFeedback", () => {
 		const { production_id } = await presentSomething()
 		await submitFeedback(store, { productionId: production_id, body: "make it shorter" })
 		expect(store.chatInputs.at(-1)).toMatchObject({ kind: "feedback", respondsTo: null, body: "make it shorter" })
+	})
+})
+
+describe("cancelNode", () => {
+	it("skips the node + its subtree, supersedes their versions, resolves their pending outputs", async () => {
+		const { production_id } = await requestVideo(store, { brief: "a 15s video about X", sessionId: "sess_1" })
+		// a planner (storyboard) with two same-named card children (the duplicate-fan-out situation) — plus a
+		// grandchild under one card, to prove the subtree is swept.
+		const [board] = await store.createChildNodes(production_id, [{ type: "storyboard", name: "storyboard" }])
+		const [keep] = await store.createChildNodes(board!.id, [{ type: "card", name: "hook", position: 0 }])
+		const [dup] = await store.createChildNodes(board!.id, [{ type: "card", name: "hook", position: 0 }])
+		const [grandchild] = await store.createChildNodes(dup!.id, [{ type: "plate", name: "plate" }])
+		const keepV = await store.createVersion({ nodeId: keep!.id, n: 1, status: "approved" })
+		const dupV = await store.createVersion({ nodeId: dup!.id, n: 1, status: "presentable" })
+		await store.updateNodeStatus(keep!.id, "approved")
+		await store.updateNodeStatus(dup!.id, "needs-presentation")
+		const dupOut = await store.emitOutput({ productionId: production_id, nodeId: dup!.id, versionId: dupV.id, type: "present", prompt: "hook ready" })
+
+		const res = await cancelNode(store, { nodeId: dup!.id })
+
+		expect(res).toEqual({ ok: true, cancelled: 2 }) // the dup card + its grandchild
+		expect((await store.getNode(dup!.id))?.status).toBe("skipped")
+		expect((await store.getNode(grandchild!.id))?.status).toBe("skipped")
+		expect((await store.getVersion(dupV.id))?.status).toBe("superseded")
+		expect((await store.getOutput(dupOut.id))?.status).toBe("resolved") // inbox clears
+		// the sibling we keep is untouched
+		expect((await store.getNode(keep!.id))?.status).toBe("approved")
+		expect((await store.getVersion(keepV.id))?.status).toBe("approved")
+	})
+
+	it("refuses to cancel the production root", async () => {
+		const { production_id } = await requestVideo(store, { brief: "x", sessionId: "s" })
+		await expect(cancelNode(store, { nodeId: production_id })).rejects.toThrow(/root/)
+	})
+
+	it("is refused on a retired production", async () => {
+		const { production_id } = await requestVideo(store, { brief: "x", sessionId: "s" })
+		const [child] = await store.createChildNodes(production_id, [{ type: "card", name: "c" }])
+		await store.updateNodeStatus(production_id, "cancelled")
+		await expect(cancelNode(store, { nodeId: child!.id })).rejects.toThrow(/cancelled/)
 	})
 })
 

@@ -5,4 +5,4 @@
 export { requestProduction, requestVideo, type RequestProductionInput, type RequestVideoInput } from "./request.js"
 export { getCapabilities } from "./capabilities.js"
 export { getDeliverable, getStatus, inbox } from "./reads.js"
-export { approve, approveBudget, submitFeedback } from "./gate.js"
+export { approve, approveBudget, cancelNode, submitFeedback } from "./gate.js"

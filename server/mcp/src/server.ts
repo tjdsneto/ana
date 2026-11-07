@@ -7,7 +7,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
-import { approve, approveBudget, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "@core/services"
+import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "@core/services"
 import { type Logger, NoopLogger, type Store } from "@core/shared"
 import { z } from "zod"
 
@@ -93,6 +93,15 @@ export function buildServer(store: Store, logger: Logger = new NoopLogger()): Mc
 		"approve_budget",
 		{ description: "Approve the render-spend budget so the worker may proceed past a money gate.", inputSchema: { production_id: z.string() } },
 		(a) => run("approve_budget", () => approveBudget(store, { productionId: a.production_id })),
+	)
+
+	server.registerTool(
+		"cancel_node",
+		{
+			description: "Cancel a node and its subtree (by node_id): marks them skipped, supersedes their versions, and clears any pending present outputs. Use to prune a node the loop should stop pursuing — e.g. a duplicate fanned-out child. Not for the production root.",
+			inputSchema: { node_id: z.string() },
+		},
+		(a) => run("cancel_node", () => cancelNode(store, { nodeId: a.node_id })),
 	)
 
 	return server

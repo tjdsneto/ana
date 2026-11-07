@@ -5,7 +5,7 @@
 
 import { readFile, stat } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
-import { approve, approveBudget, getDeliverable, submitFeedback } from "@core/services"
+import { approve, approveBudget, cancelNode, getDeliverable, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
 import { artifactsRoot, contentTypeFor, listMedia, listVideos, locateUnderRoot, type MediaFile, resolveUnderRoot } from "./media.js"
@@ -185,6 +185,7 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 	app.post("/api/approve", handle("approve", (req) => approve(store, { outputId: req.body.output_id, versionId: req.body.version_id })))
 	app.post("/api/feedback", handle("feedback", (req) => submitFeedback(store, { outputId: req.body.output_id, productionId: req.body.production_id, body: req.body.body })))
 	app.post("/api/approve-budget", handle("approve_budget", (req) => approveBudget(store, { productionId: req.body.production_id })))
+	app.post("/api/cancel-node", handle("cancel_node", (req) => cancelNode(store, { nodeId: req.body.node_id })))
 
 	return app
 }
