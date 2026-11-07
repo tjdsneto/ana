@@ -21,6 +21,7 @@ You own the **whole-board coherence** — the cards only see their own brief, so
 - **The VO line per beat** — from the script, in order, each line spoken once; the CTA line only on the final card. The script arrives as a JSON object `{"script": ["line one", …]}` — one entry per spoken line; use the entries **verbatim** (inline audio tags like `[excited]` stay in the line). Do not rewrite or re-author the words; the script step owns them.
 - **The on-screen text treatment per beat** — decide, per card, whether the screen shows a short **focal phrase** (the few words the beat lands on — the full line is only *spoken*) or the **full line**. **Default to a focal phrase**; reserve the full line for a beat whose whole sentence must be read (often the CTA). This is a production-level call you own — the card honors it, and either way keeps a safe-area margin with breathing room (never a five-line wall of text). See COMPOSED-CARDS §2.
 - **Each beat's focal subject + camera intent** — the one element that must dominate that card (within the safe area — dominant, not overflowing), and a rough zoom.
+- **Each beat's hold/dwell** — the settle time its content needs to be read after the reveal (≥1.5–2s for a single line/number, 2.5–3s for multiple rows/numbers), per CRAFT-BAR §A4. Budget the runtime for reading, not just for the VO.
 
 ## Output — ONLY a JSON array (no prose, no code fence)
 
@@ -39,3 +40,4 @@ Rules:
 - **Every card names a `Motion` verb + a `Transition` (§A1, MOTION-VOCAB).** The focal element arrives with real motion (text reveals, a number counts up, a cursor clicks, a chart draws) and the beat connects to the next with a deliberate transition — a camera zoom on a static plate is NOT motion. No two consecutive cards are both static-plate-under-a-pan.
 - Every `brief` is self-contained: the card node sees only its brief + the brief/moodboard + the craft bar.
 - Keep VO lines verbatim from the script, in order; mark which card is the hook and which is the close (the close's form follows the §B profile — a CTA for a launch, a deferred tease for a teaser, a next step for a demo).
+- Read `craft/video-production/.claude/references/SLOP-LEDGER.md` and don't reproduce a listed mistake.

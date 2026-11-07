@@ -61,4 +61,5 @@ Example:
 - **Assign a `method` per scene** from the palette above; mixed methods across one video are expected, not an error.
 - Pull the spoken lines and visual direction straight from the storyboard/script; do not invent new messages.
 - **Carry the whole-video craft anchors down to named scenes** (§A1/§B of the craft bar). The storyboard owns them whole-video; put each in the specific scene brief so the producer has its piece: assign the **§A1 signature move** to the one scene that carries it (not every scene), give the **single hero number/receipt** its own scene framed big (§A1/§A2) when the video has one, and put the **§B-profile close** (B-launch's required on-screen CTA; B-teaser's deferred ask; B-demo/-explainer's next step) in the final scene's brief. A scene brief that omits its assigned anchor leaves the producer to guess.
+- **Each scene carries a dwell (§A4)** — the hold its information needs to be read after the motion; a scene that only budgets the VO duration will rush its on-screen content.
 - Keep each `brief` tight and concrete — it becomes the scene producer's whole instruction.

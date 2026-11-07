@@ -18,6 +18,8 @@ Judge against `craft/video-production/.claude/references/CRAFT-BAR.md` (§A univ
 - **Real motion, not a slideshow (§A1, MOTION-VOCAB).** Something in the frame actually animates — text reveals, a number counts up, a cursor clicks, a chart draws, an element scales/slides in. **A slow camera pan/zoom on a static plate is NOT motion**; a scene whose only movement is the camera over a held image is a slideshow beat → `revise` ("add a real motion verb — reveal/count-up/cursor/draw-in — not just a camera move"). (Exception: a genuine canvas tour where the pan itself reveals new content.)
 - **Clean motion.** The motion that is there is purposeful and smooth — no jitter, warping, morphing artifacts, or aimless drift. For an avatar scene: natural delivery, lip-sync holds, no uncanny glitches.
 - **Length.** The clip is as long as its beat needs and no longer.
+- **Dwell (§A4).** The scene holds its information long enough to read after the motion completes — a beat that lands and immediately cuts is a rush = revise; lengthen it.
+- **Shown matches said (§A2).** What's on screen is what the VO names at that moment — a visual that doesn't match the line is a revise.
 
 ## Output
 

@@ -8,7 +8,7 @@ description: Produce ONE composed card of the board — its plate HTML + camera 
 > ## Hold to the craft bar
 > Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile) and `craft/video-production/.claude/references/COMPOSED-CARDS.md`. Judged against both.
 
-You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile for this video's type) + `craft/video-production/.claude/references/COMPOSED-CARDS.md` + the **moodboard**.
+You produce **one card** — exactly the beat in this node's spec, not the whole board. The storyboard fanned this card out; a sibling node owns each other card, so what you emit can never affect them. Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A universal taste + the §B profile for this video's type) + `craft/video-production/.claude/references/COMPOSED-CARDS.md` + the **moodboard**. Check `craft/video-production/.claude/references/SLOP-LEDGER.md` before producing — don't ship a tell it already lists.
 
 ## Inputs
 

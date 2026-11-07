@@ -20,6 +20,7 @@ The **shared visual language** every scene must hold, from the approved **storyb
 - **Palette & lighting.** Same colour world and light mood as the board — not warmer/colder, darker/brighter than its neighbours.
 - **Type & captions.** Same font treatment, size scale, and placement convention as the other scenes.
 - **Motion energy.** The same tempo/feel — a frantic scene next to slow ones (or vice versa) breaks the flow.
+- **Consistent dwell (§A4).** Information beats across scenes all hold long enough to read — no scene noticeably rushes its content relative to the others.
 - **Framing discipline.** The same "fill the frame, readable text, no dead space" standard applied consistently, so one scene isn't noticeably looser than the rest.
 - **Recurring elements.** Logo lockup, lower-thirds, transitions appear the same way the board establishes.
 

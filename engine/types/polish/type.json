@@ -2,7 +2,7 @@
 	"type": "polish",
 	"name": "Polish",
 	"description": "Tightens timing, captions, and audio levels; fixes the rough edges from the render pass.",
-	"produce": "Tighten timing, captions, and audio levels; fix the rough edges from the render pass.",
+	"produce": "Tighten timing, captions, and audio levels; fix the rough edges from the render pass. Timing means READ-TIME, not clock-time: every information beat must HOLD its fully-composed frame long enough to be read after its reveal completes (CRAFT-BAR §A4 dwell — roughly >=1.5-2s on a single line/number, 2.5-3s on a multi-row/number beat). Trim only genuine dead air (flat holds at joins); never shorten a hold below read-time to hit a runtime — if the cut is tight, let it run longer rather than rushing the key beats.",
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-polish-quality" }
 	],
