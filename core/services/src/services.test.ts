@@ -3,7 +3,7 @@
 
 import { FakeStore } from "@core/shared/testing"
 import { beforeEach, describe, expect, it } from "vitest"
-import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, submitFeedback } from "./index.js"
+import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, retryNode, submitFeedback } from "./index.js"
 
 const TYPES_DIR = new URL("../../../engine/types", import.meta.url).pathname
 const CAPS_DIR = new URL("../../../engine/capabilities", import.meta.url).pathname
@@ -150,6 +150,32 @@ describe("cancelNode", () => {
 		const [child] = await store.createChildNodes(production_id, [{ type: "card", name: "c" }])
 		await store.updateNodeStatus(production_id, "cancelled")
 		await expect(cancelNode(store, { nodeId: child!.id })).rejects.toThrow(/cancelled/)
+	})
+})
+
+describe("retryNode", () => {
+	it("resets a stranded in-progress node to pending and supersedes its dead producing version", async () => {
+		const { production_id } = await requestVideo(store, { brief: "x", sessionId: "s" })
+		const [board] = await store.createChildNodes(production_id, [{ type: "storyboard", name: "storyboard" }])
+		const [card] = await store.createChildNodes(board!.id, [{ type: "card", name: "close-cta", position: 0 }])
+		// the strand: the worker claimed it (in-progress) and created a producing version, then its subagent
+		// died (a worker recreate) — the row sits producing forever, the node never re-claimed.
+		const v = await store.createVersion({ nodeId: card!.id, n: 1, status: "producing", subagent: { runId: "r1", status: "running" } })
+		await store.updateNodeStatus(card!.id, "in-progress")
+
+		const res = await retryNode(store, { nodeId: card!.id })
+
+		expect(res).toEqual({ ok: true })
+		expect((await store.getNode(card!.id))?.status).toBe("pending") // re-claimable by the loop
+		expect((await store.getVersion(v.id))?.status).toBe("superseded") // the dead producing row is retired
+	})
+
+	it("refuses the production root and a retired production", async () => {
+		const { production_id } = await requestVideo(store, { brief: "x", sessionId: "s" })
+		await expect(retryNode(store, { nodeId: production_id })).rejects.toThrow(/root/)
+		const [child] = await store.createChildNodes(production_id, [{ type: "card", name: "c" }])
+		await store.updateNodeStatus(production_id, "cancelled")
+		await expect(retryNode(store, { nodeId: child!.id })).rejects.toThrow(/cancelled/)
 	})
 })
 

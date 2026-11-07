@@ -126,3 +126,19 @@ export async function cancelNode(store: Store, input: { nodeId: string }): Promi
 	}
 	return { ok: true, cancelled: subtree.length }
 }
+
+// Retry a stranded node: reset it to "pending" so the loop re-claims and re-produces it, and supersede
+// its dead latest version. A node whose producer died mid-flight (e.g. a worker recreate killed its
+// subagent) is left "in-progress" with a "producing" version that will never finish; the loop only
+// claims "pending" nodes, so it strands until the self-heal reaper lands (issue 0011, deferred). This is
+// the manual stopgap for that. Not for the production root. Leaves an already-approved version alone.
+export async function retryNode(store: Store, input: { nodeId: string }): Promise<{ ok: true }> {
+	const node = await store.getNode(input.nodeId)
+	if (!node) throw new Error(`retry: node ${input.nodeId} not found`)
+	if (node.parentId === null) throw new Error(`retry: ${input.nodeId} is the production root — not a retryable node`)
+	await assertProductionActive(store, node.productionId, "retry")
+	const latest = await store.latestVersion(node.id)
+	if (latest && latest.status !== "approved") await store.updateVersion(latest.id, { status: "superseded" })
+	await store.updateNodeStatus(node.id, "pending")
+	return { ok: true }
+}
