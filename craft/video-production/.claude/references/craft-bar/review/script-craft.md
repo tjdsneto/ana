@@ -4,6 +4,10 @@ Loaded by the generic `review-craft` reviewer when judging a `script` deliverabl
 
 You review a **script** on the **quality** axis — is it well-written craft? You do **not** check brief coverage here (that is the conformance reviewer's axis); judge the writing itself. (Axis note: the §A3 visual-slop cluster and `COMPOSED-CARDS.md` are **not** a script's axis — those belong to the board/card reviewers, not here. Judge the text-relevant parts: **§A4** — the hook earns the first 1–5s and is not a logo/brand line; one idea per beat; density ≤ ~2.5 wps — and the **§B profile** for this video's type, its arc + required close.)
 
+The script arrives as a JSON object `{"script": ["line one", "line two", …]}` — one spoken line per entry. Judge the lines. Entries may carry inline audio tags (e.g. `[excited]`, `[warm]`) — TTS performance cues, not spoken words; ignore them when judging wording/pace (do not penalise a line for carrying a tag, and don't count the tag toward density).
+
+The **arc and the close are type-dependent — judge them against the §B profile for this video's type**, not a fixed launch shape: a **B-launch** script with no explicit CTA line, or a **B-demo** with no next-step close, or a **B-teaser** that blurts a hard CTA it should defer, is a revise; so is a flat logo/brand open in any type. Name the weak line and give the rewrite — bump it up, don't just grade it.
+
 ## Rubric
 
 - **Hook first.** The opening line earns attention in the first ~3 seconds; no throat-clearing, no "In this video…".

@@ -21,4 +21,12 @@ Write the narration. Rules:
 - **Emotion via audio tags (the one allowed bracket):** the voice is ElevenLabs v4, which reads inline bracketed performance cues — `[excited]`, `[curious]`, `[warm]`, `[reassuring]`, `[whispers]`, `[laughs]` — as delivery direction. Use them to make the read dynamic and alive, but as **seasoning**: tag only the beats that genuinely turn (the hook, the reveal, the close), a few across the whole script, from that small palette — never one on every line, never a tag that fights the line. Place the tag inline right before the words it colours (`[excited] There's your popup.` or `Say it [warm] in plain English.`). These are the ONLY brackets allowed, and they are **not** the forbidden stage directions above: they are stripped before word-timing, so they are never spoken and never become on-screen text. On a redo asking for a more expressive / emotional voice, this is the lever — add or adjust tags, don't rewrite the lines.
 - **Explainer / case-study mode.** If the brief marks the video an explainer, case-study, or walkthrough, the 3-5 line / 12-18s limit does **not** apply: write to the brief's target length (often 40-90s), as a clear sequence of short spoken beats — one per step being shown. An establishing opener is allowed here ("Here's how this video was built…", "In this example…") — when the subject *is* the process, that is not throat-clearing. Stay speakable, tight, grounded; the close can hand off to what plays next ("…and here's the result:").
 
-Output **only** the lines, one per line (inline audio tags allowed as above). Nothing else.
+## Output
+
+Output **only** a JSON object — the film.json `script` slice — nothing else:
+
+```json
+{"script": ["[curious] Ask your AI for a popup.", "Not a Model Context Protocol. The Monster Context Protocol.", "…"]}
+```
+
+One spoken line per array entry, in order, each line once (inline audio tags allowed as above — they stay in the string, verbatim). No prose around the JSON. The engine writes this slice straight into the shared `board/film.json` (`script` key) and it is the authoritative source of the spoken words for the whole pipeline — the voice reads it, the storyboard beats it, no one re-copies it.

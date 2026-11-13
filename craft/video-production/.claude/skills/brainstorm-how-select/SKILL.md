@@ -41,8 +41,10 @@ The DAG-emission contract below is otherwise unchanged: when you are not asking,
 Emit the **winning approach's DAG** as the frozen production spine — a fenced ```json block of the shape `{"stages": [{"id": string, "type": string, "deps": [string], "binding"?: object}]}`, carrying the eight spine stages in order with the winner's method/heaviness `binding`s. This JSON block is the load-bearing output; the engine parses it and materializes each stage as a sibling node. Lead with one line naming the winner, then the JSON:
 
 ```
-WINNER: <approach name> — <one-line why it won over the others>
+WINNER: "<exact approach title>" — <one-line why it won over the others>
 ```
+
+**Name the winner (and any approach you reference) by its EXACT title, verbatim, in quotes — the title the how-idea carries / its node name, what the human sees on the dashboard. Do NOT invent, shorten, or paraphrase a new label** (renaming "One composition, one camera, sound mapped to events" to "One Canvas, One Camera" breaks the human's trace back to the approaches they approved).
 
 ```json
 {"stages": [

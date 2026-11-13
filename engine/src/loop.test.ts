@@ -1654,3 +1654,69 @@ describe("planner conformance gate (0018)", () => {
 		expect((await store.getProduction(root.id))?.status).not.toBe("approved")
 	})
 })
+
+describe("film manifest — seeded at production start (Option B #1)", () => {
+	it("creates board/film.json with the empty skeleton when the production starts", async () => {
+		const { readFileSync } = await import("node:fs")
+		const { join } = await import("node:path")
+		const cfg = makeConfig()
+		const runner = new FakeSubagentRunner(() => ({ output: "draft" }))
+		const engine = new Engine({ store, runner, types, config: cfg })
+		const root = await newProduction(store)
+		await engine.tick() // startQueuedProductions runs on the first tick
+		const manifest = JSON.parse(readFileSync(join(cfg.artifactsDir, root.id, "board", "film.json"), "utf8"))
+		expect(manifest).toEqual({ script: [], camera: [], plates: {} })
+	})
+})
+
+// A manifest-owning leaf (`owns: ["script"]`) emits its slice as JSON; the engine writes it into
+// board/film.json, and a dependent's builtFrom hashes exactly that slice (Option B #2/#3).
+const MANIFEST_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "script", type: "script", deps: [] },
+			{ id: "voice", type: "voice", deps: ["script"] },
+		],
+	},
+	{ type: "script", name: "Script", produce: "script", owns: ["script"] },
+	{ type: "voice", name: "Voice", produces: "file", skill: "voice", reads: ["script"] },
+]
+const manifestTypes = TypeRegistry.fromContracts(MANIFEST_CONTRACTS)
+
+describe("film manifest — a manifest-owning leaf writes its slice + per-key builtFrom (Option B #2)", () => {
+	it("writes the script slice into film.json and the dependent hashes just that slice", async () => {
+		const { readFileSync } = await import("node:fs")
+		const { join } = await import("node:path")
+		const { sliceHash } = await import("./film-manifest.js")
+		const cfg = makeConfig()
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "script") return { output: '{"script":["line a","line b"]}' }
+			return { output: "voice draft" } // voice: produces:"file", no file written → captured as text
+		})
+		const engine = new Engine({ store, runner, types: manifestTypes, config: cfg })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 200; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+
+		// 1) the script slice landed in the shared manifest
+		const manifest = JSON.parse(readFileSync(join(cfg.artifactsDir, root.id, "board", "film.json"), "utf8"))
+		expect(manifest.script).toEqual(["line a", "line b"])
+
+		// 2) voice's builtFrom hashes exactly the script slice (per-key), not the script node's whole artifact
+		const nodes = await store.nodesFor(root.id)
+		const scriptId = nodes.find((n) => n.type === "script")!.id
+		const voice = nodes.find((n) => n.type === "voice")!
+		const voiceVersion = (await store.versionsFor(voice.id)).at(-1)!
+		expect(voiceVersion.builtFrom?.[scriptId]).toBe(`manifest:${sliceHash(manifest, ["script"])}`)
+		// 3) voice declares `reads: ["script"]`, so builtFrom ALSO carries a per-key read entry — this is
+		// what lets a node with no dep edge to the owner still rebuild when the slice it reads changes.
+		expect(voiceVersion.builtFrom?.["manifest:script"]).toBe(sliceHash(manifest, ["script"]))
+	})
+})

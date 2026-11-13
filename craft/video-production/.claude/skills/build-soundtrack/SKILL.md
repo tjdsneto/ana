@@ -21,6 +21,7 @@ Bare voiceover over silence is a fail. Sound is never zero — the floor:
 Wire these with the tools (do not hand-fake audio):
 
 - **Music bed** → `music.py`. Its request field takes a `PATH` (bring-your-own file), `library:<mood>` (local library), `stock:<mood>` (a licence-clean fetch, CC0 via freesound), or `generate:<prompt>` (the `$MUSIC_GEN_CMD` seam). Declare it as the `music` track, ducked under the voice.
+  - **Instrumental only — no vocals (§A5).** The bed must be instrumental. A track with singing, lyrics, rapping, a vocal hook, or spoken words competes head-on with the voiceover and is an immediate AI/stock tell — it is a fail, not a style choice. The `stock:` lane already excludes vocal-tagged tracks (freesound `instrumental` default); for `generate:` prompts you MUST add `instrumental, no vocals, no lyrics, no singing` to the prompt; for `library:`/`PATH` pick a track you have confirmed is instrumental. Only override with a vocal track when the brief explicitly asks for a sung bed over no VO.
 - **SFX** → the palette in `sfxgen.py`, surfaced standalone by `sfx.py`: **click · tick · pop · hit · whoosh · swish**. `mix.py` auto-derives some cues from the timeline; add explicit `sfx` entries for the key beats the timeline would miss so every signature beat is scored.
 
 ## Inputs

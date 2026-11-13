@@ -28,6 +28,8 @@ Honor **free-text** emphases too: if the concept leans somewhere not in that lis
 
 ## 1. Develop your approach into a candidate DAG
 
+**Lead with your approach's exact title, verbatim, as an `APPROACH: "<title>"` line** — the title you were seeded with (your node's name), quoted exactly, not a new label. The judge and the human refer to your approach by this one string, so it must match what the dashboard shows.
+
 From your seed brief + the brief + the winning concept, decide, **for each stage of the universal spine** — `script → moodboard → storyboard → assemble-board → build → assemble → polish → final-review`:
 
 - **The method/engine bound** — which capability class (if any) the stage uses, matched to the brief. The sharpest choices are at `build` (acquire real-UI capture via `screen-recording` vs generate via `generative-image`/`generative-video` vs an `avatar-presenter` walkthrough) and the audio inside it (`tts` + `music`, light vs layered).

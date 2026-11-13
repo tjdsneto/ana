@@ -15,6 +15,7 @@ import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResul
 import type { EngineConfig } from "./config.js"
 import { validateJsonArtifact } from "./conformance.js"
 import { parseProductionPlanOutput } from "./plan-dag.js"
+import { parseSliceJson, pickKeys, readManifest, seedManifest, sliceHash, writeSlice } from "./film-manifest.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
 import type { TypeContract, TypeRegistry } from "./typereg.js"
 
@@ -235,6 +236,10 @@ export class Engine {
 				continue // held until the required inputs are provided — does NOT count as progress (a held
 				// production must not keep runUntilIdle draining, or the tick safety valve trips every poll)
 			}
+			// Option B: the shared film.json is created at production start and edited in place by each
+			// contributing node as it approves (docs/lisa/progressive-film-json-design.md). Idempotent —
+			// a restart/reopen never wipes slices already written.
+			seedManifest(join(this.config.artifactsDir, root.id, "board", "film.json"))
 			// A production is a root node of ANY type, not only an expand video-project. Route it by kind:
 			// an expand root fans its checklist; a planner/leaf root (a standalone capability — a scene, a
 			// clip, a one-shot sfx) is dispatched directly, marked in-progress first (the claim a non-root
@@ -271,11 +276,17 @@ export class Engine {
 		const idByKey = new Map<string, string>() // checklist-local key → created node id
 		let position = 0
 		for (const entry of contract.checklist) {
-			const deps = (entry.deps ?? []).map((k) => {
+			const sibling = (entry.deps ?? []).map((k) => {
 				const id = idByKey.get(k)
 				if (!id) throw new Error(`expandNode: dep "${k}" referenced before it was declared`)
 				return id
 			})
+			// Inherit the expand node's OWN upstream deps too (mirrors dispatchPlan's fan-out, loop.ts ~407):
+			// a child is built in the context of the parent's upstream, so it must list that upstream as a
+			// dep — otherwise its builtFrom is empty and revalidation can never see an upstream change, so a
+			// changed board never rebuilds build-voice/soundtrack/assets (issue 0039). The root's own deps are
+			// empty, so its phase-1 children are unaffected.
+			const deps = [...new Set([...node.deps, ...sibling])]
 			const name = this.types.has(entry.type) ? (this.types.get(entry.type).name ?? entry.type) : entry.type
 			const [child] = await this.store.createChildNodes(node.id, [{ type: entry.type, name, deps, position }])
 			if (!child) throw new Error("expandNode: createChildNodes returned no row")
@@ -615,6 +626,20 @@ export class Engine {
 
 		const upstream = await this.collectUpstream(node)
 
+		// Record the in-flight draft BEFORE the producer runs, so the dashboard shows "producing" for the
+		// minutes a scene/polish actually drafts — not just the brief review window after it returns. The
+		// row starts status "producing" with a live subagent; the producer result then updates it with the
+		// real artifact + session (builtFrom computed then, after any manifest write), and the reviewers flip
+		// it to needs-work/presentable. Keeping the same version id means the review loop below is unchanged.
+		const runId = randomUUID()
+		const version = await this.store.createVersion({
+			nodeId: node.id,
+			n,
+			prevVersionId: latest?.id,
+			status: "producing",
+			subagent: { runId, status: "running" },
+		})
+
 		// produce — always via a subagent: a rendered leaf runs the render-film skill (which owns its
 		// own TTS/ffmpeg tools and writes the .mp4), every other leaf runs its producer skill. A redo
 		// does NOT resume the prior provider session: the producer prompt already carries the prior
@@ -715,19 +740,27 @@ export class Engine {
 				},
 				contract,
 			)
-			draft = producerResult.output
-			artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			if (contract.owns && contract.owns.length > 0) {
+				// Option B: a manifest-owning leaf emits its slice as JSON. Write those keys into the shared
+				// board/film.json (edited in place as the pipeline runs) and snapshot the owned keys as THIS
+				// node's artifact, so revalidation + builtFrom work on the slice (docs/lisa/progressive-film-json-design.md).
+				const boardPath = join(this.config.artifactsDir, node.productionId, "board", "film.json")
+				seedManifest(boardPath)
+				const slice = pickKeys(parseSliceJson(producerResult.output), contract.owns)
+				writeSlice(boardPath, slice)
+				draft = JSON.stringify(slice, null, 2)
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			} else {
+				draft = producerResult.output
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+			}
 		}
 		const producerMs = Date.now() - t0
-		const version = await this.store.createVersion({
-			nodeId: node.id,
-			n,
-			prevVersionId: latest?.id,
-			status: "producing",
+		await this.store.updateVersion(version.id, {
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
 			subagent: {
-				runId: randomUUID(),
+				runId,
 				status: "done",
 				...(producerResult ? { sessionId: producerResult.sessionId, engine: producerResult.engine ?? this.runner.engine, model: producerResult.model } : {}),
 			},
@@ -944,15 +977,25 @@ export class Engine {
 		}
 		if (named.size === 0) return []
 
-		// invalid = named ∪ forward-deps-closure ∪ ancestor-closure (to fixpoint)
+		// invalid = named ∪ forward-deps-closure ∪ ancestor-closure ∪ manifest-reads-closure (to fixpoint).
+		// The reads closure (Option B, issue 0039): a node that READS a film.json key owned by an invalid
+		// node is itself stale, even with no dep edge to that owner — so build-voice (reads ["script"]),
+		// nested far from the script node, rebuilds when the script slice changes. Without this the cascade
+		// only followed deps/child edges and a reads-only consumer was never reopened.
+		const owns = (n: Node) => this.types.get(n.type).owns ?? []
+		const reads = (n: Node) => this.types.get(n.type).reads ?? []
 		const invalid = new Set(named.keys())
 		for (let changed = true; changed; ) {
 			changed = false
+			// keys owned by something already invalid = the slices this reopen is changing
+			const changedKeys = new Set<string>()
+			for (const n of tree) if (invalid.has(n.id)) for (const k of owns(n)) changedKeys.add(k)
 			for (const node of tree) {
 				if (invalid.has(node.id)) continue
 				const dependsOnInvalid = node.deps.some((d) => invalid.has(d))
 				const hasInvalidChild = (childrenOf.get(node.id) ?? []).some((c) => invalid.has(c.id))
-				if (dependsOnInvalid || hasInvalidChild) {
+				const readsChanged = reads(node).some((k) => changedKeys.has(k))
+				if (dependsOnInvalid || hasInvalidChild || readsChanged) {
 					invalid.add(node.id)
 					changed = true
 				}
@@ -1094,7 +1137,8 @@ export class Engine {
 	// revalidation compares these against the current upstream: unchanged hash = a no-op, changed = a
 	// real change the dependent must react to.
 	private async computeBuiltFrom(node: Node): Promise<Record<string, string>> {
-		if (node.deps.length === 0) return {}
+		const selfReads = this.types.get(node.type).reads ?? []
+		if (node.deps.length === 0 && selfReads.length === 0) return {}
 		const tree = await this.store.nodesFor(node.productionId)
 		const childrenOf = new Map<string, Node[]>()
 		for (const n of tree) {
@@ -1106,7 +1150,24 @@ export class Engine {
 		const out: Record<string, string> = {}
 		for (const depId of node.deps) {
 			const dep = tree.find((n) => n.id === depId)
-			if (dep) out[depId] = await this.effectiveHash(dep, childrenOf)
+			if (!dep) continue
+			const dc = this.types.get(dep.type)
+			if (dc.owns && dc.owns.length > 0) {
+				// Option B: a manifest-owning dep is tracked by the hash of JUST its slice keys in the shared
+				// film.json (per-key), so this node is stale only when the slice it consumes changed — not when
+				// some unrelated slice did (docs/lisa/progressive-film-json-design.md).
+				const m = readManifest(join(this.config.artifactsDir, node.productionId, "board", "film.json"))
+				out[depId] = `manifest:${sliceHash(m, dc.owns)}`
+			} else {
+				out[depId] = await this.effectiveHash(dep, childrenOf)
+			}
+		}
+		// Option B: hash the manifest keys this node READS, independent of its node deps — so a consumer
+		// (e.g. build-voice reads ["script","voice"]) goes stale when a slice it reads changes even without
+		// a dep edge to the owner (docs/lisa/progressive-film-json-design.md).
+		if (selfReads.length > 0) {
+			const m = readManifest(join(this.config.artifactsDir, node.productionId, "board", "film.json"))
+			for (const key of selfReads) out[`manifest:${key}`] = sliceHash(m, [key])
 		}
 		return out
 	}

@@ -6,7 +6,7 @@ description: Produce one scene from its spec, realized by the scene's method (au
 # build-scene
 
 > ## Hold to the craft bar
-> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`. Judged against both.
+> Read `craft/video-production/.claude/references/CRAFT-BAR.md` (§A + the §B profile); for composed scenes also `COMPOSED-CARDS.md`; for the scene's motion, `MOTION-VOCAB.md`. Judged against all.
 
 You produce **one scene** of the video — the clip for exactly the scene in this node's spec, not the whole film, realized by the spec's `method`. The engine fanned this scene out from the storyboard; a sibling node owns each other scene.
 
@@ -24,7 +24,20 @@ The scene spec carries a **`method`** (assigned by `plan-scenes`). It decides ho
 - **`authored-continuous`** — the same authored-render chain, but a single plate under one continuous word-anchored camera move and no `layers` (a straight product-tour beat).
 - **`whole-clip-generative`** — generate the scene as one whole clip via the generator below; do not decompose it.
 - **`edit-footage`** — the scene is cut from a **caller-provided** video asset staged in the scene work dir (a screen recording, a take, stock). Follow the `edit-footage` craft skill: inspect the asset, write an EDL (in/out, crop, audio), apply it with `edl-apply.mjs`, optionally a ken-burns `punch.mjs` → `scene.mp4`. You cut/crop what's provided; never fabricate footage.
-- **`motion-graphics`** — the scene is a programmatic animated clip (animated title / lower-third / caption / overlay). Follow the `motion-graphics` craft skill: author a self-contained HTML/GSAP composition and render it with the motion-graphics tool (HyperFrames default) → `scene.mp4`. Use for a designed-motion beat with no captured or generated footage.
+- **`motion-graphics`** — the scene is a programmatic animated clip (animated title / lower-third / caption / stat / chart / overlay). Follow the `motion-graphics` craft skill: author a self-contained HTML/GSAP composition and render it with the motion-graphics tool (HyperFrames default) → `scene.mp4`. Build the motion from `MOTION-VOCAB.md` — word-by-word text reveals, a number that counts up, a bar/line that draws in, kinetic emphasis on the hero word. Use for a designed-motion / text / data beat with no captured or generated footage.
+
+## Motion is required — the scene's `brief` names its verb (§A1, MOTION-VOCAB)
+
+The scene brief carries a MOTION verb + a TRANSITION (assigned by `plan-scenes`). Realize them — do not ship a static plate under a slow pan (that is the slideshow §A1 fails):
+
+- **`authored-composite`:** the focal element must *arrive* with motion — animate `layers` (`move`/entrance), not a static overlay. For a real-UI "it does X" beat, drive a **cursor** layer that glides to and clicks the element, synced to the VO, with a click/tick SFX:
+  ```json
+  { "kind": "image", "src": "assets/overlays/cursor.png", "at": "<word before the action>", "until": "<end>", "x": 300, "y": 600, "z": 20,
+    "move": { "to": { "x": 1180, "y": 430 }, "at": "<word>", "dur": 0.7, "ease": "power2.inOut" } }
+  ```
+  (land a `click@"<word>"` SFX in the audio plan on the click). Callouts stagger in; a result panel scales in; the presenter PiP shrinks to a corner. One clear move per beat — kinetic, not busy (§A4).
+- **`authored-continuous`:** a camera pan is the *bed*, not the motion. If the beat has nothing animating over it, it is a slideshow candidate — prefer `motion-graphics` or add an animated layer unless the pan itself reveals something (a canvas tour).
+- **Transition out:** realize the brief's transition into the next beat (push / zoom-through / match-cut / a cut on a VO stress with a whoosh) at the scene's tail where the method allows; at minimum do not end on a frozen hold.
 
 Pick the branch from `method`; do not generate a clip for the authored methods, do not hand-author a composite for the generative one, and do not re-capture or re-generate footage for `edit-footage` (use only what the staged asset contains).
 

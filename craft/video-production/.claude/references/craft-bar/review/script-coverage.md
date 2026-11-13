@@ -4,6 +4,8 @@ Loaded by the generic `review-conformance` reviewer when judging a `script` deli
 
 Does the script match what was asked? Do **not** judge writing quality here (that is the quality reviewer's axis); check the script against the **brief** and the **approved upstream work** you were given. A dull-but-complete script still passes here. (Axis note: the §A3 visual-slop cluster and `COMPOSED-CARDS.md` are not a script's axis — this is a coverage check against the brief + §B, not a visual-craft gate.)
 
+The script arrives as a JSON object `{"script": ["line one", "line two", …]}` — one spoken line per entry; it is the film.json `script` slice. Entries may carry inline audio tags (e.g. `[excited]`, `[warm]`) — TTS performance cues, not spoken words; ignore them when checking coverage/wording.
+
 Check every sent param made it in:
 
 - **Messages.** Every point the brief asks the video to make is present. None dropped, none invented beyond the brief/upstream.

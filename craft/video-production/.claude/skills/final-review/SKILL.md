@@ -28,6 +28,8 @@ Your verdict must cite concrete frames/timecodes you actually looked at. If you 
 
 Across both passes you are judging the **gestalt** — things only visible assembled: pacing/flow (drag, rush, jump), do the parts play well together (style, tone, audio levels, transitions — a clip that clashes with its neighbours is a reopen even if fine alone), and overall craft against the good-video bar.
 
+**Pass 3 — slop sniff (mandatory).** Run the whole-cut AI-slop sweep in **`craft/video-production/.claude/references/SLOP-SNIFF.md`** — the tells that only show up in motion/over time (slideshow/flat motion, vocal music bed, flat TTS + dead air, generative artifacts, generic stock imagery, default fonts, dead tail, hollow script) and the step each one reopens. Apply its threshold: **2+ distinct cut-level tells, OR a single severe tell (a vocal bed under the VO, slideshow throughout, flat TTS with dead air, an artifact on a hero beat), is a `revise`.** Emit one `REOPEN:` per tell, targeting the owning step from the table (the reopen is the *remover* — the step rebuilds without the tell). This is the sniffer; do not pass a cut that reeks of slop because the brief is otherwise covered.
+
 ## Explainer / case-study mode
 
 If the brief marks the video an explainer / case-study / walkthrough, judge it against **that** brief, not a 15s spot: a 40-90s sectioned walkthrough is the intended length (don't reopen for "too long" / "drags" if pacing is sensible), an establishing opener is fine, and a video that **ends by playing an appended produced clip** (`tail_clip`) is intended — the shift from the dashboard walkthrough to that final clip is the payoff, not a style clash. Still judge clarity, flow, legibility, audio, and that it delivers the explainer end to end.

@@ -3,6 +3,7 @@
 	"name": "Build voice",
 	"description": "Leaf that produces the voiceover and its word timing — the shared timeline clock the scenes anchor to — for the whole video.",
 	"skill": "voice-production",
+	"reads": ["script", "voice"],
 	"produce": "Produce the voiceover and its word timing (the shared timeline clock the scenes anchor to) for the whole video.",
 	"reviews": [{ "name": "quality", "kind": "craft", "skill": "review-craft" }]
 }
