@@ -56,7 +56,10 @@ export interface PlanChild {
 // playback order. The engine stays domain-agnostic: it parses only this generic shape, never the
 // upstream's own schema (e.g. a storyboard's film.json). Each entry becomes one child of childType,
 // and its "brief" rides into the child's producer prompt as that unit's spec.
-export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string; upstream: UpstreamArtifact[]; feedback?: string }): string {
+export function buildPlannerPrompt(
+	contract: TypeContract,
+	ctx: { brief: string; upstream: UpstreamArtifact[]; feedback?: string; feedbackKind?: "schema" | "directive" },
+): string {
 	const parts: string[] = []
 	parts.push(
 		contract.produce ??
@@ -65,12 +68,23 @@ export function buildPlannerPrompt(contract: TypeContract, ctx: { brief: string;
 	parts.push(
 		'Output ONLY a fenced ```json block: an array of objects {"name": string, "brief": string}, one per unit, in playback order. "brief" is the self-contained spec that unit\'s producer needs.',
 	)
-	// 0018: on a redo after a failed schema check, the exact violations come back here so the planner
-	// corrects THIS output rather than regenerating blind (come-back-to-the-model).
+	// Two redo paths thread feedback into the SAME planner prompt, each with a different meaning — the
+	// caller tags which via feedbackKind:
+	//   - "directive" (replan): the step was reopened by name with a human/critic directive. Without it the
+	//     planner re-plans blind and reproduces the very thing the reopen asked to change (issue: a
+	//     named-planner reopen that ignored "lose the hook strike"). Keep unit NAMES stable so the engine
+	//     reconciles in place rather than rebuilding the whole set.
+	//   - "schema" (0018, dispatchPlan): the prior output failed the JSON-Schema conformance gate; the exact
+	//     violations come back so the planner corrects THIS output rather than regenerating blind
+	//     (come-back-to-the-model).
 	if (ctx.feedback) {
-		parts.push(
-			`\n## Fix these schema-conformance errors from your previous attempt\nYour previous output did not satisfy the required schema. Correct exactly these and re-emit the FULL corrected JSON (every required field on every entry):\n${ctx.feedback}`,
-		)
+		if (ctx.feedbackKind === "directive") {
+			parts.push(`\n## Directive to address (this is a re-plan)\n${ctx.feedback}\n\nRe-plan to satisfy this directive. Keep each unit's "name" the same as before unless the directive requires adding, dropping, or renaming a unit — stable names let the engine keep the units that did not change instead of rebuilding the whole set.`)
+		} else {
+			parts.push(
+				`\n## Fix these schema-conformance errors from your previous attempt\nYour previous output did not satisfy the required schema. Correct exactly these and re-emit the FULL corrected JSON (every required field on every entry):\n${ctx.feedback}`,
+			)
+		}
 	}
 	parts.push(`\n## Brief\n${ctx.brief}`)
 	if (ctx.upstream.length > 0) {

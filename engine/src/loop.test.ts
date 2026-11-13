@@ -1,7 +1,7 @@
 // Engine loop tests — full pipeline on FakeStore + FakeSubagentRunner, no DB, no claude -p. The
 // tests drive the human gate (approve/feedback) between ticks, like the client would.
 
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ChatOutput, Store, SubagentInput, SubagentResult, SubagentRunner } from "@core/shared"
@@ -102,6 +102,35 @@ describe("happy path — produce → present → approve, end to end", () => {
 		// loop records (the fake runner drops a placeholder file — spec 09 skills+tools, no stub client)
 		const render = children.find((c) => c.type === "render")!
 		expect((await store.latestVersion(render.id))?.artifactPath?.endsWith(".mp4")).toBe(true)
+	})
+})
+
+describe("artifact layout — per-step version dirs + a deliverable folder", () => {
+	it("writes text artifacts under steps/<step>/v<n>/ and copies a deliverable render to deliverable/<name>-v<n>.<ext>", async () => {
+		const LAYOUT: TypeContract[] = [
+			{ type: "video-project", name: "VP", checklist: [{ id: "briefing", type: "briefing", deps: [] }, { id: "render", type: "render", deps: ["briefing"] }] },
+			{ type: "briefing", name: "Briefing", produce: "brief" },
+			{ type: "render", name: "Render", produces: "file", skill: "render-film", deliverable: "film" },
+		]
+		const t = TypeRegistry.fromContracts(LAYOUT)
+		const cfg = makeConfig()
+		const engine = new Engine({ store, runner: new FakeSubagentRunner(), types: t, config: cfg })
+		const root = await newProduction(store)
+		for (let g = 0; g < 80; g++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) break
+		}
+		const A = cfg.artifactsDir
+		// each step gets its own dir with versions as subdirs; the text artifact lives inside the version dir
+		expect(existsSync(join(A, root.id, "steps", "briefing", "v1", "artifact.md"))).toBe(true)
+		// the deliverable render is copied to a deliverable/ folder, version in the filename
+		const deliv = readdirSync(join(A, root.id, "deliverable"))
+		expect(deliv.some((f) => /^film-v\d+\.mp4$/.test(f))).toBe(true)
+		// nothing is dumped flat at the production root as <base>-v<n>.md anymore
+		const rootEntries = readdirSync(join(A, root.id))
+		expect(rootEntries.some((f) => /-v\d+\.md$/.test(f))).toBe(false)
 	})
 })
 
@@ -927,6 +956,51 @@ describe("planner re-plan — reopen the storyboard, reconcile scenes by name", 
 	})
 })
 
+// A planner named DIRECTLY by the holistic review (REOPEN: <planner>) must reconcile its children, not
+// blind re-fan. Regression for the live duplicate-cards bug: a named planner's version goes "denied"
+// (not "stale"), so it skipped the revalidate→replan route and fell through to dispatchPlan, which
+// appended a SECOND full set of same-named children (18 cards for a 9-beat board). The named reopen must
+// also reconcile, AND thread the critic's directive into the planner prompt so the re-plan obeys it.
+describe("planner reopened BY NAME — reconcile, never blind re-fan (duplicate-set regression)", () => {
+	it("re-plans in place (no duplicate children) and threads the reopen directive into the planner prompt", async () => {
+		let plans = 0
+		let critiques = 0
+		let draftN = 0
+		const planPrompts: string[] = []
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "plan-scenes") {
+				plans++
+				planPrompts.push(input.prompt)
+				// same three beats both times — reconcile must KEEP them, not create A,B,C a second time
+				return { output: '```json\n[{"name":"A","brief":"a"},{"name":"B","brief":"b"},{"name":"C","brief":"c"}]\n```' }
+			}
+			if (input.skill === "final-review") {
+				critiques++
+				return critiques === 1 ? { output: "VERDICT: revise\nREOPEN: build — restructure the beats, keep their names" } : { output: "VERDICT: pass" }
+			}
+			if (input.skill?.startsWith("review:")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` }
+		})
+		const engine = new Engine({ store, runner, types: replanTypes, config: makeConfig({ maxGlobalRevisions: 2 }) })
+		const root = await newProduction(store)
+
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(plans).toBe(2) // planned once, re-planned once after the NAMED reopen
+		const scenes = (await store.nodesFor(root.id)).filter((n) => n.type === "scene")
+		expect(scenes).toHaveLength(3) // reconciled in place — NOT 6 (the blind-re-fan duplicate bug)
+		expect(scenes.map((s) => s.name).sort()).toEqual(["A", "B", "C"])
+		// the critic's directive reached the re-plan (so a real re-plan would obey "restructure the beats")
+		expect(planPrompts[1]).toMatch(/restructure the beats/)
+	})
+})
+
 // Convergence: a leaf can sit at all-but-one-pass round after round and never get a unanimous pass.
 // After convergeAfter consecutive all-but-one-pass rounds, the gate accepts it instead of grinding to
 // the redo cap. A weak leaf (more than one dissent) never sustains the streak. (Under carry-forward,
@@ -1125,8 +1199,7 @@ describe("file-leaf output contract (produces: file)", () => {
 			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
 		}
 		expect((await store.getProduction(root.id))?.status).toBe("approved")
-		const assemble = (await store.nodesFor(root.id)).find((n) => n.type === "assemble")!
-		const scenesDir = join(config.artifactsDir, root.id, `assemble-${assemble.id}-v1`, "scenes")
+		const scenesDir = join(config.artifactsDir, root.id, "steps", "assemble", "v1", "scenes")
 		expect(readdirSync(scenesDir).sort()).toEqual(["01-Hook.mp4", "02-CTA.mp4"])
 	})
 })

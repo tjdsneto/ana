@@ -351,6 +351,17 @@ export class Engine {
 			return
 		}
 		if (contract.planner) {
+			// A planner that ALREADY has children is being re-entered — reopened by name (version "denied"),
+			// or a worker restart mid-fan. It must RECONCILE its existing children (keep/skip/add by name),
+			// never blind re-fan: dispatchPlan appends a whole second set of same-named children (the live
+			// 18-cards-for-9-beats duplicate bug). Only the FIRST plan (no children yet) runs dispatchPlan.
+			// (The cascade path — a planner marked "stale" by an upstream change — already reconciles via
+			// revalidate→replan above and returned before here.)
+			const hasChildren = (await this.store.nodesFor(node.productionId)).some((n) => n.parentId === node.id)
+			if (hasChildren && latest) {
+				await this.replan(node, contract, latest)
+				return
+			}
 			await this.dispatchPlan(node, contract)
 			return
 		}
@@ -393,7 +404,7 @@ export class Engine {
 
 		const t0 = Date.now()
 		const feedback = latest?.status === "needs-work" ? (latest.feedback ?? undefined) : undefined // 0018: a prior off-schema attempt's violations, fed back to the same planner
-		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream, feedback })
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root.description ?? "", upstream, feedback, feedbackKind: "schema" })
 		const result = await this.runSubagent(
 			{
 				prompt: plannerPrompt,
@@ -651,13 +662,14 @@ export class Engine {
 		let producerResult: SubagentResult | undefined
 		let producerPrompt = ""
 		const t0 = Date.now()
+		const step = await this.artifactBase(node) // the step key: <prod>/steps/<step>/v<n>/
 		if (contract.produces === "file") {
 			// A file-output leaf is produced by a WORKER running the type's skill (skills + tools, spec 09),
 			// not by engine code. Stage the upstream artifacts into a work dir, dispatch the worker from
 			// craftRoot (its .claude/skills), and capture the file it writes. The engine owns no renderer —
 			// the craft skills do. Generic: no video knowledge here (the type names its skill + staging).
-			// Include node.id: sibling nodes of the same type (fanned-out scenes) must not share a work dir.
-			const workDir = join(this.config.artifactsDir, node.productionId, `${node.type}-${node.id}-v${n}`)
+			// The step key is node-scoped (artifactBase), so sibling fanned-out scenes don't share a work dir.
+			const workDir = stepVersionDir(this.config.artifactsDir, node.productionId, step, n)
 			mkdirSync(workDir, { recursive: true })
 			// A board-dir producer (e.g. a composed-board assembler) writes its shared files — plates/,
 			// fonts/, and its output file — into a stable <prod>/board dir, referenced by absolute path so
@@ -713,16 +725,23 @@ export class Engine {
 				artifactPath = outFile
 				// Binary artifact: never read into a reviewer prompt. A text descriptor stands in.
 				draft = `[file ${node.type}] ${outFile}`
+				// A shippable deliverable (the terminal render, e.g. polish) is also copied to a single
+				// deliverable/ folder, versioned in the filename, so the finished cuts collect in one place.
+				if (contract.deliverable) {
+					const delivDir = join(this.config.artifactsDir, node.productionId, "deliverable")
+					mkdirSync(delivDir, { recursive: true })
+					copyFileSync(outFile, join(delivDir, `${contract.deliverable}-v${n}${extname(outFile)}`))
+				}
 			} else {
 				draft = producerResult.output
-				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, await this.artifactBase(node), n, draft)
+				artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, step, n, draft)
 			}
 		} else {
 			let boardOut: string | undefined
 			if (contract.emitsBoard) {
-				const base = await this.artifactBase(node)
-				boardOut = join(this.config.artifactsDir, node.productionId, "boards", `${base}-v${n}.jpg`)
-				mkdirSync(join(this.config.artifactsDir, node.productionId, "boards"), { recursive: true })
+				const dir = stepVersionDir(this.config.artifactsDir, node.productionId, step, n)
+				mkdirSync(dir, { recursive: true })
+				boardOut = join(dir, "board.jpg")
 			}
 			let boardDir: string | undefined
 			if (contract.boardDir) {
@@ -1255,7 +1274,9 @@ export class Engine {
 		const root = await this.store.getProduction(node.productionId)
 		const upstream = await this.collectUpstream(node)
 		const t0 = Date.now()
-		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream })
+		// A named reopen carries the critic/human directive as denial feedback — thread it in so the re-plan
+		// obeys it (otherwise the planner re-plans blind and reproduces what the reopen asked to change).
+		const plannerPrompt = buildPlannerPrompt(contract, { brief: root?.description ?? "", upstream, feedback: latest.feedback ?? undefined, feedbackKind: "directive" })
 		const result = await this.runSubagent(
 			{
 				prompt: plannerPrompt,
@@ -1315,10 +1336,16 @@ function builtFromEqual(a: Record<string, string>, b: Record<string, string>): b
 
 // ── artifact files (on the shared volume; the DB only references the path) ─────────────────────────
 
+// Each step owns a dir with its versions as subdirs: <prod>/steps/<step>/v<n>/. `name` is the
+// step key (node-scoped — see artifactBase). A text producer's artifact is `artifact.md` inside it.
+function stepVersionDir(artifactsDir: string, productionId: string, step: string, n: number): string {
+	return join(artifactsDir, productionId, "steps", step, `v${n}`)
+}
+
 function writeArtifact(artifactsDir: string, productionId: string, name: string, n: number, content: string): string {
-	const dir = join(artifactsDir, productionId)
+	const dir = stepVersionDir(artifactsDir, productionId, name, n)
 	mkdirSync(dir, { recursive: true })
-	const path = join(dir, `${name}-v${n}.md`)
+	const path = join(dir, "artifact.md")
 	writeFileSync(path, content, "utf8")
 	return path
 }

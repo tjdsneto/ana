@@ -1,8 +1,12 @@
 {
 	"type": "polish",
 	"name": "Polish",
-	"description": "Tightens timing, captions, and audio levels; fixes the rough edges from the render pass.",
-	"produce": "Tighten timing, captions, and audio levels; fix the rough edges from the render pass.",
+	"description": "Tightens timing, captions, and audio levels; fixes the rough edges from the render pass. Produces the finished, shippable cut.",
+	"produce": "Produce the FINAL, shippable cut and write it as `film.mp4` in your work dir. You are given the approved assemble render and the shared board (plates/fonts/film.json) staged for you — retime and tighten from these; do not re-plan the video. Tighten timing, captions, and audio levels and fix the rough edges from the render pass. Timing means READ-TIME, not clock-time: every information beat must HOLD its fully-composed frame long enough to be read after its reveal completes (CRAFT-BAR §A4 dwell — roughly >=1.5-2s on a single line/number, 2.5-3s on a multi-row/number beat). Trim only genuine dead air (flat holds at joins); never shorten a hold below read-time to hit a runtime — if the cut is tight, let it run longer rather than rushing the key beats. OUTPUT CONTRACT: write the finished video to `film.mp4` in your work dir (keep any build sources under a `src/` subdir there). The engine captures that `film.mp4` as the deliverable.",
+	"produces": "file",
+	"output": "film.mp4",
+	"deliverable": "film",
+	"boardDir": true,
 	"reviews": [
 		{ "name": "quality", "kind": "craft", "skill": "review-craft" }
 	],

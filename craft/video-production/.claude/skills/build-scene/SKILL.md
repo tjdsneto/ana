@@ -38,6 +38,7 @@ The scene brief carries a MOTION verb + a TRANSITION (assigned by `plan-scenes`)
   (land a `click@"<word>"` SFX in the audio plan on the click). Callouts stagger in; a result panel scales in; the presenter PiP shrinks to a corner. One clear move per beat — kinetic, not busy (§A4).
 - **`authored-continuous`:** a camera pan is the *bed*, not the motion. If the beat has nothing animating over it, it is a slideshow candidate — prefer `motion-graphics` or add an animated layer unless the pan itself reveals something (a canvas tour).
 - **Transition out:** realize the brief's transition into the next beat (push / zoom-through / match-cut / a cut on a VO stress with a whoosh) at the scene's tail where the method allows; at minimum do not end on a frozen hold.
+- **Dwell (§A4):** hold the scene's information long enough to read after the motion completes; don't cut the instant the reveal lands.
 
 Pick the branch from `method`; do not generate a clip for the authored methods, do not hand-author a composite for the generative one, and do not re-capture or re-generate footage for `edit-footage` (use only what the staged asset contains).
 

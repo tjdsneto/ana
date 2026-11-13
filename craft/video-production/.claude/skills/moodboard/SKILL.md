@@ -34,6 +34,7 @@ These are quality gates on the structure above, not extra fields. They decide wh
 
 - **Swap test:** put a different product's name on this look — if it still fits, it's generic. Redo it.
 - **Tell count (CRAFT-BAR §A3):** gradients-everywhere + card-for-everything + one-bright-accent + a default font = a 4-tell slop cluster. Keep to **0–1 tells**. If you're over, name the specific sourced swap.
+- **Slop ledger:** check `craft/video-production/.claude/references/SLOP-LEDGER.md` — the look/slop tells this project has shipped before — and avoid them.
 - **No house style:** do not repeat a palette/type/signature from an earlier video for this brand.
 
 ## Output
