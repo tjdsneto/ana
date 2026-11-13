@@ -24,6 +24,8 @@ The one hard rule: **never a fake that reads as real.** A sloppy mock that looks
 
 **And never noisy.** A real capture arrives carrying the live site's ephemeral UI — an exit-intent popup, a chat or mascot launcher in the corner, a cookie bar, a sticky promo. None of it belongs in the frame; it reads as unpolished and pulls the eye off the message. Strip it before the capture is used, and keep only what the beat is about. The one thing to protect while stripping is the hero itself — clean the chrome, not the content.
 
+**A supplied screenshot is locked — reproduce it, don't regenerate it (issue 0049).** When the brief hands you an exact UI screenshot/mockup for a beat, composite that image as-is — place, crop, scale, animate it — and do **not** rebuild the interface or restyle it. The model's instinct is to re-compose a "cleaner" UI; that drifts from the real product and is the sharpest critique the Sadia call raised ("use the reference exactly the way it is — it makes a huge difference"). Mark the composited element with `data-locked-source="<asset>"` (see [frame-geometry.md](frame-geometry.md)); the render then diffs the rendered region against the source with `tools/mockup-diff.mjs` and writes a 0–1 `fidelity` into the geometry, and the engine's **deterministic mockup-fidelity check** reopens the beat if the rendered UI fell below the bar — a cheap, reliable catch that doesn't depend on a model noticing the drift. This is the *faithful rebuild / real capture* rule above, made enforceable.
+
 ## Direct the eye — one focus at a time
 
 A full app screen is busy; the viewer looks where you point. The toolkit, strongest first:

@@ -16,6 +16,14 @@ You produce **one card** — exactly the beat in this node's spec, not the whole
 - The **moodboard** — the sourced look every card shares (ground, palette, the chosen **non-default** font, surface, signature).
 - Any reviewer **feedback** from a prior pass — address **that specific point**; do not redesign the card from scratch (surgical edit, below).
 
+## A supplied UI screenshot is a LOCKED asset — composite it, never regenerate it (issue 0049)
+
+When the card's spec or the staged assets include a **real UI screenshot / mockup** for this beat (an exact product screen, not a loose "inspiration" reference), reproduce it **exactly**: composite the supplied image as-is — place, crop, scale, and animate it, but do not rebuild the interface in HTML/CSS and do not restyle, relabel, or "clean up" the UI. The product in the video must match the product the customer actually uses; a regenerated interface is the single sharpest drift the Sadia call flagged.
+
+- Reference the screenshot with an `<img>` (or a background-image) sized to fit the safe area — do not hand-rebuild its chrome, buttons, or text.
+- Mark that element so the deterministic mockup-fidelity check can verify it: add **`data-locked-source="<asset filename>"`** to the composited element (and `data-geom` / `data-beat` per `craft/video-production/docs/frame-geometry.md`). The render diffs the rendered region against the source screenshot (`tools/mockup-diff.mjs`) and the engine reopens this card if the rendered UI drifted below the fidelity bar.
+- Only an **exact** UI asset is locked. A loose moodboard/inspiration image is still inspiration — this rule is for "use this screen the way it is."
+
 ## Produce the card
 
 1. **Plate HTML** — a self-contained card sized to the film (1920×1080), per COMPOSED-CARDS §2:

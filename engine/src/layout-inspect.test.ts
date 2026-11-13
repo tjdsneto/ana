@@ -155,6 +155,25 @@ describe("too-many-type-systems", () => {
 	})
 })
 
+describe("mockup-fidelity (0049)", () => {
+	it("flags a locked-source element whose rendered region drifted below the threshold", () => {
+		const f = frame({ beat: 2, elements: [{ id: "ui", kind: "image", box: { x: 200, y: 200, w: 1000, h: 600 }, lockedSourceId: "dashboard.png", fidelity: 0.62 }] })
+		expect(checks(f)).toContain("mockup-fidelity")
+	})
+	it("passes a faithful composite at/above the threshold", () => {
+		const f = frame({ elements: [{ id: "ui", kind: "image", box: { x: 200, y: 200, w: 1000, h: 600 }, lockedSourceId: "dashboard.png", fidelity: 0.97 }] })
+		expect(checks(f)).not.toContain("mockup-fidelity")
+	})
+	it("does not fire on an element with no locked source (ordinary generated art)", () => {
+		const f = frame({ elements: [{ id: "art", kind: "image", box: { x: 200, y: 200, w: 1000, h: 600 }, fidelity: 0.1 }] })
+		expect(checks(f)).not.toContain("mockup-fidelity")
+	})
+	it("does not fire when fidelity was not computed (renderer did not diff)", () => {
+		const f = frame({ elements: [{ id: "ui", kind: "image", box: { x: 200, y: 200, w: 1000, h: 600 }, lockedSourceId: "dashboard.png" }] })
+		expect(checks(f)).not.toContain("mockup-fidelity")
+	})
+})
+
 describe("overlapFraction", () => {
 	it("is 1 when the smaller box is fully contained", () => {
 		expect(overlapFraction({ x: 0, y: 0, w: 100, h: 100 }, { x: 10, y: 10, w: 20, h: 20 })).toBe(1)

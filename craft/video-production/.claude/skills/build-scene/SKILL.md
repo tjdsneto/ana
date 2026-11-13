@@ -26,6 +26,13 @@ The scene spec carries a **`method`** (assigned by `plan-scenes`). It decides ho
 - **`edit-footage`** — the scene is cut from a **caller-provided** video asset staged in the scene work dir (a screen recording, a take, stock). Follow the `edit-footage` craft skill: inspect the asset, write an EDL (in/out, crop, audio), apply it with `edl-apply.mjs`, optionally a ken-burns `punch.mjs` → `scene.mp4`. You cut/crop what's provided; never fabricate footage.
 - **`motion-graphics`** — the scene is a programmatic animated clip (animated title / lower-third / caption / stat / chart / overlay). Follow the `motion-graphics` craft skill: author a self-contained HTML/GSAP composition and render it with the motion-graphics tool (HyperFrames default) → `scene.mp4`. Build the motion from `MOTION-VOCAB.md` — word-by-word text reveals, a number that counts up, a bar/line that draws in, kinetic emphasis on the hero word. Use for a designed-motion / text / data beat with no captured or generated footage.
 
+## A supplied UI screenshot is a LOCKED asset — composite it, never regenerate it (issue 0049)
+
+When this scene is given a **real UI screenshot / mockup** (an exact product screen staged in the work dir, not a loose inspiration reference), reproduce it **exactly** — composite the supplied image as the plate (place/crop/scale/animate it, drive a cursor over it, Ken-Burns across it), but do **not** rebuild the interface from HTML/CSS and do not restyle, relabel, or regenerate the UI. The product shown must match the product the customer actually uses; a re-composed interface is the single sharpest drift the Sadia call flagged ("use the reference exactly the way it is"). This applies to every method: an `authored-composite`/`authored-continuous` plate that is a supplied screen uses the image, and `edit-footage` already cuts only what's provided.
+
+- Mark the composited screenshot element with **`data-locked-source="<asset filename>"`** (plus `data-geom` / `data-beat`, per `craft/video-production/docs/frame-geometry.md`). The render diffs the rendered region against the source (`tools/mockup-diff.mjs`); the engine's deterministic mockup-fidelity check reopens this scene if the rendered UI drifted below the bar — cheaper and more reliable than a model noticing the drift.
+- A loose moodboard/inspiration image stays inspiration; lock only an **exact** UI asset.
+
 ## Motion is required — the scene's `brief` names its verb (§A1, MOTION-VOCAB)
 
 The scene brief carries a MOTION verb + a TRANSITION (assigned by `plan-scenes`). Realize them — do not ship a static plate under a slow pan (that is the slideshow §A1 fails):
