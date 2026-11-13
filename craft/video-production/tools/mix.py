@@ -127,7 +127,7 @@ if PLAN:
     beds = [c for c in PLAN.get("music", []) if c.get("src")]
     if beds:
         tt = np.arange(L) / SR
-        duck = (10 ** (-7 * duck_env(vo) / 20))[:, None]                                  # 7 dB dip under the voice
+        env = duck_env(vo)
         bedsum = np.zeros((L, 2), np.float32)
         for c in beds:
             b = np.zeros((L, 2), np.float32)
@@ -135,7 +135,7 @@ if PLAN:
             fi, fo = float(c.get("fade_in", 0.4)), float(c.get("fade_out", 1.6))        # per-clip fades (s); defaults = the old fixed ones
             b *= (np.clip(tt / max(fi, 1e-3), 0, 1) * np.clip((DUR - tt) / max(fo, 1e-3), 0, 1) ** 1.5)[:, None]
             if c.get("duck", True):
-                b *= duck
+                b *= (10 ** (float(c.get("duck_db", -7)) * env / 20))[:, None]          # per-clip dip under the voice (default 7 dB)
             bedsum += b
         mix = vo + bedsum + fit(fx) * 10 ** (-9 / 20)
     else:
