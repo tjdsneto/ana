@@ -56,10 +56,12 @@ After the verdict/reopen lines, append a critique in this shape — per-dimensio
 
 ```
 ## Critique
-Dimensions (pass / weak / fail):
+Dimensions (pass / weak / fail) — score each separately, never blended. **Justify Temporal and mechanical Craft the hardest:** they are the two axes a model judge grades worst and that fail most often (Code2Video), so a bare one-liner is not enough — cite specific timecodes and say what is wrong or right. Conformance (chain fidelity, Pass 2) is near-solved and stays a cheap checklist — don't over-spend attention there.
 - Hook & one idea — <score> — <one line> [t0.5s] [seen]
-- Structure & pacing (incl. dwell — info beats hold long enough to read, §A4) — <score> — ... [seen]
-- Visual craft (focal dominance, no dead space/slideshow) — <score> — ... [seen]
+- Structure (beat arc — the right beats in the right order; nothing padded, nothing missing; §A1/§B) — <score> — ... [seen]
+- Temporal (timing · easing · transition smoothness · cadence · dwell — every info beat holds long enough to read AFTER its reveal completes, §A4) — <score, JUSTIFIED at timecodes> — ... [seen]
+- Composition (balance · contrast · typography · hierarchy — focal dominance, no dead space/slideshow, readable type, one type system) — <score> — ... [seen]
+- Craft (mechanical: clipping · alignment · clean render — the deterministic pre-check (0033) already owns the clear-cut cases it has geometry for; here, confirm those and catch what it couldn't measure) — <score, JUSTIFIED at timecodes> — ... [seen]
 - Look (0–1 AI-slop tells; flat not gradient; sourced font) — <score> — ... [seen]
 - Sound (bed + no dead tail) — <score> — ... [heard|not-verifiable-from-frames]
 - CTA & close (the close the §B profile owes — launch CTA / demo next-step / teaser tease) — <score> — ... [seen]
@@ -70,6 +72,8 @@ Issues (worst first):
 
 TOP FIX: <the single highest-leverage change>
 ```
+
+**Why these five craft axes, split this way.** "Structure & pacing" used to blend the beat *arc* (Structure) with motion *timing* (Temporal), and "Visual craft" blended *compositional* craft (Composition) with *mechanical* craft (clipping/alignment/clean render). A Temporal-only or mechanical-Craft-only failure could hide behind a passing neighbour in the same blended score. Code2Video measured that models follow the brief well but fail hardest on exactly Temporal and mechanical Craft — so name them separately and weight your attention there. Mechanical Craft overlaps the deterministic pre-check (0033): where it can decide an axis from the render's own geometry (clipping, never-settling, low contrast, too many type systems), it has already reopened — so don't re-litigate those; spend your Craft judgement on what geometry can't capture (alignment feel, render cleanliness, artefacts) and your Temporal judgement on how the motion *reads*.
 
 - `REOPEN: <step> — <reason>` — `<step>` is the pipeline node to redo (`script`, `moodboard`, `storyboard`, `render`, `polish`). The engine reopens that node **and everything downstream of it** (reopen `moodboard` ⇒ storyboard, build, render, polish all rebuild), re-produces, and brings the result back to you.
 - **Target one fanned-out unit** with `REOPEN: <step>[<n>] — <reason>` (1-based, e.g. `scene[3]`). Only that scene re-produces; its sibling scenes and the shared upstream are left untouched, and only what depends on it (render, polish) rebuilds. Use this for a single weak shot — don't reopen the whole `storyboard` or every `scene` for one bad frame.
