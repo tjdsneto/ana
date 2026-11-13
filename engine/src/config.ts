@@ -50,6 +50,16 @@ export interface EngineConfig {
 	// 0009: soft threshold (ms) — a call that COMPLETES but takes longer than this is logged (subagent.slow)
 	// so a slow produce is visible, not buried in timing. undefined = no slow-call warning.
 	subagentWarnMs?: number
+	// 0011 self-heal: how long a node's claim lease is valid from the moment it is claimed (or last
+	// heartbeated). A worker that dies stops heartbeating; once a claim is this stale the reaper returns
+	// the node to pending. Must comfortably exceed the heartbeat interval + the longest expected single
+	// produce, so a live long produce is never reaped (produces up to ~16 min have been seen).
+	claimLeaseTtlMs: number
+	// 0011 self-heal: how often the worker extends the lease on the nodes it currently holds. Well inside
+	// claimLeaseTtlMs so a transient delay never lets a live claim lapse.
+	claimHeartbeatMs: number
+	// 0011 self-heal: how often the worker sweeps for expired claims to reclaim (also runs once at boot).
+	reaperIntervalMs: number
 }
 
 export function configFromEnv(env = process.env): EngineConfig {
@@ -68,6 +78,9 @@ export function configFromEnv(env = process.env): EngineConfig {
 		craftRoot: env.AUTONOMY_CRAFT_ROOT || undefined,
 		subagentTimeoutMs: optNum(env.SUBAGENT_TIMEOUT_MS),
 		subagentWarnMs: optNum(env.SUBAGENT_WARN_MS),
+		claimLeaseTtlMs: num(env.CLAIM_LEASE_TTL_MS, 45 * 60 * 1000), // 45 min — generous over the longest produce
+		claimHeartbeatMs: num(env.CLAIM_HEARTBEAT_MS, 60 * 1000), // 1 min
+		reaperIntervalMs: num(env.REAPER_INTERVAL_MS, 60 * 1000), // 1 min
 	}
 }
 

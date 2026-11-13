@@ -34,6 +34,7 @@ export interface EngineDeps {
 	types: TypeRegistry
 	config: EngineConfig
 	logger?: Logger // default: quiet (NoopLogger). Entrypoints inject a JsonLogger.
+	workerId?: string // 0011: this worker's per-process id, stamped on every claim's lease. Default: a fresh uuid.
 }
 
 export class Engine {
@@ -50,6 +51,7 @@ export class Engine {
 	private readonly noProgressStreak = new Map<string, { sig: string; n: number }>() // nodeId → the repeated failing-finding signature + its consecutive-round count (0020 no-progress escape; per-process)
 	private readonly dispatchFailures = new Map<string, number>() // nodeId → consecutive dispatch throws (0001; per-process retry counter)
 	private readonly planSchemas = new Map<string, object>() // schema path → parsed JSON Schema (0018 planner conformance gate; loaded once per path)
+	private readonly workerId: string // 0011: stamped on every claim's lease so the reaper can tell a live claim from an abandoned one
 
 	constructor(deps: EngineDeps) {
 		this.store = deps.store
@@ -58,6 +60,7 @@ export class Engine {
 		this.types = deps.types
 		this.config = deps.config
 		this.log = deps.logger ?? new NoopLogger()
+		this.workerId = deps.workerId ?? randomUUID()
 	}
 
 	// One unit of work. Returns whether anything advanced (false = idle: nothing queued/ready and
@@ -84,8 +87,9 @@ export class Engine {
 		// maxParallel = 1 keeps the original serial behaviour.
 		const cap = Math.max(1, this.config.maxParallel)
 		const claimed: Node[] = []
+		const lease = { workerId: this.workerId, leaseTtlMs: this.config.claimLeaseTtlMs } // 0011: lease each claim so a dead worker's node is reaped
 		for (let i = 0; i < cap; i++) {
-			const n = await this.store.claimReadyNode()
+			const n = await this.store.claimReadyNode(lease)
 			if (!n) break
 			claimed.push(n)
 		}

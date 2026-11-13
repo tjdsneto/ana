@@ -2,6 +2,7 @@
 // runner) and the on-disk type registry, then drains work on every LISTEN wake-up with a
 // poll-interval fallback. stdout is free; logs go to stderr.
 
+import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { JsonLogger, makeDbPool, PgStore } from "@core/shared"
@@ -53,6 +54,11 @@ async function main(): Promise<void> {
 	}
 	const types = TypeRegistry.load(typesDir)
 
+	// 0011 self-heal: this worker's per-process id. Stamped on every claim's lease so the reaper can tell
+	// a live claim (still heartbeated by a running worker) from one abandoned by a dead/restarted worker.
+	const workerId = randomUUID()
+	const store = new PgStore(dbPool)
+
 	// 0008: a real `claude -p` subagent resolves craft skills from <craftRoot>/.claude/skills. A stale or
 	// empty bind mount serves an empty dir, so a skill-required node (e.g. brainstorm) would fail three
 	// layers down with "Unknown skill" and strand the production. Assert every referenced skill resolves
@@ -70,18 +76,23 @@ async function main(): Promise<void> {
 	}
 
 	const engine = new Engine({
-		store: new PgStore(dbPool),
+		store,
 		runner,
 		runners,
 		types,
 		config,
 		logger,
+		workerId,
 	})
 	logger.info("worker.up", {
 		buildSha,
+		workerId,
 		typesDir,
 		skillsDir: skillsDirFor(config.craftRoot),
 		pollIntervalMs: config.pollIntervalMs,
+		claimLeaseTtlMs: config.claimLeaseTtlMs,
+		claimHeartbeatMs: config.claimHeartbeatMs,
+		reaperIntervalMs: config.reaperIntervalMs,
 		engine: runnerConfig.engine,
 		model: runnerConfig.model ?? null,
 	})
@@ -99,6 +110,32 @@ async function main(): Promise<void> {
 		}
 	}
 
+	// 0011 self-heal: extend the lease on every node this worker still holds, so a genuinely long produce
+	// is never reaped out from under a live worker. Runs well inside the lease TTL.
+	const heartbeat = async () => {
+		try {
+			await store.heartbeatClaims(workerId, config.claimLeaseTtlMs)
+		} catch (err) {
+			logger.error("worker.heartbeat_error", { error: err instanceof Error ? err.message : String(err) })
+		}
+	}
+
+	// 0011 self-heal: reclaim nodes stranded by a dead/restarted worker — return each expired in-progress
+	// claim to pending (superseding its dead producing version) so the loop re-produces it. Visible as a
+	// node.reclaim warn per recovered node. If anything was freed, nudge the loop to pick it up now rather
+	// than wait for the next poll.
+	const reap = async (trigger: string) => {
+		try {
+			const reaped = await store.reapExpiredClaims()
+			for (const n of reaped) {
+				logger.warn("node.reclaim", { trigger, productionId: n.productionId, nodeId: n.id, type: n.type, name: n.name })
+			}
+			if (reaped.length > 0) void drain("reaper")
+		} catch (err) {
+			logger.error("worker.reaper_error", { trigger, error: err instanceof Error ? err.message : String(err) })
+		}
+	}
+
 	// push wake-up (spec 03): a dedicated client parks on the new-production channel. The poll loop is
 	// the fallback — and the ONLY path that resumes a production after the human gate (approve /
 	// feedback / budget), since those writes NOTIFY production_changed, which the worker does not listen to.
@@ -106,8 +143,13 @@ async function main(): Promise<void> {
 	await listener.query("LISTEN new_production")
 	listener.on("notification", (msg) => void drain(msg.channel))
 
+	// Reclaim anything stranded by a previous worker's death BEFORE the first drain, so startup resumes
+	// those productions instead of leaving them stuck (the common crash/restart recovery case — 0011).
+	await reap("startup")
 	await drain("startup") // catch up on anything queued before we started
 	setInterval(() => void drain("poll"), config.pollIntervalMs)
+	setInterval(() => void heartbeat(), config.claimHeartbeatMs)
+	setInterval(() => void reap("interval"), config.reaperIntervalMs)
 }
 
 main().catch((err) => {

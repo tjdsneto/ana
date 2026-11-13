@@ -47,6 +47,9 @@ function makeConfig(over: Partial<EngineConfig> = {}): EngineConfig {
 		maxParallel: 1, // serial by default; the parallelism test raises it
 		noProgressAfter: 99, // off by default; the no-progress test sets it low
 		pollIntervalMs: 1000,
+		claimLeaseTtlMs: 45 * 60 * 1000, // 0011: lease TTL (irrelevant to the fake-clock loop tests; the reaper has its own suite)
+		claimHeartbeatMs: 60 * 1000,
+		reaperIntervalMs: 60 * 1000,
 		...over,
 	}
 }

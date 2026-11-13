@@ -126,8 +126,10 @@ the `worker.up` log matches HEAD.
 more to produce fanned-out leaves (cards/scenes) concurrently instead of serially:
 `docker compose up -d --scale engine-worker=<N>` (the service sets no `container_name`, so scaling
 works out of the box). Each replica polls + `LISTEN`s independently; SKIP LOCKED hands each a different
-ready node. Caveats: **(1)** a replica that dies mid-node strands that node until the self-heal reaper
-lands (issue 0011, deferred) — more replicas = more restart exposure; **(2)** `SUBAGENT_MAX_CALLS` is a
+ready node. Caveats: **(1)** a replica that dies mid-node leaves that node `in-progress` until the
+self-heal reaper reclaims it (issue 0011: a claim lease + heartbeat + a reaper sweep return an expired
+claim to `pending`) — recovery is bounded by `CLAIM_LEASE_TTL_MS` (default 45 min), so more replicas =
+more restart exposure but no permanent strand; **(2)** `SUBAGENT_MAX_CALLS` is a
 per-process guard, so the effective spend cap ≈ N × the per-worker cap; **(3)** the cheaper/faster
 half of the throughput problem landed separately (issue 0021: carried-forward passes + Sonnet-tiered
 mechanical reviewers). Measure the real speedup on a live N-worker run before relying on it.
