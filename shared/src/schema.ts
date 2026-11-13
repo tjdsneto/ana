@@ -48,6 +48,9 @@ export const nodes = pgTable(
 		actorKind: text("actor_kind").$type<ActorKind>(), // root only: human | agent — sets the agreement cap
 		model: text("model"), // 0027: per-NODE subagent model override (a fanned idea agent can run a different model for diversity); null → the type contract's model → SUBAGENT_MODEL (unchanged)
 		params: jsonb("params").$type<Record<string, unknown>>(), // root only: the intake params the production was requested with, resolved against the root type's `inputs`
+		claimedBy: text("claimed_by"), // 0011: the worker id holding this claim (self-heal lease); null = unclaimed / pre-lease row
+		claimedAt: timestamp("claimed_at", { withTimezone: true }), // 0011: when the current claim was taken
+		leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), // 0011: claim expiry; a worker heartbeat extends it, the reaper returns an in-progress row past this to pending. null = never reaped
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -55,6 +58,7 @@ export const nodes = pgTable(
 		index("idx_nodes_production").on(t.productionId),
 		index("idx_nodes_parent").on(t.parentId),
 		index("idx_nodes_account").on(t.accountId),
+		index("idx_nodes_lease").on(t.status, t.leaseExpiresAt), // 0011: the reaper's in-progress + expired-lease sweep
 	],
 )
 

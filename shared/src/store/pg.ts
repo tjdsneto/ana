@@ -3,11 +3,11 @@
 // this one, in tests it is the FakeStore (../testing). Ids + timestamps come from the injected
 // IdGen / Clock so tests of the adapter stay deterministic.
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
 import type { Pool } from "pg"
 import { DEFAULT_ACCOUNT_ID, DEFAULT_USER_ID } from "../defaults.js"
-import type { Clock, IdGen, Store, VersionPatch } from "../ports.js"
+import type { ClaimLease, Clock, IdGen, Store, VersionPatch } from "../ports.js"
 import * as schema from "../schema.js"
 import type {
 	Account,
@@ -135,8 +135,10 @@ export class PgStore implements Store {
 	}
 
 	// Worker claim seam — FOR UPDATE SKIP LOCKED so N workers never grab the same node. v0 runs one
-	// worker; readiness is re-checked in JS (the engine refines the exact semantics in step 5).
-	async claimReadyNode(): Promise<Node | null> {
+	// worker; readiness is re-checked in JS (the engine refines the exact semantics in step 5). When a
+	// `claim` is passed, the flip to in-progress also writes the ownership lease (claimed_by +
+	// lease_expires_at) so the reaper can return the node to pending if this worker dies (0011).
+	async claimReadyNode(claim?: ClaimLease): Promise<Node | null> {
 		return this.db.transaction(async (tx) => {
 			const pending = await tx
 				.select()
@@ -151,11 +153,66 @@ export class PgStore implements Store {
 				const root = tree.find((r) => r.id === n.productionId)
 				if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
 				if (isReady(n, tree)) {
-					await tx.update(nodes).set({ status: "in-progress", updatedAt: this.clock.now() }).where(eq(nodes.id, n.id))
-					return { ...n, status: "in-progress" }
+					const now = this.clock.now()
+					const lease = claim
+						? { claimedBy: claim.workerId, claimedAt: now, leaseExpiresAt: new Date(now.getTime() + claim.leaseTtlMs) }
+						: {}
+					await tx.update(nodes).set({ status: "in-progress", updatedAt: now, ...lease }).where(eq(nodes.id, n.id))
+					return { ...n, status: "in-progress", ...lease }
 				}
 			}
 			return null
+		})
+	}
+
+	// 0011 self-heal: push lease_expires_at forward on every in-progress node this worker still owns, so a
+	// genuinely long produce is never reaped. Does not touch updated_at (the lease is liveness, not visible
+	// content state) and never fires the dashboard nudge. Returns how many claims were refreshed.
+	async heartbeatClaims(workerId: string, leaseTtlMs: number): Promise<number> {
+		const expiresAt = new Date(this.clock.now().getTime() + leaseTtlMs)
+		const refreshed = await this.db
+			.update(nodes)
+			.set({ leaseExpiresAt: expiresAt })
+			.where(and(eq(nodes.status, "in-progress"), eq(nodes.claimedBy, workerId)))
+			.returning({ id: nodes.id })
+		return refreshed.length
+	}
+
+	// 0011 self-heal: reclaim stranded nodes. Select every in-progress node whose lease has lapsed (its
+	// owning worker stopped heartbeating — crash/kill/restart) under FOR UPDATE SKIP LOCKED, and for each
+	// one that is not under a retired production, supersede its dead latest version (mirrors retryNode, so
+	// the re-produce writes a clean v(n+1) instead of orphaning the half-written one) and reset it to
+	// pending with its claim cleared. Returns the reaped nodes so the worker can log node.reclaim.
+	async reapExpiredClaims(): Promise<Node[]> {
+		return this.db.transaction(async (tx) => {
+			const now = this.clock.now()
+			const expired = await tx
+				.select()
+				.from(nodes)
+				.where(and(eq(nodes.status, "in-progress"), isNotNull(nodes.leaseExpiresAt), lt(nodes.leaseExpiresAt, now)))
+				.for("update", { skipLocked: true })
+			const reaped: Node[] = []
+			for (const n of expired) {
+				const [root] = await tx.select().from(nodes).where(eq(nodes.id, n.productionId)).limit(1)
+				if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
+				const [latest] = await tx
+					.select()
+					.from(versions)
+					.where(eq(versions.nodeId, n.id))
+					.orderBy(desc(versions.n))
+					.limit(1)
+				if (latest && latest.status !== "approved" && latest.status !== "superseded") {
+					await tx.update(versions).set({ status: "superseded", updatedAt: now }).where(eq(versions.id, latest.id))
+				}
+				await tx
+					.update(nodes)
+					.set({ status: "pending", claimedBy: null, claimedAt: null, leaseExpiresAt: null, updatedAt: now })
+					.where(eq(nodes.id, n.id))
+				reaped.push({ ...n, status: "pending", claimedBy: null, claimedAt: null, leaseExpiresAt: null })
+			}
+			// nudge the dashboard once if anything moved (producing → pending is a visible state change)
+			if (reaped.length > 0) await tx.execute(sql`SELECT pg_notify('production_changed', '')`)
+			return reaped
 		})
 	}
 

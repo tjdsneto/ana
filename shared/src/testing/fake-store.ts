@@ -3,7 +3,7 @@
 // + user on construction, like a migrated+seeded database.
 
 import { DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_NAME, DEFAULT_USER_ID, DEFAULT_USER_NAME } from "../defaults.js"
-import type { Clock, IdGen, Store, VersionPatch } from "../ports.js"
+import type { ClaimLease, Clock, IdGen, Store, VersionPatch } from "../ports.js"
 import type {
 	Account,
 	Asset,
@@ -104,6 +104,9 @@ export class FakeStore implements Store {
 			actorKind: input.actorKind,
 			model: null,
 			params: seedParams(input),
+			claimedBy: null,
+			claimedAt: null,
+			leaseExpiresAt: null,
 			createdAt: now,
 			updatedAt: now,
 		}
@@ -130,7 +133,7 @@ export class FakeStore implements Store {
 		const tree = await this.nodesFor(productionId)
 		return tree.filter((n) => isReady(n, tree))
 	}
-	async claimReadyNode(): Promise<Node | null> {
+	async claimReadyNode(claim?: ClaimLease): Promise<Node | null> {
 		for (const n of [...this.nodes.values()].sort((a, b) => a.position - b.position)) {
 			if (n.status !== "pending") continue
 			// Never claim work for a retired production (cancelled/skipped/failed). The production status
@@ -139,12 +142,52 @@ export class FakeStore implements Store {
 			if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
 			const tree = await this.nodesFor(n.productionId)
 			if (isReady(n, tree)) {
-				const claimed = { ...n, status: "in-progress" as NodeStatus, updatedAt: this.clock.now() }
+				const now = this.clock.now()
+				const lease = claim
+					? { claimedBy: claim.workerId, claimedAt: now, leaseExpiresAt: new Date(now.getTime() + claim.leaseTtlMs) }
+					: {}
+				const claimed = { ...n, status: "in-progress" as NodeStatus, updatedAt: now, ...lease }
 				this.nodes.set(n.id, claimed)
 				return claimed
 			}
 		}
 		return null
+	}
+
+	// 0011 self-heal: mirror PgStore.heartbeatClaims — extend the lease on every in-progress node this
+	// worker still owns. Returns how many were refreshed.
+	async heartbeatClaims(workerId: string, leaseTtlMs: number): Promise<number> {
+		const expiresAt = new Date(this.clock.now().getTime() + leaseTtlMs)
+		let refreshed = 0
+		for (const n of this.nodes.values()) {
+			if (n.status === "in-progress" && n.claimedBy === workerId) {
+				this.nodes.set(n.id, { ...n, leaseExpiresAt: expiresAt })
+				refreshed++
+			}
+		}
+		return refreshed
+	}
+
+	// 0011 self-heal: mirror PgStore.reapExpiredClaims — return every in-progress node whose lease has
+	// lapsed to pending (clearing the claim, superseding its dead producing version), skipping nodes with
+	// no lease and nodes under a retired production. Returns the reaped nodes.
+	async reapExpiredClaims(): Promise<Node[]> {
+		const now = this.clock.now()
+		const reaped: Node[] = []
+		for (const n of this.nodes.values()) {
+			if (n.status !== "in-progress") continue
+			if (!n.leaseExpiresAt || n.leaseExpiresAt.getTime() >= now.getTime()) continue
+			const root = this.nodes.get(n.productionId)
+			if (root && RETIRED_PRODUCTION.has(root.status as NodeStatus)) continue
+			const latest = [...this.versions.values()].filter((v) => v.nodeId === n.id).sort((a, b) => b.n - a.n)[0]
+			if (latest && latest.status !== "approved" && latest.status !== "superseded") {
+				this.versions.set(latest.id, { ...latest, status: "superseded", updatedAt: now })
+			}
+			const resat: Node = { ...n, status: "pending", claimedBy: null, claimedAt: null, leaseExpiresAt: null, updatedAt: now }
+			this.nodes.set(n.id, resat)
+			reaped.push(resat)
+		}
+		return reaped
 	}
 
 	async updateNodeStatus(id: string, status: NodeStatus): Promise<void> {
@@ -173,6 +216,9 @@ export class FakeStore implements Store {
 				actorKind: null,
 				model: c.model ?? null,
 				params: null, // children carry no intake params (root only)
+				claimedBy: null,
+				claimedAt: null,
+				leaseExpiresAt: null,
 				createdAt: now,
 				updatedAt: now,
 			}
