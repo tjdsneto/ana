@@ -3,6 +3,7 @@
 
 export * from "./schema.js"
 export * from "./types.js"
+export * from "./catalog.js"
 export * from "./capabilities.js"
 export * from "./edl.js"
 export * from "./ports.js"
