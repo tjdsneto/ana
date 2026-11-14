@@ -42,8 +42,12 @@ import { subtreeUsage } from "./rollup.js"
 import { siblingIndex, stepPhase } from "./step-phase.js"
 import { stepDescription } from "./step-info.js"
 import { useLive } from "./useLive.js"
+import { Catalog } from "./catalog/Catalog.js"
+import { TemplateDetail } from "./catalog/TemplateDetail.js"
+import { getCatalog } from "./catalog/catalog-api.js"
+import type { Template } from "./catalog/types.js"
 
-type Tab = "productions" | "videos"
+type Tab = "productions" | "videos" | "templates"
 
 export function App() {
 	const [tab, setTab] = useState<Tab>("productions")
@@ -52,6 +56,9 @@ export function App() {
 	const [selectedId, setSelectedId] = useState<string | null>(() => productionIdFromUrl())
 	const [detail, setDetail] = useState<ProductionDetail | null>(null)
 	const [videos, setVideos] = useState<VideoFile[]>([])
+	// The curated template catalog (static committed JSON) + the selected template, mirrored to ?t=<slug>.
+	const [templates, setTemplates] = useState<Template[]>([])
+	const [selectedTemplate, setSelectedTemplate] = useState<string | null>(() => templateSlugFromUrl())
 	const [error, setError] = useState<string | null>(null)
 	const selectedRef = useRef<string | null>(null)
 	selectedRef.current = selectedId
@@ -83,6 +90,7 @@ export function App() {
 	useEffect(() => {
 		void refreshList()
 		void refreshVideos()
+		getCatalog().then(setTemplates).catch(() => setTemplates([]))
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
@@ -108,8 +116,20 @@ export function App() {
 		history.pushState({ p: id }, "", url)
 	}
 
+	// Mirror the selected template to ?t=<slug> (same pushState/popstate pattern as ?p=).
+	const selectTemplate = (slug: string | null) => {
+		setSelectedTemplate(slug)
+		const url = new URL(location.href)
+		if (slug) url.searchParams.set("t", slug)
+		else url.searchParams.delete("t")
+		history.pushState({ t: slug }, "", url)
+	}
+
 	useEffect(() => {
-		const onPop = () => setSelectedId(productionIdFromUrl())
+		const onPop = () => {
+			setSelectedId(productionIdFromUrl())
+			setSelectedTemplate(templateSlugFromUrl())
+		}
 		window.addEventListener("popstate", onPop)
 		return () => window.removeEventListener("popstate", onPop)
 	}, [])
@@ -127,11 +147,35 @@ export function App() {
 					<button className={tab === "videos" ? "on" : ""} onClick={() => setTab("videos")}>
 						Videos {videos.length > 0 && <span className="badge">{videos.length}</span>}
 					</button>
+					<button className={tab === "templates" ? "on" : ""} onClick={() => setTab("templates")}>
+						Templates {templates.length > 0 && <span className="badge">{templates.length}</span>}
+					</button>
 				</nav>
 			</header>
 			{error && <div className="error" onClick={() => setError(null)}>{error} (click to dismiss)</div>}
 			{tab === "videos" ? (
 				<Gallery videos={videos} />
+			) : tab === "templates" ? (
+				selectedTemplate ? (
+					(() => {
+						const t = templates.find((x) => x.slug === selectedTemplate)
+						return t ? (
+							<TemplateDetail
+								template={t}
+								onBack={() => selectTemplate(null)}
+								onLaunched={(id) => {
+									selectTemplate(null)
+									setTab("productions")
+									selectProduction(id)
+								}}
+							/>
+						) : (
+							<p className="muted pad">Template not found.</p>
+						)
+					})()
+				) : (
+					<Catalog templates={templates} onSelect={selectTemplate} />
+				)
 			) : (
 				<div className="shell">
 					<aside className="rail">
@@ -182,6 +226,14 @@ function ProdId({ id }: { id: string }) {
 function productionIdFromUrl(): string | null {
 	try {
 		return new URLSearchParams(location.search).get("p")
+	} catch {
+		return null
+	}
+}
+
+function templateSlugFromUrl(): string | null {
+	try {
+		return new URLSearchParams(location.search).get("t")
 	} catch {
 		return null
 	}
