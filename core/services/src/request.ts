@@ -15,6 +15,7 @@ export interface RequestVideoInput {
 // (default "video-project"); requestVideo is the back-compat shim that always roots a video-project.
 export interface RequestProductionInput extends RequestVideoInput {
 	type?: string
+	params?: Record<string, unknown>
 }
 
 export async function requestProduction(store: Store, input: RequestProductionInput): Promise<{ production_id: string; status: string }> {
@@ -30,6 +31,7 @@ export async function requestProduction(store: Store, input: RequestProductionIn
 		autonomyLever: input.autonomyLever ?? (input.actorKind === "agent" ? "high" : "medium"),
 		actorKind: input.actorKind ?? "human",
 		type: input.type,
+		params: input.params,
 	})
 	return { production_id: root.id, status: root.status }
 }
