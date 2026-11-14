@@ -111,6 +111,16 @@ the IDE's in-editor test runner / debugger is the one thing the container can't 
 - Render stubbed (text-level) is fine. Core loop + tool handlers have unit tests against fakes. No
   brand/product naming anywhere.
 
+## Registry-push contract (secret safety)
+
+Images are **secret-free by construction**, not by blocklist (issue 0036). The build is structured so no credential can land in a pushed layer regardless of `.dockerignore`:
+
+- **No `COPY . .` in any shipped stage.** The Dockerfile splits into `deps` (toolchain + `npm ci`, no source) → `build` (the one stage that copies the repo root, to compile — **intermediate, never a Compose/runtime target, never pushed**) → `base` (the pushed node image: an **allowlist** `COPY --from=build` of just the `shared` / `core` / `engine` / `server` workspace dirs) → `engine` (the pushed worker: the allowlisted `base` /repo overlaid on the agent-tools stage, plus the baked `craft` tree) → `web` (nginx + the built SPA only). Because the pushed stages copy only named subpaths and never the repo root, a root secret file (`.env` / `.common_env` / `.engine_env`, or any future one) **cannot** be copied in — `.dockerignore` is now a second line of defence, not the only one.
+- **Secrets inject at RUNTIME only**, via Compose `env_file` (`.common_env`, `.engine_env`). No secret is ever a build `ARG` or `ENV` (both are readable in `docker history` of a pushed image). If a build step ever genuinely needs one, use a **BuildKit secret mount** (`RUN --mount=type=secret,id=…`) — see the pattern in the Dockerfile header.
+- **Pre-push guard is mandatory.** Before any `docker push`, run `scripts/scan-image-secrets.sh` (defaults to the three pushed images: `production-engine:local`, `production-engine-claude:local`, `production-engine-web:local`). It fails the pipeline if it finds a credential-config file (`.env*` / `*_env`), a named private key, a secret-shaped `ENV`/`ARG` in `docker history`, or (with `--deep`, or automatically when `gitleaks` is on `PATH`) secret material in file contents. A non-zero exit must abort the push.
+
+> **Do not reintroduce `COPY . .` into `base`, `engine`, or `web` for convenience.** That re-opens the exact gap 0036 closed. Full-source needs (the Vite dev server) use the `build` stage, which is never pushed.
+
 ## Not in scope
 
 Real render wiring (needs keys), hosting, accounts/billing, multi-worker scale, the production
