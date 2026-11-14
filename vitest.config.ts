@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config"
 // and vitest would otherwise run those too (every test twice) — so exclude dist/ (and node_modules).
 export default defineConfig({
 	test: {
-		include: ["**/src/**/*.test.ts"],
+		include: ["**/src/**/*.test.ts", "scripts/**/*.test.ts"],
 		exclude: ["**/node_modules/**", "**/dist/**"],
 	},
 })
