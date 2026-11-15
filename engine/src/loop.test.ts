@@ -538,6 +538,95 @@ describe("holistic final review — reopen + revalidation cascade (rebuild only 
 	})
 })
 
+// 0033 — the deterministic geometry pre-check short-circuits the model final-review when the renderer's
+// emitted frame geometry has a defect, reopening the named target WITHOUT spending the model pass.
+const PRECHECK_CONTRACTS: TypeContract[] = [
+	{
+		type: "video-project",
+		name: "Video project",
+		checklist: [
+			{ id: "script", type: "script", deps: [] },
+			{ id: "scene", type: "scene", deps: ["script"] },
+			{ id: "polish", type: "polish", deps: ["scene"] },
+			{ id: "final-review", type: "final-review", deps: ["polish"] },
+		],
+	},
+	{ type: "script", name: "Script", produce: "script", reviews: [{ name: "craft", kind: "craft" }] },
+	{ type: "scene", name: "Scene", produces: "file", skill: "build-scene", reviews: [{ name: "craft", kind: "craft" }] },
+	{ type: "polish", name: "Polish", produces: "file", skill: "self", reviews: [{ name: "craft", kind: "craft" }] },
+	{ type: "final-review", name: "Final review", holisticReview: true, precheck: { geometry: "board/frames.json", reopenTarget: "scene" } },
+]
+const precheckTypes = TypeRegistry.fromContracts(PRECHECK_CONTRACTS)
+
+const CLIPPED_GEOMETRY = JSON.stringify({
+	frames: [{ t: 1, beat: 1, hold: true, bounds: { width: 1920, height: 1080 }, elements: [{ id: "headline", kind: "text", text: "Clipped headline", box: { x: 1850, y: 100, w: 400, h: 120 } }] }],
+})
+const CLEAN_GEOMETRY = JSON.stringify({
+	frames: [{ t: 1, beat: 1, hold: true, bounds: { width: 1920, height: 1080 }, elements: [{ id: "headline", kind: "text", text: "ok", box: { x: 200, y: 200, w: 400, h: 120 }, revealProgress: 1, motionDelta: 0 }] }],
+})
+
+describe("0033 — deterministic geometry pre-check short-circuits the model final-review", () => {
+	it("reopens the named target on a geometry defect without calling the model reviewer, then passes once the geometry is clean", async () => {
+		const artifactsDir = mkdtempSync(join(tmpdir(), "eng-precheck-"))
+		let finalReviewModelCalls = 0
+		let sceneBuilds = 0
+		let draftN = 0
+		const root = await newProduction(store)
+		const geomPath = join(artifactsDir, root.id, "board", "frames.json")
+		mkdirSync(join(artifactsDir, root.id, "board"), { recursive: true })
+		writeFileSync(geomPath, CLIPPED_GEOMETRY) // the renderer's first pass clipped a headline
+
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "final-review") {
+				finalReviewModelCalls++
+				return { output: "VERDICT: pass" } // the model would pass; the pre-check must gate it before this
+			}
+			if (input.skill === "build-scene") {
+				sceneBuilds++
+				if (sceneBuilds >= 2) writeFileSync(geomPath, CLEAN_GEOMETRY) // the reopened scene fixes the clip
+				return { output: `scene ${sceneBuilds}` }
+			}
+			if (/^review[:-]/.test(input.skill ?? "")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` }
+		})
+		const engine = new Engine({ store, runner, types: precheckTypes, config: makeConfig({ artifactsDir, maxGlobalRevisions: 2 }) })
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		// The model final-review ran ONLY on the clean 2nd pass — the clipped 1st pass was caught deterministically.
+		expect(finalReviewModelCalls).toBe(1)
+		expect(sceneBuilds).toBeGreaterThanOrEqual(2) // the scene was reopened + rebuilt by the pre-check
+	})
+
+	it("falls through to the model reviewer when no geometry file is present (purely additive)", async () => {
+		const artifactsDir = mkdtempSync(join(tmpdir(), "eng-nogeom-"))
+		let finalReviewModelCalls = 0
+		let draftN = 0
+		const runner = new FakeSubagentRunner((input) => {
+			if (input.skill === "final-review") {
+				finalReviewModelCalls++
+				return { output: "VERDICT: pass" }
+			}
+			if (/^review[:-]/.test(input.skill ?? "")) return { output: "VERDICT: pass" }
+			return { output: `draft ${++draftN}` }
+		})
+		const engine = new Engine({ store, runner, types: precheckTypes, config: makeConfig({ artifactsDir }) })
+		const root = await newProduction(store)
+		for (let guard = 0; guard < 400; guard++) {
+			const did = await engine.tick()
+			for (const o of await store.pendingOutputs(root.id)) await gateApprove(store, o)
+			if ((await store.getProduction(root.id))?.status === "approved") break
+			if (!did && (await store.pendingOutputs(root.id)).length === 0) throw new Error("stuck before done")
+		}
+		expect((await store.getProduction(root.id))?.status).toBe("approved")
+		expect(finalReviewModelCalls).toBe(1) // no geometry → the model reviewer ran normally
+	})
+})
+
 // A video-project whose `build` step is a PLANNER that fans out one `scene` leaf per unit, then an
 // `assemble` leaf depends on the whole build. Exercises the three recursion primitives at once:
 // non-root dispatch of a plan node, dynamic fan-out, and rollup from scene → build → root.

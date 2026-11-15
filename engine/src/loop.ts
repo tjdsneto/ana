@@ -14,6 +14,7 @@ import { NoopLogger } from "@core/shared"
 import type { InteractionRole, Logger, Node, Store, SubagentInput, SubagentResult, SubagentRunner, Version } from "@core/shared"
 import type { EngineConfig } from "./config.js"
 import { validateJsonArtifact } from "./conformance.js"
+import { inspectLayout, parseGeometry, renderPrecheckReport } from "./layout-inspect.js"
 import { parseProductionPlanOutput } from "./plan-dag.js"
 import { parseSliceJson, pickKeys, readManifest, seedManifest, sliceHash, writeSlice } from "./film-manifest.js"
 import { buildHolisticPrompt, buildPlannerPrompt, buildProducerPrompt, buildProductionPlanPrompt, buildReviewerPrompt, parsePlan, parseReopen, parseVerdict, type ReopenTarget, type UpstreamArtifact } from "./prompts.js"
@@ -919,18 +920,33 @@ export class Engine {
 		// feedback is about instead of re-grading the same render to a pass (issue 0037).
 		const feedback = latest?.status === "denied" ? (latest.feedback ?? undefined) : undefined
 
+		// 0033: deterministic layout-geometry pre-pass, BEFORE the expensive model reviewer. If the type
+		// declares a precheck and the renderer emitted its geometry, inspect it for the enumerable defect
+		// class a VLM judges worst (clipping, collision, never-settling, reveal-stops-short, low contrast,
+		// too many type systems). Any defect short-circuits straight into the REOPEN channel — no Opus pass
+		// burned on an obviously broken render. A clean pre-check (or no geometry file) falls through to the
+		// model reviewer unchanged; it gates the expensive pass, it never replaces it.
+		const precheck = this.precheckGeometry(node, contract)
 		const t0 = Date.now()
-		const holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream, feedback })
-		const result = await this.runSubagent(
-			{
-				prompt: holisticPrompt,
-				skill: contract.skill ?? "final-review",
-				cwd: this.config.craftRoot,
-				resumeSessionId: latest?.subagent?.sessionId,
-			},
-			contract,
-		)
-		const draft = result.output
+		let draft: string
+		let result: SubagentResult | undefined
+		let holisticPrompt = ""
+		if (precheck) {
+			draft = precheck.report
+			log.info("review.precheck", { versionId: "pending", defects: precheck.defectCount, reopenTarget: contract.precheck?.reopenTarget })
+		} else {
+			holisticPrompt = buildHolisticPrompt(contract, { brief: root.description ?? "", upstream, feedback })
+			result = await this.runSubagent(
+				{
+					prompt: holisticPrompt,
+					skill: contract.skill ?? "final-review",
+					cwd: this.config.craftRoot,
+					resumeSessionId: latest?.subagent?.sessionId,
+				},
+				contract,
+			)
+			draft = result.output
+		}
 		const artifactPath = writeArtifact(this.config.artifactsDir, node.productionId, node.type, n, draft)
 		const version = await this.store.createVersion({
 			nodeId: node.id,
@@ -939,9 +955,11 @@ export class Engine {
 			status: "producing",
 			artifactPath,
 			builtFrom: await this.computeBuiltFrom(node),
-			subagent: { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model },
+			subagent: result
+				? { runId: randomUUID(), status: "done", sessionId: result.sessionId, engine: result.engine ?? this.runner.engine, model: result.model }
+				: { runId: randomUUID(), status: "done", engine: "precheck" },
 		})
-		await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, holisticPrompt)
+		if (result) await this.logInteraction(node, version.id, "producer", result, Date.now() - t0, holisticPrompt)
 
 		if (parseVerdict(draft) === "pass") {
 			log.info("review.holistic", { versionId: version.id, verdict: "pass" })
@@ -965,6 +983,28 @@ export class Engine {
 		this.globalRevisions.set(node.productionId, used + 1)
 		const reopened = await this.reopenWithCascade(node, targets)
 		log.info("review.holistic_reopen", { versionId: version.id, pass: used + 1, reopened })
+	}
+
+	// 0033: run the deterministic layout-geometry pre-pass for a holisticReview node. Returns a revise
+	// report (VERDICT + REOPEN lines + detail) ONLY when the renderer's geometry exists and the inspector
+	// found defects — so the caller skips the model reviewer and feeds this through the identical
+	// REOPEN/budget path. Returns undefined when there is no precheck configured, no geometry emitted yet,
+	// or a clean geometry: in every one of those cases the holistic review falls through to the model pass
+	// unchanged. Fail-safe: a malformed geometry parses to zero frames (undefined) rather than throwing.
+	private precheckGeometry(node: Node, contract: TypeContract): { report: string; defectCount: number } | undefined {
+		const pre = contract.precheck
+		if (!pre) return undefined
+		const geomPath = join(this.config.artifactsDir, node.productionId, pre.geometry)
+		if (!existsSync(geomPath)) return undefined
+		let geometry: ReturnType<typeof parseGeometry>
+		try {
+			geometry = parseGeometry(readFileSync(geomPath, "utf8"))
+		} catch {
+			return undefined
+		}
+		const defects = inspectLayout(geometry)
+		if (defects.length === 0) return undefined
+		return { report: renderPrecheckReport(defects, pre.reopenTarget), defectCount: defects.length }
 	}
 
 	// Send the named upstream node(s) back to revise and cascade. Surgical by design: reopening one

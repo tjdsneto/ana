@@ -3,6 +3,7 @@
 	"name": "Final review",
 	"description": "Holistic whole-production review; on revise it reopens named upstream nodes (approved → pending) and cascades, capped by maxGlobalRevisions.",
 	"holisticReview": true,
+	"precheck": { "geometry": "board/frames.json", "reopenTarget": "scene" },
 	"skill": "final-review",
 	"model": "claude-opus-5-5"
 }

@@ -26,9 +26,11 @@ set -euo pipefail
 F="${1:?make-film: film dir required (holds film.json + script.txt)}"; shift || true
 OUT="$F/film.mp4"; FPS=30; MUSIC=""; SKIP_CAPTURE=0; SKIP_VOICE=0; VOICE_ENGINE="kokoro"
 AUDIO_CLIP=""; CAPTIONS="auto"; CAPTION_STYLE=""        # CAPTIONS: auto (film.json decides) | on | off
+GEOM=""                                                 # 0033: --geometry-out <path> forwards to render.mjs (layout geometry for the deterministic pre-check); off when empty
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
+    --geometry-out) GEOM="$2"; shift 2 ;;
     --fps) FPS="$2"; shift 2 ;;
     --music) MUSIC="$2"; shift 2 ;;
     --skip-capture) SKIP_CAPTURE=1; shift ;;
@@ -94,7 +96,7 @@ if [ -z "$MUSIC" ] && grep -q '"music"' "$F/film.json"; then
   [ -n "$MUSIC" ] && echo "  music -> $MUSIC"
 fi
 echo "  [4/5] mix";    "$PY" "$HERE/mix.py" --root "$F" ${MUSIC:+--music "$MUSIC"}
-echo "  [5/5] render"; ( cd "$HERE" && node render.mjs --html "$F/index.html" --audio "$F/media/mix.wav" --out "$OUT" --fps "$FPS" --no-master )
+echo "  [5/5] render"; ( cd "$HERE" && node render.mjs --html "$F/index.html" --audio "$F/media/mix.wav" --out "$OUT" --fps "$FPS" --no-master ${GEOM:+--geometry-out "$GEOM"} )
 
 # Captions (post-render, in place). Default: film.json's `captions` field decides (--captions forces on,
 # --no-captions suppresses). captions.py --gated is a no-op when the field is absent/off, so the burn
