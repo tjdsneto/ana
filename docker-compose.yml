@@ -138,7 +138,15 @@ services:
   # Development web: the Vite dev server (hot reload), proxying /api + /ws to web-api itself. Only
   # starts under the `dev` profile (docker compose --profile dev up), so a plain up runs prod nginx.
   web-dev:
-    <<: *engine-image
+    # Needs the FULL app source to run the Vite dev server, so it builds the `build` stage (not the
+    # allowlisted `base`, which no longer carries app source after the 0036 registry-safe split). The
+    # `build` stage is intermediate and dev-only here — never pushed. Own build/image override the
+    # engine-image anchor's target: base.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    image: production-engine-dev:local
     command: ["sh", "-c", "npm -w @app/web run dev -- --host 0.0.0.0 --port 5173"]
     environment:
       WEB_API_URL: http://web-api:8788   # Vite proxies /api + /ws here (server-side, cross-container)

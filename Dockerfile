@@ -1,15 +1,40 @@
-# Two stages (PoC — don't over-build). `base` is the one image every service runs (node services run
-# their built dist; the web app runs the Vite dev server, which proxies /api + /ws to web-api so the
-# browser talks to one origin). `engine` extends it with the Claude Code CLI for the real subagent
-# runner — kept off the mcp/api/web image, which don't shell out to `claude`.
+# Registry-safe multi-stage build (issue 0036). The stages are arranged so NO stage that ships to a
+# registry ever does a wholesale `COPY . .` of the build context:
 #
-# NOTE: build with an explicit `target` — Compose services use `target: base`, engine-worker uses
-# `target: engine`. Without a target, Docker builds the LAST stage (engine) for everyone.
+#   deps   — toolchain + `npm ci` from the package manifests only (NO source). Shared dependency layer.
+#   build  — `deps` + `COPY . .` + `npm run build`. The ONLY stage that copies the repo root wholesale,
+#            and it is INTERMEDIATE: never a Compose/runtime target, never pushed. (web-dev, a dev-only
+#            profile service, is the one runtime consumer of this full-source stage — also never pushed.)
+#   base   — `deps` + an ALLOWLIST `COPY --from=build` of just the named workspace dirs (shared, core,
+#            engine, server). The repo ROOT is never copied here, so a root secret file (.env /
+#            .common_env / .engine_env, or any future one) CANNOT land in this image regardless of what
+#            `.dockerignore` says. This is the pushed node-service image (mcp-server / web-api / migrate).
+#   engine — `engine-tools` + the agent CLIs, overlaid with the allowlisted `base` /repo + baked craft.
+#            The pushed worker image. Also never copies the root.
+#   web    — nginx + the built SPA only (already clean; nothing from the repo root).
+#
+# `.dockerignore` stays as a SECOND line of defence, not the only one: the structural guarantee is that
+# a pushed stage only ever copies named subpaths that contain no secrets (verified: secret files are
+# root-only, see .gitignore `/*_env` + `/.env`). A pre-push scan (scripts/scan-image-secrets.sh) is the
+# backstop — see README "Registry-push contract (secret safety)".
+#
+# BUILD-TIME SECRETS: none are needed today (all auth — CLAUDE_CODE_OAUTH_TOKEN, OPENAI_API_KEY,
+# GEMINI_API_KEY, DB creds — is injected at RUNTIME via Compose env_file, never at build). If a build
+# step ever genuinely needs one (e.g. a private-registry token for `npm ci`), use a BuildKit secret
+# mount so it lives only for that layer and never persists in the image or `docker history`:
+#   RUN --mount=type=secret,id=npmtoken \
+#       NPM_TOKEN="$(cat /run/secrets/npmtoken)" npm ci
+# built with `docker build --secret id=npmtoken,src=./.npmtoken …` (Compose: build.secrets). NEVER pass
+# a secret via `ARG` or `ENV` — both are readable in `docker history` of the pushed image.
+#
+# NOTE: build with an explicit `target` — Compose services use `target: base`, engine-worker + toolbox
+# use `target: engine`, web-dev uses `target: build`. Without a target, Docker builds the LAST stage.
 
+# ── deps stage ────────────────────────────────────────────────────────────────────────────────────
 # Base is debian (bookworm-slim), not alpine: the engine stage needs glibc — ffmpeg, the Claude Code
 # CLI's native binary, and piper/onnxruntime (kokoro later) are all glibc-shaped, and uniform glibc
 # removes the musl special-casing. web stage stays nginx:alpine (static assets only).
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim AS deps
 WORKDIR /repo
 
 # Pin the toolchain in the image (the versioned source of truth, not the host): Node 24 LTS from the
@@ -17,7 +42,8 @@ WORKDIR /repo
 RUN npm i -g npm@latest
 
 # Install with the full workspace layout present (npm needs every package.json to resolve the
-# @core/@server/@engine/@app links) — copied before the source so this layer caches on lockfile changes.
+# @core/@server/@engine/@app links) — only the manifests, so this layer caches on lockfile changes and
+# carries NO source. npm ci builds the workspace node_modules + symlinks every service resolves at run.
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY shared/package.json shared/package.json
 COPY core/services/package.json core/services/package.json
@@ -27,10 +53,27 @@ COPY server/api/package.json server/api/package.json
 COPY app/package.json app/package.json
 RUN npm ci
 
-# Source, then build the composite TS projects (shared → core/services → engine → server/{mcp,api}).
-# The web app is not pre-built; it runs the Vite dev server at runtime.
+# ── build stage (INTERMEDIATE — never pushed) ────────────────────────────────────────────────────
+# The only stage that copies the repo root wholesale, to compile. Its output is consumed by `base`
+# (allowlisted) and `web-build`; the full-source filesystem never reaches a pushed image.
+# Build the composite TS projects (shared → core/services → engine → server/{mcp,api}). The web app is
+# built separately in web-build (vite); for dev it runs the Vite server from this stage (web-dev).
+FROM deps AS build
 COPY . .
 RUN npm run build
+
+# ── base stage (pushed node-service image) ───────────────────────────────────────────────────────
+# ALLOWLIST copy from `build`: only the named workspace dirs, never the repo root. These dirs hold no
+# secrets (root-only, see .gitignore), so the structural guarantee holds no matter what .dockerignore
+# does. node_modules + the root manifests/tsconfigs are already in `deps` (FROM deps), so they are not
+# re-copied. Note migrate/seed run `tsx src/migrate.ts` (TS source, not dist) reading shared/migrations
+# — so shared/{src,migrations} ship here on purpose; mcp-server reads engine/{types,capabilities}.
+FROM deps AS base
+WORKDIR /repo
+COPY --from=build /repo/shared /repo/shared
+COPY --from=build /repo/core /repo/core
+COPY --from=build /repo/engine /repo/engine
+COPY --from=build /repo/server /repo/server
 
 # Overridden per service in docker-compose.yml.
 CMD ["node", "server/mcp/dist/http.js"]
@@ -149,7 +192,13 @@ WORKDIR /repo
 # the COPY overlay because base carries no playwright dep (it is --no-save).
 RUN npm i --no-save playwright@1.48.2 \
 	&& npx playwright install --with-deps chromium
+# Allowlisted overlay (issue 0036): the node runtime from `base` (workspace dirs + node_modules, no
+# repo root), plus the craft tree baked from `build`. Neither copies the repo root, so no root secret
+# file can reach the worker image. Compose live-mounts craft/{skills,tools,references,assets/fonts}
+# over this bake for edit-without-rebuild; the baked copy backs the non-mounted craft (docs, assets,
+# evals) and keeps the image self-contained when run without those mounts.
 COPY --from=base /repo /repo
+COPY --from=build /repo/craft /repo/craft
 # Stamp the source git SHA (passed as a build arg) so the worker logs which build it is running (0015),
 # making a stale / not-rebuilt image visible at worker.up instead of silently running old code.
 ARG GIT_SHA=unknown
@@ -157,9 +206,10 @@ ENV ENGINE_BUILD_SHA=$GIT_SHA
 CMD ["node", "engine/dist/worker/index.js"]
 
 # ── web build stage ─────────────────────────────────────────────────────────────────────────────
-# Produce the static SPA bundle (app/dist). Separate from `base` so the heavy node_modules never ship
-# in the final web image — only the built assets do.
-FROM base AS web-build
+# Produce the static SPA bundle (app/dist). FROM `build` (full source + node_modules) because `base`
+# no longer carries the app source after the 0036 allowlist split; this stage is intermediate and
+# never pushed — only its app/dist is copied into the clean nginx `web` image below.
+FROM build AS web-build
 RUN npm -w @app/web run build
 
 # ── web (prod) stage ────────────────────────────────────────────────────────────────────────────
