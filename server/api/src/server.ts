@@ -5,9 +5,10 @@
 
 import { readFile, stat } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
-import { approve, approveBudget, cancelNode, getDeliverable, retryNode, submitFeedback } from "@core/services"
+import { approve, approveBudget, cancelNode, getDeliverable, requestProduction, retryNode, submitFeedback } from "@core/services"
 import type { Logger, Store } from "@core/shared"
 import express from "express"
+import { buildLaunchInput, type LaunchBody } from "./launch.js"
 import { artifactsRoot, contentTypeFor, listMedia, listVideos, locateUnderRoot, type MediaFile, resolveUnderRoot } from "./media.js"
 import { listProductions, productionDetail } from "./queries.js"
 
@@ -182,11 +183,20 @@ export function buildApi(store: Store, logger: Logger): express.Express {
 	})
 
 	// ── gate writes (reuse the MCP tool handlers) ────────────────────────────────────────────────
+	app.post("/api/productions", handle("request_production", (req) => requestProduction(store, buildLaunchInput(req.body as LaunchBody))))
 	app.post("/api/approve", handle("approve", (req) => approve(store, { outputId: req.body.output_id, versionId: req.body.version_id })))
 	app.post("/api/feedback", handle("feedback", (req) => submitFeedback(store, { outputId: req.body.output_id, productionId: req.body.production_id, body: req.body.body })))
 	app.post("/api/approve-budget", handle("approve_budget", (req) => approveBudget(store, { productionId: req.body.production_id })))
 	app.post("/api/cancel-node", handle("cancel_node", (req) => cancelNode(store, { nodeId: req.body.node_id })))
 	app.post("/api/retry-node", handle("retry_node", (req) => retryNode(store, { nodeId: req.body.node_id })))
+
+	// Terminal error middleware. Body-parser failures (malformed JSON → SyntaxError, oversized body →
+	// PayloadTooLargeError) throw inside express.json() before any route's try/catch, so without this
+	// they'd return Express's default HTML. Normalize to the same { error } JSON shape the routes use.
+	app.use((err: { status?: number; statusCode?: number; message?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+		if (res.headersSent) return next(err)
+		res.status(err.status ?? err.statusCode ?? 400).json({ error: err.message ?? "bad request" })
+	})
 
 	return app
 }

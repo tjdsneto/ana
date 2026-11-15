@@ -1,0 +1,5 @@
+# Reference video clips (*.mp4) are provisioned locally by scripts/promote-template.ts, which reads
+# them from ../research at dev time. They are ~70MB total and are NOT committed — the catalog.json
+# ledger references them by path, and the local docker build COPYs whatever is on disk. Posters
+# (*.poster.jpg, ~1.2MB) ARE committed so the grid renders in a fresh checkout without provisioning.
+*.mp4
