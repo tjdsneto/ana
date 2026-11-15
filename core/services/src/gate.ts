@@ -130,8 +130,10 @@ export async function cancelNode(store: Store, input: { nodeId: string }): Promi
 // Retry a stranded node: reset it to "pending" so the loop re-claims and re-produces it, and supersede
 // its dead latest version. A node whose producer died mid-flight (e.g. a worker recreate killed its
 // subagent) is left "in-progress" with a "producing" version that will never finish; the loop only
-// claims "pending" nodes, so it strands until the self-heal reaper lands (issue 0011, deferred). This is
-// the manual stopgap for that. Not for the production root. Leaves an already-approved version alone.
+// claims "pending" nodes. The self-heal reaper (issue 0011: claim lease + heartbeat + reaper sweep)
+// now recovers this automatically once the lease lapses; this verb is the MANUAL complement — an
+// operator unsticks a known-stranded node immediately instead of waiting out the lease TTL. Same reset
+// the reaper performs. Not for the production root. Leaves an already-approved version alone.
 export async function retryNode(store: Store, input: { nodeId: string }): Promise<{ ok: true }> {
 	const node = await store.getNode(input.nodeId)
 	if (!node) throw new Error(`retry: node ${input.nodeId} not found`)

@@ -38,6 +38,15 @@ export interface VersionPatch {
 	approvedBy?: ApprovedBy
 }
 
+// 0011 self-heal: the ownership lease a worker writes when it claims a node. `claimReadyNode` stamps
+// claimed_by + lease_expires_at = now + leaseTtlMs; the worker heartbeat extends the lease while its
+// producer is alive; the reaper reclaims an in-progress node whose lease has lapsed (owning worker
+// gone). TTL must exceed the heartbeat interval with margin so a live, long produce is never reaped.
+export interface ClaimLease {
+	workerId: string // the owning worker's per-process id (logged at worker.up)
+	leaseTtlMs: number // how long the claim is valid from now; a heartbeat pushes it forward
+}
+
 // ── Store: all DB access ────────────────────────────────────────────────────────────────────
 // Every method is one transaction. The MCP server, the worker, and the dashboard API are all
 // Store clients; they never call each other (spec: the DB is the only integration point).
@@ -56,7 +65,20 @@ export interface Store {
 	getNode(id: string): Promise<Node | null>
 	nodesFor(productionId: string): Promise<Node[]> // whole tree (v0-flat: root + leaves)
 	listReadyNodes(productionId: string): Promise<Node[]> // pending + deps approved + parent active
-	claimReadyNode(): Promise<Node | null> // worker claim seam (FOR UPDATE SKIP LOCKED); null = nothing ready
+	// Worker claim seam (FOR UPDATE SKIP LOCKED); null = nothing ready. When `claim` is passed, the
+	// claimed node is leased (claimed_by + lease_expires_at) so the reaper can reclaim it if this worker
+	// dies; without it the claim is unleased (and so never reaped).
+	claimReadyNode(claim?: ClaimLease): Promise<Node | null>
+
+	// 0011 self-heal: extend the lease on every in-progress node this worker still holds, so a long but
+	// live produce is never reaped. Called on a timer well inside the lease TTL. Returns the count refreshed.
+	heartbeatClaims(workerId: string, leaseTtlMs: number): Promise<number>
+
+	// 0011 self-heal: return every in-progress node whose lease has lapsed (owning worker gone) to
+	// 'pending' — clearing its claim and superseding its dead producing version so the re-claim produces
+	// a clean next version — under FOR UPDATE SKIP LOCKED so concurrent workers never reclaim the same
+	// node. A node under a retired production, or one with no lease, is left alone. Returns the reaped nodes.
+	reapExpiredClaims(): Promise<Node[]>
 
 	// node writes
 	updateNodeStatus(id: string, status: NodeStatus): Promise<void>

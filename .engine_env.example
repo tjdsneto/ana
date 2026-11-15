@@ -9,6 +9,13 @@
 # AGREEMENT_MAX_ROUNDS_HUMAN=5 # briefing agreement loop, actor_kind=human
 # AGREEMENT_MAX_ROUNDS_AGENT=2 # briefing agreement loop, actor_kind=agent
 
+# Self-heal: claim lease + reaper (0011). A claimed node carries a lease the worker heartbeats while it
+# produces; a dead/restarted worker stops, and after the TTL lapses the reaper returns the node to
+# pending so the production resumes. Defaults: TTL 45min, heartbeat 60s, reaper 60s.
+# CLAIM_LEASE_TTL_MS=2700000   # lease validity; must exceed heartbeat + the longest single produce (generous)
+# CLAIM_HEARTBEAT_MS=60000     # how often a live worker extends the lease on nodes it holds
+# REAPER_INTERVAL_MS=60000     # how often the worker sweeps for expired claims (also runs once at boot)
+
 # Subagent engine. Code default: claude. Set fake for canned output, ZERO spend, no `claude` call.
 SUBAGENT_ENGINE=fake
 # SUBAGENT_MODEL=
