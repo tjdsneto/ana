@@ -52,6 +52,10 @@ services:
       - "${MCP_HTTP_PORT:-8790}:8787"          # host 8790 by default (8787 is taken by chrome-bridge locally)
     volumes:
       - ./server/data/artifacts:/data/artifacts
+      # Live-mount the type registry so new/edited types register without an image rebuild (same
+      # rationale as the craft-skills mount on the worker). The engine DIST stays baked; only the
+      # JSON type definitions are read at runtime from here (AUTONOMY_TYPES_DIR).
+      - ./engine/types:/repo/engine/types
     depends_on:
       db:
         condition: service_healthy
@@ -99,6 +103,9 @@ services:
       # the same reason the skills are mounted: a reference edit reaches the worker without an image
       # rebuild, and a live skill never points at a stale baked reference. Baking is for a shippable image.
       - ./craft/video-production/.claude/references:/repo/craft/video-production/.claude/references
+      # Live-mount the type registry (see mcp-server) so the worker dispatches new/edited types
+      # without an image rebuild. Engine DIST stays baked.
+      - ./engine/types:/repo/engine/types
     depends_on:
       db:
         condition: service_healthy
