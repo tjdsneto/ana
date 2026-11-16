@@ -1,0 +1,16 @@
+{
+	"type": "research-report",
+	"name": "Research report",
+	"description": "Root-capable NON-VIDEO autonomy task: research a topic and produce a written report. Proves the engine is domain-general — a static two-node DAG (gather -> write) with no planner fan-out and no render, so it completes on the fake engine at $0.",
+	"rootCapable": true,
+	"inputs": [
+		{ "name": "topic", "required": true, "description": "The subject or question to research." },
+		{ "name": "audience", "description": "who the report is for" },
+		{ "name": "depth", "description": "quick | standard | deep" },
+		{ "name": "format", "description": "memo | brief | deep-dive" }
+	],
+	"checklist": [
+		{ "id": "gather", "type": "research-gather", "deps": [] },
+		{ "id": "report", "type": "research-report-write", "deps": ["gather"] }
+	]
+}

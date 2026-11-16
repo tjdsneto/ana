@@ -1,0 +1,10 @@
+{
+	"type": "research-report-write",
+	"name": "Research report (write)",
+	"description": "Synthesize the gathered dossier into a structured written report; client approval is the gate.",
+	"produce": "Write a structured report from the gathered dossier: an executive summary, the key findings (each tied to its evidence and confidence level), the risks and unknowns, and the recommended next steps. Keep unverified claims marked as unverified. Plain prose with headings.",
+	"agreement": true,
+	"reviews": [
+		{ "name": "conformance", "kind": "coverage", "skill": "review-conformance" }
+	]
+}

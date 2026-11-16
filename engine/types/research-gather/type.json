@@ -1,0 +1,9 @@
+{
+	"type": "research-gather",
+	"name": "Research gather",
+	"description": "Explore the topic and capture findings as a dossier of verified vs. unverified facts, each with its source and a confidence note.",
+	"produce": "Research the topic. Output a dossier: verified facts (each with its source), unverified or uncertain claims (flagged as such), and the open questions that remain. Be explicit about confidence; do not present an unverified claim as settled.",
+	"reviews": [
+		{ "name": "conformance", "kind": "coverage", "skill": "review-conformance" }
+	]
+}
