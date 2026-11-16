@@ -46,8 +46,14 @@ const sessionId = flags.session ?? `smoke-${Date.now()}`
 const pollMs = Number(flags["poll-ms"] ?? 2500)
 const maxMs = Number(flags["max-ms"] ?? 180000)
 const resumeId = typeof flags.production === "string" ? flags.production : null
+const rootType = typeof flags.type === "string" ? flags.type : null
+const rootParams = typeof flags.params === "string" ? JSON.parse(flags.params) : undefined
 
-const TERMINAL = new Set(["done", "delivered", "failed", "error", "cancelled", "canceled", "retired"])
+// Top-level status mirrors the ROOT node. The engine rolls a finished root up to "approved" (and logs
+// a production.done EVENT) — there is no literal "done" node status — so "approved" on the root is the
+// success terminal. It only appears once the whole tree has rolled up, so breaking on it can't fire mid-run.
+const SUCCESS = new Set(["done", "delivered", "approved"])
+const TERMINAL = new Set([...SUCCESS, "failed", "error", "cancelled", "canceled", "retired"])
 const t0 = Date.now()
 const el = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`
 const log = (...a) => console.log(`[${el()}]`, ...a)
@@ -75,8 +81,11 @@ if (resumeId) {
 	productionId = resumeId
 	log("resume production", productionId)
 } else {
-	const req = await call("request_video", { brief, session_id: sessionId, autonomy_lever: lever, actor_kind: actor })
-	log("request_video ->", JSON.stringify(req))
+	const reqArgs = { brief, session_id: sessionId, autonomy_lever: lever, actor_kind: actor }
+	if (rootType) reqArgs.type = rootType
+	if (rootParams) reqArgs.params = rootParams
+	const req = await call("request_video", reqArgs)
+	log(`request_video (type=${rootType ?? "video-project"}) ->`, JSON.stringify(req))
 	productionId = req.production_id ?? req.productionId
 }
 if (!productionId) throw new Error("no production_id")
@@ -141,4 +150,4 @@ try {
 }
 log(`approvals=${approved.size} production=${productionId}`)
 await client.close()
-process.exit(finalStatus === "done" ? 0 : 1)
+process.exit(SUCCESS.has(finalStatus) ? 0 : 1)
