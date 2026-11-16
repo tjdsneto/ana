@@ -9,7 +9,7 @@ x-engine-image: &engine-image
     context: .
     dockerfile: Dockerfile
     target: base          # the slim image (no claude CLI); engine-worker overrides to target: engine
-  image: production-engine:local
+  image: ana:local
 
 services:
   db:
@@ -66,7 +66,7 @@ services:
       target: engine           # the image WITH the agent CLIs (claude -p, codex, gemini) — see Dockerfile engine-tools "SHARED-IMAGE CONTRACT"
       args:
         GIT_SHA: ${GIT_SHA:-unknown}   # stamped into the image + logged at worker.up (0015); set by scripts/worker-reload.sh
-    image: production-engine-claude:local
+    image: ana-engine:local
     command: ["node", "engine/dist/worker/index.js"]
     # All the worker knobs (subagent engine/model/caps, render + voice providers, the Claude
     # subscription token) live in .engine_env — see .engine_env.example. RENDER_FONT + VOICE_MODEL
@@ -129,7 +129,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
-    image: production-engine-web:local
+    image: ana-web:local
     ports:
       - "${WEB_PORT:-5173}:80"
     depends_on:
@@ -146,7 +146,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: build
-    image: production-engine-dev:local
+    image: ana-dev:local
     command: ["sh", "-c", "npm -w @app/web run dev -- --host 0.0.0.0 --port 5173"]
     environment:
       WEB_API_URL: http://web-api:8788   # Vite proxies /api + /ws here (server-side, cross-container)
@@ -177,7 +177,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: engine
-    image: production-engine-claude:local
+    image: ana-engine:local
     working_dir: /work
     env_file:
       - .common_env

@@ -10,7 +10,7 @@
 #   scripts/scan-image-secrets.sh --deep [IMAGE ...] # also run a content scan (gitleaks if installed)
 #
 # Default images = the three a registry push would ship:
-#   production-engine:local  production-engine-claude:local  production-engine-web:local
+#   ana:local  ana-engine:local  ana-web:local
 #
 # Gates (any hit = fail):
 #   1. Filenames  — no credential-config files: .env / .env.* / .common_env / .engine_env / *_env,
@@ -39,7 +39,7 @@ for arg in "$@"; do
 	esac
 done
 if [ "${#IMAGES[@]}" -eq 0 ]; then
-	IMAGES=(production-engine:local production-engine-claude:local production-engine-web:local)
+	IMAGES=(ana:local ana-engine:local ana-web:local)
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
