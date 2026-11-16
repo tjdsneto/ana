@@ -7,7 +7,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
-import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestVideo, retryNode, submitFeedback } from "@core/services"
+import { approve, approveBudget, cancelNode, getCapabilities, getDeliverable, getStatus, inbox, requestProduction, retryNode, submitFeedback } from "@core/services"
 import { type Logger, NoopLogger, type Store } from "@core/shared"
 import { z } from "zod"
 
@@ -39,15 +39,17 @@ export function buildServer(store: Store, logger: Logger = new NoopLogger()): Mc
 	server.registerTool(
 		"request_video",
 		{
-			description: "Start a video production from a brief. Hands off: inserts the root node and returns its production_id immediately — the engine worker produces it.",
+			description: "Start a production from a brief. Hands off: inserts the root node and returns its production_id immediately — the engine worker produces it. Roots a full video-project by default; pass `type` to root any other rootCapable type (see get_capabilities), and `params` for that type's intake inputs.",
 			inputSchema: {
 				brief: z.string(),
 				session_id: z.string(),
 				autonomy_lever: z.enum(["low", "medium", "high"]).optional(),
 				actor_kind: z.enum(["human", "agent"]).optional(),
+				type: z.string().optional(),
+				params: z.record(z.string(), z.unknown()).optional(),
 			},
 		},
-		(a) => run("request_video", () => requestVideo(store, { brief: a.brief, sessionId: a.session_id, autonomyLever: a.autonomy_lever, actorKind: a.actor_kind })),
+		(a) => run("request_video", () => requestProduction(store, { brief: a.brief, sessionId: a.session_id, autonomyLever: a.autonomy_lever, actorKind: a.actor_kind, type: a.type, params: a.params })),
 	)
 
 	server.registerTool(
