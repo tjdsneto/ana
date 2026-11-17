@@ -1,0 +1,15 @@
+{
+  "description": "Record learnings and counted mistakes when a Claude session stops.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/extract-learnings\""
+          }
+        ]
+      }
+    ]
+  }
+}

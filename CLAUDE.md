@@ -13,6 +13,8 @@ storyboard, render, audio, polish) are fine — those name the domain, not the p
 
 If you find a brand/product name in this repo, it is a mistake — remove it.
 
+**Exception — `agent-layer/`:** that folder owns the `.ana` marker other repositories carry as their personal agent layer. It is allowed to use the product name. Do not strip those names from `agent-layer/`.
+
 ## What this is
 
 A **PoC** for an autonomous video-production agent, built on a **generic autonomy engine**. A caller
@@ -84,6 +86,7 @@ engine        generic autonomy loop — knows nothing about video
 | `server/data/` | gitignored runtime state: produced `artifacts/` (the Postgres data lives in the `db` container volume) |
 | `client/agent/` | thin client template a brand installs (MCP config only; no craft) — the product client |
 | `app/` | `@app/web` — the React + Vite SPA: dev/observability UI + the v0 human gate (approve/feedback). Reads `server/api`, renders productions/nodes live. **Not** the product client |
+| `agent-layer/` | the `.ana` personal-agent-layer protocol for other repositories (skill + scripts). Not used by the video engine. Naming-rule exception — see the top of this file. |
 | `craft/video-production/` | the whole video specialization in one home: `tools/`, `.claude/skills/`, `.claude/references/` (the `CRAFT-BAR.md` / `COMPOSED-CARDS.md` rubrics the skills cite — kept next to the skills, not in `docs/`), `assets/`, `docs/` (the human video-production reference: glossary, launch-video anatomy), and a `README.md` catalog. Not engine code. |
 | `craft/video-production/.claude/skills/` | the craft production + review skills a `claude -p` worker runs (storyboard, build-card, render-film, review-*…). The worker cwd stays `/repo`, so Compose mounts them to the project path it resolves (`/repo/.claude/skills`). Tool refs inside them are `/repo`-relative (`craft/video-production/tools/…`). |
 

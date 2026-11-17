@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""
+install-plugins - Enable the ana-learnings plugins and drop the old Stop command.
+
+Claude loads its plugin from this repo through the local "ana" marketplace.
+Codex copies the plugin into a cache and drops the skill symlink, so this
+script installs that plugin and writes the skill plus a script pointer into
+the cache. Cursor does not follow a symlink out of ~/.cursor/plugins/local,
+so that plugin is copied there and pointed back at this repo's script.
+
+The extract-learnings command is removed from each engine's global hook file
+so the plugin is the only copy that runs.
+
+  install-plugins [--dry-run]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPT = ROOT / "scripts" / "extract-learnings"
+SCRIPT_NAME = "extract-learnings"
+MARKETPLACE = "ana"
+CLAUDE_PLUGIN = "ana-learnings@ana"
+CODEX_PLUGIN = "ana-learnings@ana"
+OLD_CODEX_PLUGIN = "ana-learnings-codex@ana"
+
+
+def log(action: str, dry: bool) -> None:
+    prefix = "WOULD " if dry else ""
+    print(f"  {prefix}{action}")
+
+
+def load_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        raise SystemExit(f"cannot read {path}: {e}")
+    if not isinstance(data, dict):
+        raise SystemExit(f"{path} is not a JSON object")
+    return data
+
+
+def write_json(path: Path, data: dict, dry: bool) -> None:
+    if dry:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def command_is_ours(command: str) -> bool:
+    head = command.strip().split()
+    if not head:
+        return False
+    return Path(head[0]).name == SCRIPT_NAME or head[0].rstrip('"').endswith("/" + SCRIPT_NAME)
+
+
+def strip_claude(data: dict, event: str) -> bool:
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    groups = hooks.get(event)
+    if not isinstance(groups, list):
+        return False
+    changed = False
+    kept = []
+    for group in groups:
+        if not isinstance(group, dict):
+            kept.append(group)
+            continue
+        inner = group.get("hooks")
+        if not isinstance(inner, list):
+            kept.append(group)
+            continue
+        remaining = [
+            hook for hook in inner
+            if not (isinstance(hook, dict) and command_is_ours(str(hook.get("command", ""))))
+        ]
+        if len(remaining) != len(inner):
+            changed = True
+        if remaining:
+            group = dict(group)
+            group["hooks"] = remaining
+            kept.append(group)
+        elif not remaining and inner:
+            changed = True
+    if changed:
+        hooks[event] = kept
+    return changed
+
+
+def strip_cursor(data: dict, event: str) -> bool:
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    entries = hooks.get(event)
+    if not isinstance(entries, list):
+        return False
+    kept = [
+        hook for hook in entries
+        if not (isinstance(hook, dict) and command_is_ours(str(hook.get("command", ""))))
+    ]
+    if len(kept) == len(entries):
+        return False
+    hooks[event] = kept
+    return True
+
+
+def ensure_claude(dry: bool) -> None:
+    path = Path.home() / ".claude" / "settings.json"
+    data = load_json(path)
+    changed = False
+    enabled = data.setdefault("enabledPlugins", {})
+    if enabled.get(CLAUDE_PLUGIN) is not True:
+        enabled[CLAUDE_PLUGIN] = True
+        changed = True
+        log(f"enable {CLAUDE_PLUGIN} in {path}", dry)
+    marketplaces = data.setdefault("extraKnownMarketplaces", {})
+    wanted = {"source": {"source": "directory", "path": str(ROOT)}}
+    current = marketplaces.get(MARKETPLACE)
+    if current != wanted:
+        marketplaces[MARKETPLACE] = wanted
+        changed = True
+        log(f"set marketplace {MARKETPLACE} -> {ROOT} in {path}", dry)
+    if strip_claude(data, "Stop"):
+        changed = True
+        log(f"remove {SCRIPT_NAME} from Stop in {path}", dry)
+    if changed:
+        write_json(path, data, dry)
+    else:
+        log(f"present claude plugin in {path}", dry)
+
+
+def ensure_codex_toml(dry: bool) -> None:
+    path = Path.home() / ".codex" / "config.toml"
+    text = path.read_text() if path.exists() else ""
+    plugin_header = f'[plugins."{CODEX_PLUGIN}"]'
+    old_header = f'[plugins."{OLD_CODEX_PLUGIN}"]'
+    market_header = f"[marketplaces.{MARKETPLACE}]"
+    source_line = f'source = "{ROOT}"'
+    if old_header in text:
+        text = text.replace(f"\n{old_header}\nenabled = true\n", "\n")
+        log(f"remove {OLD_CODEX_PLUGIN} from {path}", dry)
+        changed_old = True
+    else:
+        changed_old = False
+    additions = []
+    if plugin_header not in text:
+        additions.append(f"\n{plugin_header}\nenabled = true\n")
+        log(f"enable {CODEX_PLUGIN} in {path}", dry)
+    if market_header not in text:
+        additions.append(
+            f"\n{market_header}\nsource_type = \"local\"\n{source_line}\n"
+        )
+        log(f"set marketplace {MARKETPLACE} -> {ROOT} in {path}", dry)
+    elif source_line not in text.split(market_header, 1)[1].split("\n[", 1)[0]:
+        raise SystemExit(
+            f"{path} already has {market_header} with a different source; leave it for a manual edit"
+        )
+    if not additions and not changed_old:
+        log(f"present codex plugin in {path}", dry)
+        return
+    if dry:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text + "".join(additions))
+
+
+def ensure_codex_cache(dry: bool) -> None:
+    cache_root = Path.home() / ".codex" / "plugins" / "cache" / MARKETPLACE / "ana-learnings"
+    installs = sorted(p for p in cache_root.glob("*") if p.is_dir()) if cache_root.exists() else []
+    if not installs:
+        log(f"install {CODEX_PLUGIN}", dry)
+        if dry:
+            return
+        subprocess.run(["codex", "plugin", "add", CODEX_PLUGIN, "--json"], check=True)
+        installs = sorted(p for p in cache_root.glob("*") if p.is_dir())
+    skill_src = ROOT / "skills" / "ana-project"
+    for dest in installs:
+        log(f"materialize codex skill and hook pointer in {dest}", dry)
+        if dry:
+            continue
+        skill_dest = dest / "skills" / "ana-project"
+        if skill_dest.is_symlink() or skill_dest.exists():
+            if skill_dest.is_dir() and not skill_dest.is_symlink():
+                shutil.rmtree(skill_dest)
+            else:
+                skill_dest.unlink()
+        skill_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(skill_src, skill_dest)
+        (dest / "hooks" / "script-path").write_text(str(SCRIPT) + "\n")
+
+
+def ensure_codex_hooks(dry: bool) -> None:
+    path = Path.home() / ".codex" / "hooks.json"
+    if not path.exists():
+        return
+    data = load_json(path)
+    if strip_claude(data, "Stop"):
+        log(f"remove {SCRIPT_NAME} from Stop in {path}", dry)
+        write_json(path, data, dry)
+    else:
+        log(f"present codex hooks in {path}", dry)
+
+
+def ensure_cursor(dry: bool) -> None:
+    dest = Path.home() / ".cursor" / "plugins" / "local" / "ana-learnings"
+    src = ROOT / "plugins" / "cursor"
+    log(f"refresh cursor plugin at {dest}", dry)
+    if not dry:
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        (dest / "hooks" / "script-path").write_text(str(SCRIPT) + "\n")
+    path = Path.home() / ".cursor" / "hooks.json"
+    if path.exists():
+        data = load_json(path)
+        if strip_cursor(data, "stop"):
+            log(f"remove {SCRIPT_NAME} from stop in {path}", dry)
+            write_json(path, data, dry)
+        else:
+            log(f"present cursor hooks in {path}", dry)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    if not SCRIPT.is_file():
+        raise SystemExit(f"hook script missing: {SCRIPT}")
+    ensure_claude(args.dry_run)
+    ensure_codex_toml(args.dry_run)
+    ensure_codex_cache(args.dry_run)
+    ensure_codex_hooks(args.dry_run)
+    ensure_cursor(args.dry_run)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

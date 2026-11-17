@@ -1,0 +1,17 @@
+{
+  "name": "ana",
+  "owner": {
+    "name": "Tiago Neto",
+    "url": "https://github.com/tjdsneto"
+  },
+  "metadata": {
+    "description": "Ana project layer plugins."
+  },
+  "plugins": [
+    {
+      "name": "ana-learnings",
+      "source": "./plugins/claude",
+      "description": "Stop hook that records learnings and counted mistakes."
+    }
+  ]
+}

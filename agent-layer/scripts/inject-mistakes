@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""
+inject-mistakes - SessionStart hook. Inject recurring mistakes into context,
+sorted by how often they have repeated (Aladdin's "a 5x-repeated mistake floats
+to the top" idea).
+
+Reads two tiers:
+  - global : ~/.claude/mistakes.json
+  - project: the nearest .ana/mistakes.json walking up from cwd, never the home store
+
+Merges by slug (summing counts across tiers), sorts by count desc, and prints
+the top N as plain text. SessionStart hook stdout is surfaced to Claude as
+session context, so no wrapper tags are needed here.
+
+Fails open: any missing/malformed store is skipped silently so session start is
+never blocked.
+
+Env overrides:
+  MISTAKES_INJECT_TOP   max entries to inject (default 10)
+  MISTAKES_MIN_COUNT    skip entries below this count (default 1)
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+GLOBAL_STORE = Path.home() / ".claude" / "mistakes.json"
+TOP_N = int(os.environ.get("MISTAKES_INJECT_TOP", "10"))
+MIN_COUNT = int(os.environ.get("MISTAKES_MIN_COUNT", "1"))
+
+
+def load_store(path: Path) -> list[dict]:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    items = data.get("mistakes", [])
+    return items if isinstance(items, list) else []
+
+
+def find_project_store(cwd: str) -> Path | None:
+    """Nearest .ana/mistakes.json walking up from cwd. Stop at home/root.
+
+    Never treat the global store (~/.claude/mistakes.json) as a project store.
+    """
+    try:
+        here = Path(cwd).resolve()
+    except (OSError, ValueError):
+        return None
+    home = Path.home().resolve()
+    global_resolved = GLOBAL_STORE.resolve()
+    for d in [here, *here.parents]:
+        if d == home or d == d.parent:
+            break
+        candidate = d / ".ana" / "mistakes.json"
+        if candidate.is_file() and candidate.resolve() != global_resolved:
+            return candidate
+    return None
+
+
+def read_cwd() -> str:
+    try:
+        hook_input = json.loads(sys.stdin.read() or "{}")
+    except (ValueError, OSError):
+        hook_input = {}
+    return hook_input.get("cwd") or os.getcwd()
+
+
+def main() -> None:
+    cwd = read_cwd()
+
+    merged: dict[str, dict] = {}
+    for store, origin in ((GLOBAL_STORE, "global"), (find_project_store(cwd), "repo")):
+        if not store:
+            continue
+        for m in load_store(store):
+            slug = m.get("slug")
+            text = (m.get("text") or "").strip()
+            if not slug or not text:
+                continue
+            count = m.get("count") or 1
+            if slug in merged:
+                merged[slug]["count"] += count
+                if origin not in merged[slug]["origins"]:
+                    merged[slug]["origins"].append(origin)
+            else:
+                merged[slug] = {"text": text, "count": count, "origins": [origin]}
+
+    entries = [e for e in merged.values() if e["count"] >= MIN_COUNT]
+    if not entries:
+        return
+    entries.sort(key=lambda e: (-e["count"], e["text"]))
+    entries = entries[:TOP_N]
+
+    print("Recurring mistakes from past sessions — do NOT repeat these (ranked by how often they have recurred):")
+    for e in entries:
+        tag = "+".join(e["origins"])
+        print(f"- [{tag} ×{e['count']}] {e['text']}")
+
+
+if __name__ == "__main__":
+    main()

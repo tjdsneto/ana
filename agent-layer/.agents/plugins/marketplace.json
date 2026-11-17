@@ -1,0 +1,20 @@
+{
+  "name": "ana",
+  "interface": {
+    "displayName": "Ana"
+  },
+  "plugins": [
+    {
+      "name": "ana-learnings",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

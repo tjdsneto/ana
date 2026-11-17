@@ -1,0 +1,623 @@
+#!/usr/bin/env python3
+"""
+extract-learnings - Extract trial-and-error learnings from Claude sessions.
+
+After each session, analyzes the transcript to find cases where Claude tried
+an approach that failed, iterated, and eventually found the correct solution.
+Appends cross-project learnings to ~/.claude/learnings.md.
+Project-scoped learnings go to <project>/.ana/learnings.md when that layer exists.
+
+Used as a Stop hook on Claude and Codex, and as Cursor's stop hook.
+Cursor lines use "role" where Claude uses "type". A Codex rollout is a
+session_meta line plus event_msg item_completed entries.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.request
+import urllib.error
+from datetime import datetime
+from pathlib import Path
+
+LEARNINGS_FILE = Path.home() / ".claude" / "learnings.md"
+PROCESSED_FILE = Path.home() / ".claude" / "learnings-processed.json"
+PROJECT_LEARNINGS_HEADER = (
+    "# Project learnings\n\n"
+    "Trial-and-error learnings for this project.\n"
+)
+AI_TIMEOUT = 45
+GEMINI_MODEL = "gemini-2.5-flash"
+CLAUDE_CLI_MODEL = "haiku"
+
+# Max characters of conversation to send for analysis
+MAX_CONVERSATION_CHARS = 40_000
+
+# Load Gemini API key
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if not GEMINI_API_KEY:
+    _env_file = Path.home() / ".config" / "claude-tools" / ".env"
+    if _env_file.exists():
+        for _line in _env_file.read_text().splitlines():
+            _line = _line.strip()
+            if _line.startswith("GEMINI_API_KEY="):
+                GEMINI_API_KEY = _line.split("=", 1)[1].strip().strip("'\"")
+                break
+
+
+EXTRACTION_PROMPT = """\
+Review this AI assistant conversation transcript. Identify cases where:
+1. The assistant tried an approach that didn't work (tool call failed, wrong output, error, wrong assumption)
+2. The assistant tried one or more alternatives
+3. Eventually found the correct solution
+
+Return ONLY a JSON array — no prose, no markdown, no code fence. Each element:
+{"slug": "<stable kebab-case id, 2-5 words, naming the gotcha>", "scope": "global" | "project", "text": "<one sentence: the wrong approach and why it failed, then the correct approach>"}
+
+- scope = "global" when the lesson applies to any project (CLI/shell/OS/tool/framework/API quirk, environment behavior). scope = "project" when it is specific to THIS codebase (named files, this repo's local setup or conventions).
+- slug MUST be stable and reusable, so the SAME recurring mistake gets the SAME slug across different sessions (e.g. "macos-sed-i-suffix", "ugrep-no-backslash-plus"). This is how repeats are counted — pick the slug as if you've seen this before.
+- Only non-obvious learnings: API quirks, CLI flag gotchas, framework behaviors, environment specifics, counterintuitive behaviors. Skip trivial typos, obvious syntax errors, or things any dev would know.
+- If there are no significant learnings in this conversation, return exactly: []
+
+Transcript:
+"""
+
+
+def log(msg: str):
+    print(msg, file=sys.stderr)
+
+
+def is_already_processed(session_id: str) -> bool:
+    """Return True if this session was already analyzed."""
+    if not PROCESSED_FILE.exists():
+        return False
+    try:
+        processed = json.loads(PROCESSED_FILE.read_text())
+        return session_id in processed
+    except (json.JSONDecodeError, OSError):
+        return False
+
+
+def mark_processed(session_id: str):
+    """Record this session as analyzed."""
+    try:
+        processed = []
+        if PROCESSED_FILE.exists():
+            try:
+                processed = json.loads(PROCESSED_FILE.read_text())
+            except (json.JSONDecodeError, OSError):
+                processed = []
+        if session_id not in processed:
+            processed.append(session_id)
+            # Keep only the last 500 to avoid unbounded growth
+            processed = processed[-500:]
+            PROCESSED_FILE.write_text(json.dumps(processed))
+    except OSError as e:
+        log(f"ERROR updating processed sessions: {e}")
+
+
+def _extract_text_from_content(content) -> str | None:
+    """Extract the first meaningful text from a message content field."""
+    import re
+    if isinstance(content, str):
+        text = re.sub(r"<[^>]+>", "", content).strip()
+        return text[:300] if text else None
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = re.sub(r"<[^>]+>", "", block.get("text", "")).strip()
+                if text:
+                    return text[:300]
+    return None
+
+
+def _text_blocks(content) -> str:
+    """Join text blocks from a Claude, Cursor, or Codex content list."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for block in content:
+        if isinstance(block, dict) and str(block.get("type", "")).lower() == "text":
+            parts.append(str(block.get("text") or ""))
+    return "\n".join(part for part in parts if part.strip()).strip()
+
+
+def _append_codex_event(payload: dict, messages: list[str], first_user: list[str | None]) -> None:
+    """Read one Codex item_completed event. The rollout's response_item lines repeat it."""
+    if payload.get("type") != "item_completed":
+        return
+    item = payload.get("item")
+    if not isinstance(item, dict):
+        return
+    kind = item.get("type")
+    if kind == "UserMessage":
+        text = _text_blocks(item.get("content"))
+        if not text:
+            return
+        if first_user[0] is None:
+            first_user[0] = text[:300]
+        messages.append(f"[USER]: {text[:1000]}")
+    elif kind == "AgentMessage":
+        text = _text_blocks(item.get("content"))
+        if text:
+            messages.append(f"[ASSISTANT]: {text[:1000]}")
+    elif kind == "CommandExecution":
+        command = item.get("command")
+        if isinstance(command, list):
+            command = " ".join(str(part) for part in command)
+        else:
+            command = str(command or "")
+        messages.append(f"[TOOL_CALL: exec] {command[:200]}")
+        output = str(item.get("aggregated_output") or "")
+        failed = item.get("exit_code") not in (0, None, "0") or item.get("status") in ("failed", "error")
+        prefix = "[TOOL_ERROR]" if failed else "[TOOL_RESULT]"
+        messages.append(f"{prefix}: {output[:500]}")
+    elif kind not in ("Reasoning", None):
+        name = item.get("name") or kind
+        messages.append(f"[TOOL_CALL: {name}] {json.dumps(item)[:200]}")
+
+
+def read_transcript(filepath: Path) -> tuple[str, str | None, str | None]:
+    """
+    Read transcript JSONL and return (condensed_conversation, session_title, first_user_message).
+    Extracts text messages and tool call outcomes for learning detection.
+    """
+    messages = []
+    custom_title = None
+    first_user_message = None
+    first_user_holder: list[str | None] = [None]
+    codex_rollout = False
+
+    try:
+        with open(filepath) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if d.get("type") == "custom-title":
+                    custom_title = d.get("customTitle")
+                    continue
+
+                if d.get("type") == "session_meta":
+                    codex_rollout = True
+                    continue
+
+                if codex_rollout:
+                    if d.get("type") == "event_msg":
+                        payload = d.get("payload")
+                        if isinstance(payload, dict):
+                            _append_codex_event(payload, messages, first_user_holder)
+                    continue
+
+                msg_type = d.get("type")
+                if msg_type not in ("user", "assistant"):
+                    msg_type = d.get("role")
+                if msg_type not in ("user", "assistant"):
+                    continue
+
+                msg = d.get("message", {})
+                if not isinstance(msg, dict):
+                    continue
+
+                content = msg.get("content", [])
+
+                # Capture first meaningful user message for context
+                if msg_type == "user" and first_user_message is None:
+                    text = _extract_text_from_content(content)
+                    if text:
+                        first_user_message = text
+
+                if isinstance(content, str):
+                    if content.strip():
+                        messages.append(f"[{msg_type.upper()}]: {content[:1000]}")
+                    continue
+
+                if not isinstance(content, list):
+                    continue
+
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type")
+
+                    if btype == "text":
+                        text = block.get("text", "").strip()
+                        if text:
+                            messages.append(f"[{msg_type.upper()}]: {text[:1000]}")
+
+                    elif btype == "tool_use":
+                        tool_name = block.get("name", "?")
+                        inp = block.get("input", {})
+                        inp_summary = json.dumps(inp)[:200] if inp else ""
+                        messages.append(f"[TOOL_CALL: {tool_name}] {inp_summary}")
+
+                    elif btype == "tool_result":
+                        result_content = block.get("content", "")
+                        if isinstance(result_content, list):
+                            result_text = " ".join(
+                                c.get("text", "") for c in result_content
+                                if isinstance(c, dict) and c.get("type") == "text"
+                            )
+                        else:
+                            result_text = str(result_content)
+                        is_error = block.get("is_error", False)
+                        prefix = "[TOOL_ERROR]" if is_error else "[TOOL_RESULT]"
+                        messages.append(f"{prefix}: {result_text[:500]}")
+
+    except OSError as e:
+        log(f"ERROR reading transcript: {e}")
+        return "", None, None
+
+    if first_user_message is None:
+        first_user_message = first_user_holder[0]
+
+    conversation = "\n".join(messages)
+    # Trim to max chars from the end (most recent / relevant part)
+    if len(conversation) > MAX_CONVERSATION_CHARS:
+        conversation = "...(truncated)...\n" + conversation[-MAX_CONVERSATION_CHARS:]
+
+    return conversation, custom_title, first_user_message
+
+
+def build_prompt(conversation: str, cwd: str | None, first_user_message: str | None) -> str:
+    context_lines = []
+    if cwd:
+        context_lines.append(f"Project directory: {cwd}")
+    if first_user_message:
+        context_lines.append(f"Task: {first_user_message}")
+    context = "\n".join(context_lines)
+    header = f"Session context:\n{context}\n\n" if context else ""
+    return EXTRACTION_PROMPT + header + conversation
+
+
+def call_gemini(conversation: str, cwd: str | None = None, first_user_message: str | None = None) -> str | None:
+    if not GEMINI_API_KEY:
+        return None
+
+    prompt = build_prompt(conversation, cwd, first_user_message)
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.2},
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=AI_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return None
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts:
+                return None
+            return parts[0].get("text", "").strip()
+    except Exception as e:
+        log(f"Gemini API failed: {e}")
+        return None
+
+
+def call_claude_cli(conversation: str, cwd: str | None = None, first_user_message: str | None = None) -> str | None:
+    import subprocess
+
+    prompt = build_prompt(conversation, cwd, first_user_message)
+    try:
+        result = subprocess.run(
+            [
+                "claude", "-p",
+                "--model", CLAUDE_CLI_MODEL,
+                "--no-session-persistence",
+                "--allowedTools", "none",
+            ],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=AI_TIMEOUT,
+            env={k: v for k, v in os.environ.items() if k != "CLAUDECODE"},
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception as e:
+        log(f"Claude CLI failed: {e}")
+    return None
+
+
+def extract_learnings(conversation: str, cwd: str | None = None, first_user_message: str | None = None) -> str | None:
+    """Call AI to extract learnings. Returns None if no learnings found."""
+    if not conversation.strip():
+        return None
+
+    # Try Gemini first (faster)
+    if GEMINI_API_KEY:
+        result = call_gemini(conversation, cwd, first_user_message)
+        if result:
+            if "NO_LEARNINGS" in result:
+                return None
+            return result
+
+    result = call_claude_cli(conversation, cwd, first_user_message)
+    if result:
+        if "NO_LEARNINGS" in result:
+            return None
+        return result
+
+    return None
+
+
+def append_learnings(
+    learnings: str,
+    session_title: str | None,
+    session_id: str,
+    cwd: str | None,
+    first_user_message: str | None,
+    dest: Path | None = None,
+    header: str | None = None,
+):
+    """Append one entry to a learnings log. Default dest is the global log."""
+    path = dest or LEARNINGS_FILE
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    title_line = session_title or session_id[:8]
+
+    entry = f"\n## {date_str} — {title_line}\n"
+    if cwd:
+        entry += f"**Project:** `{cwd}`\n"
+    if first_user_message:
+        entry += f"**Task:** {first_user_message}\n"
+    entry += "\n" + learnings.strip() + "\n"
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        new_file = not path.exists() or path.stat().st_size == 0
+        with open(path, "a") as f:
+            if new_file:
+                f.write(header or "# Claude Learnings Log\n\nTrial-and-error learnings extracted from Claude sessions.\n")
+            f.write(entry)
+        log(f"Learnings appended to {path}")
+    except OSError as e:
+        log(f"ERROR writing learnings: {e}")
+
+
+GLOBAL_MISTAKES_FILE = Path.home() / ".claude" / "mistakes.json"
+
+
+def parse_items(raw: str) -> list[dict] | None:
+    """Parse the AI output as a JSON array of {slug, scope, text}.
+
+    Returns the list (possibly empty) on success, or None if it is not valid
+    JSON — in which case the caller falls back to the free-text log behaviour.
+    """
+    if not raw:
+        return None
+    text = raw.strip()
+    # Tolerate a ```json ... ``` fence if the model adds one despite instructions.
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.rstrip().endswith("```"):
+            text = text.rsplit("```", 1)[0]
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(data, list):
+        return None
+    items = []
+    for d in data:
+        if not isinstance(d, dict):
+            continue
+        slug = (d.get("slug") or "").strip()
+        body = (d.get("text") or "").strip()
+        scope = d.get("scope") if d.get("scope") in ("global", "project") else "global"
+        if slug and body:
+            items.append({"slug": slug, "scope": scope, "text": body})
+    return items
+
+
+def render_markdown(items: list[dict]) -> str:
+    """Render structured items back into the learnings.md entry format."""
+    lines = []
+    for it in items:
+        tag = "project" if it["scope"] == "project" else "global"
+        lines.append(f"**[{it['slug']} · {tag}]**: {it['text']}")
+    return "\n".join(lines)
+
+
+def find_project_root(cwd: str | None) -> Path | None:
+    """Nearest ancestor of cwd that contains a .ana/ directory; None if none.
+
+    Stops before home, so a home directory is never treated as a project.
+    """
+    if not cwd:
+        return None
+    try:
+        here = Path(cwd).resolve()
+    except (OSError, ValueError):
+        return None
+    home = Path.home().resolve()
+    for d in [here, *here.parents]:
+        if d == home or d == d.parent:
+            break
+        if (d / ".ana").is_dir():
+            return d
+    return None
+
+
+def _upsert(items: list[dict], item: dict, project_name: str | None, today: str):
+    """Increment an existing slug's count, or append a new entry (count=1)."""
+    for m in items:
+        if m.get("slug") == item["slug"]:
+            m["count"] = (m.get("count") or 1) + 1
+            m["last_seen"] = today
+            m["text"] = item["text"]  # refresh wording to the latest phrasing
+            if project_name:
+                projs = m.setdefault("projects", [])
+                if project_name not in projs:
+                    projs.append(project_name)
+            return
+    items.append({
+        "slug": item["slug"],
+        "text": item["text"],
+        "count": 1,
+        "first_seen": today,
+        "last_seen": today,
+        "projects": [project_name] if project_name else [],
+    })
+
+
+def _write_store(path: Path, payload: dict):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+    except OSError as e:
+        log(f"ERROR writing mistakes store {path}: {e}")
+
+
+def _load_store(path: Path, default_scope: str) -> dict:
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, dict) and isinstance(data.get("mistakes"), list):
+                return data
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"version": 1, "scope": default_scope, "mistakes": []}
+
+
+def update_mistakes_stores(items: list[dict], cwd: str | None):
+    """Global mistakes always go to ~/.claude/mistakes.json. Project mistakes go
+    to <project>/.ana/mistakes.json ONLY if that store already exists (opt-in),
+    so this global Stop hook never litters repos that have not opted in."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    project_root = find_project_root(cwd)
+    project_name = project_root.name if project_root else None
+
+    global_items = [i for i in items if i["scope"] == "global"]
+    project_items = [i for i in items if i["scope"] == "project"]
+
+    if global_items:
+        store = _load_store(GLOBAL_MISTAKES_FILE, "global")
+        for it in global_items:
+            _upsert(store["mistakes"], it, project_name, today)
+        _write_store(GLOBAL_MISTAKES_FILE, store)
+
+    if project_items and project_root:
+        proj_path = project_root / ".ana" / "mistakes.json"
+        if proj_path.exists():  # opt-in gate
+            store = _load_store(proj_path, "project")
+            store.setdefault("project", project_name)
+            for it in project_items:
+                _upsert(store["mistakes"], it, None, today)
+            _write_store(proj_path, store)
+        else:
+            log(f"Project store not opted in ({proj_path} absent); {len(project_items)} project learning(s) kept in learnings.md only")
+
+
+def main():
+    try:
+        raw = sys.stdin.read()
+        hook_input = json.loads(raw)
+    except (json.JSONDecodeError, ValueError) as e:
+        log(f"ERROR: Could not parse hook stdin: {e}")
+        sys.exit(0)
+
+    # Prevent loops
+    if hook_input.get("stop_hook_active"):
+        sys.exit(0)
+
+    transcript_path = hook_input.get("transcript_path")
+    session_id = (
+        hook_input.get("session_id")
+        or hook_input.get("conversation_id")
+        or hook_input.get("thread_id")
+        or ""
+    )
+    if not isinstance(session_id, str):
+        session_id = str(session_id)
+    cwd = hook_input.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        roots = hook_input.get("workspace_roots")
+        if isinstance(roots, list) and roots and isinstance(roots[0], str):
+            cwd = roots[0]
+        else:
+            cwd = os.environ.get("CURSOR_PROJECT_DIR") or os.environ.get("CLAUDE_PROJECT_DIR")
+
+    # Skip if this session was already analyzed
+    if session_id and is_already_processed(session_id):
+        sys.exit(0)
+
+    if not transcript_path:
+        sys.exit(0)
+
+    filepath = Path(transcript_path).expanduser()
+    if not filepath.exists():
+        log(f"Transcript not found: {filepath}")
+        sys.exit(0)
+
+    conversation, session_title, first_user_message = read_transcript(filepath)
+
+    if not conversation.strip():
+        sys.exit(0)
+
+    # Only analyze if there were tool calls (indicates actual work was done)
+    if "[TOOL_CALL:" not in conversation:
+        sys.exit(0)
+
+    learnings = extract_learnings(conversation, cwd, first_user_message)
+    mark_processed(session_id)
+    if not learnings:
+        return
+
+    items = parse_items(learnings)
+    if items is None:
+        # Not parseable as JSON — preserve the old free-text log behaviour.
+        append_learnings(learnings, session_title, session_id, cwd, first_user_message)
+        return
+    if not items:
+        # Explicit empty array == no significant learnings.
+        return
+
+    global_items = [i for i in items if i["scope"] != "project"]
+    project_items = [i for i in items if i["scope"] == "project"]
+    if global_items:
+        append_learnings(
+            render_markdown(global_items), session_title, session_id, cwd, first_user_message
+        )
+    if project_items:
+        project_root = find_project_root(cwd)
+        project_log = project_root / ".ana" / "learnings.md" if project_root else None
+        if project_log is not None and (project_root / ".ana").is_dir():
+            append_learnings(
+                render_markdown(project_items),
+                session_title,
+                session_id,
+                cwd,
+                first_user_message,
+                dest=project_log,
+                header=PROJECT_LEARNINGS_HEADER,
+            )
+        else:
+            append_learnings(
+                render_markdown(project_items),
+                session_title,
+                session_id,
+                cwd,
+                first_user_message,
+            )
+    update_mistakes_stores(items, cwd)
+
+
+if __name__ == "__main__":
+    main()

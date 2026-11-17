@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""
+apply-ana-project - Mark the current project as an ana project.
+
+Idempotently sets up, for the current project:
+  - a .ana/ ana-project layer (settings.json + memory + learnings + mistakes)
+  - native auto-memory repointed to <root>/.ana/memory  (visible, personal)
+  - a project mistakes store at <root>/.ana/mistakes.json (opts the repo in
+    to the inject-mistakes / extract-learnings machinery)
+  - a SessionStart hook running inject-mistakes
+
+Two layouts, auto-detected (override with --layout):
+  wrapper : cwd is NOT inside a git repo (e.g. a personal dir that holds the
+            versioned repo as a subdir). Config goes in
+            .claude/settings.json; files are naturally unversioned.
+  local   : cwd IS a git repo. Config goes in .claude/settings.local.json
+            (Claude Code gitignores it), and the personal memory/mistakes
+            files are added to the repo .gitignore so they stay yours.
+
+Never touches CLAUDE.md. Safe to re-run.
+
+Usage:
+  apply-ana-project [--root DIR] [--layout auto|wrapper|local|wrapper-git] [--dry-run]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+INJECT_SCRIPT = str(Path(__file__).resolve().parent / "inject-mistakes")
+
+
+def detect_layout(cwd: Path) -> tuple[str, Path]:
+    """Return (layout, project_root)."""
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "wrapper", cwd
+    if top.returncode == 0 and top.stdout.strip():
+        return "local", Path(top.stdout.strip())
+    return "wrapper", cwd
+
+
+def ensure_mistakes_store(path: Path, project_name: str, actions: list[str], dry: bool):
+    if path.exists():
+        return
+    payload = {"version": 1, "scope": "project", "project": project_name, "mistakes": []}
+    actions.append(f"create {path}")
+    if not dry:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def ensure_learnings(path: Path, actions: list[str], dry: bool):
+    if path.exists():
+        return
+    actions.append(f"create {path}")
+    if not dry:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# Project learnings\n\nTrial-and-error learnings for this project.\n"
+        )
+
+
+def ensure_memory_dir(path: Path, actions: list[str], dry: bool):
+    if path.is_dir():
+        return
+    actions.append(f"create dir {path}/")
+    if not dry:
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def merge_settings(settings_path: Path, mem_dir: Path, actions: list[str], dry: bool):
+    """Set autoMemoryDirectory + ensure one SessionStart inject-mistakes hook,
+    without clobbering other keys or hooks."""
+    data = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            actions.append(f"WARNING: {settings_path} unparseable; leaving untouched")
+            return
+    if not isinstance(data, dict):
+        actions.append(f"WARNING: {settings_path} is not an object; leaving untouched")
+        return
+
+    changed = False
+
+    abs_mem = str(mem_dir.resolve())
+    if data.get("autoMemoryDirectory") != abs_mem:
+        data["autoMemoryDirectory"] = abs_mem
+        changed = True
+        actions.append(f"set autoMemoryDirectory = {abs_mem} in {settings_path.name}")
+
+    hooks = data.setdefault("hooks", {})
+    session_start = hooks.setdefault("SessionStart", [])
+    already = any(
+        isinstance(grp, dict)
+        and any(
+            isinstance(h, dict) and str(h.get("command", "")).endswith("inject-mistakes")
+            for h in grp.get("hooks", [])
+        )
+        for grp in session_start
+    )
+    if not already:
+        session_start.append({"hooks": [{"type": "command", "command": INJECT_SCRIPT}]})
+        changed = True
+        actions.append(f"add SessionStart inject-mistakes hook in {settings_path.name}")
+
+    if changed and not dry:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def ensure_gitignore(root: Path, entries: list[str], actions: list[str], dry: bool):
+    gi = root / ".gitignore"
+    existing = gi.read_text().splitlines() if gi.exists() else []
+    missing = [e for e in entries if e not in existing]
+    if not missing:
+        return
+    actions.append(f"add to {gi}: {', '.join(missing)}")
+    if dry:
+        return
+    block = ""
+    if existing and existing[-1].strip() != "":
+        block += "\n"
+    block += "# ana project layer (not versioned)\n" + "\n".join(missing) + "\n"
+    with open(gi, "a") as f:
+        f.write(block)
+
+
+CLAUDE_STUB = """\
+# Personal project layer
+
+This directory is the personal layer for the project in the child repo below it.
+It is NOT the company/versioned repo. Keep company code in the child repo; keep
+personal project-management and memory here.
+
+## Ana project
+
+- `.ana/` — this project is an ana project. `.ana/settings.json` holds its properties.
+- `.ana/memory/` — auto-memory (via `autoMemoryDirectory`). `MEMORY.md` is the
+  index loaded each session; one file per fact. Write durable project facts here,
+  not in the versioned repo's CLAUDE.md.
+- `.ana/learnings.md` — trial-and-error learnings for this project.
+- `.ana/mistakes.json` — recurring-mistake registry; repeats are counted and the
+  most frequent are injected at session start by the `inject-mistakes` hook, and
+  `extract-learnings` appends to it automatically at session end.
+- `tmp/` — scratch (gitignored).
+
+Personal and machine-local. The child repo keeps its own CLAUDE.md untouched.
+"""
+
+
+def migrate_settings_name(ana_dir: Path, settings: Path, actions: list[str], dry: bool):
+    old = ana_dir / "config.json"
+    if old.is_file() and not settings.exists():
+        actions.append(f"move {old} -> {settings}")
+        if not dry:
+            old.rename(settings)
+
+
+def ensure_settings(path: Path, actions: list[str], dry: bool):
+    if path.exists():
+        return
+    payload = {"version": 1}
+    actions.append(f"create {path}")
+    if not dry:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def migrate_legacy(root: Path, mem_dir: Path, mistakes: Path, actions: list[str], dry: bool):
+    """Move a pre-.ana memory/mistakes store into .ana when the new paths are empty."""
+    old_mistakes = root / ".claude" / "mistakes.json"
+    if old_mistakes.is_file() and not mistakes.exists():
+        actions.append(f"move {old_mistakes} -> {mistakes}")
+        if not dry:
+            mistakes.parent.mkdir(parents=True, exist_ok=True)
+            old_mistakes.rename(mistakes)
+
+    old_mem = root / ".claude" / "memory"
+    if not old_mem.is_dir():
+        return
+    try:
+        children = list(old_mem.iterdir())
+    except OSError:
+        return
+    if not children:
+        return
+    if not dry:
+        mem_dir.mkdir(parents=True, exist_ok=True)
+    for child in children:
+        dest = mem_dir / child.name
+        if dest.exists():
+            continue
+        actions.append(f"move {child} -> {dest}")
+        if not dry:
+            child.rename(dest)
+
+
+def ensure_tmp(root: Path, actions: list[str], dry: bool):
+    tmp = root / "tmp"
+    if tmp.is_dir():
+        return
+    actions.append(f"create dir {tmp}/")
+    if not dry:
+        tmp.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_claude_stub(root: Path, actions: list[str], dry: bool):
+    """Scaffold a personal CLAUDE.md — only in a personal-root layout, never
+    overwriting an existing one (so a versioned CLAUDE.md is never touched)."""
+    path = root / "CLAUDE.md"
+    if path.exists():
+        return
+    actions.append(f"create {path} (personal stub)")
+    if not dry:
+        path.write_text(CLAUDE_STUB)
+
+
+def git_init(root: Path, actions: list[str], dry: bool):
+    if (root / ".git").exists():
+        return
+    actions.append(f"git init {root}")
+    if dry:
+        return
+    try:
+        subprocess.run(["git", "-C", str(root), "init", "-q"], check=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as e:
+        actions.append(f"WARNING: git init failed: {e}")
+
+
+def detect_child_repos(root: Path) -> list[str]:
+    """Immediate subdirectories that are their own git repos (have .git)."""
+    children = []
+    try:
+        for d in sorted(root.iterdir()):
+            if d.is_dir() and (d / ".git").exists():
+                children.append(d.name + "/")
+    except OSError:
+        pass
+    return children
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--layout", choices=["auto", "wrapper", "wrapper-git", "local"], default="auto")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    cwd = Path(args.root).resolve()
+    if args.layout == "auto":
+        layout, root = detect_layout(cwd)
+    else:
+        layout = args.layout
+        _, detected = detect_layout(cwd)
+        root = detected if layout == "local" else cwd
+
+    ana_dir = root / ".ana"
+    mem_dir = ana_dir / "memory"
+    mistakes = ana_dir / "mistakes.json"
+    learnings = ana_dir / "learnings.md"
+    settings = ana_dir / "settings.json"
+    claude_dir = root / ".claude"
+    settings_name = "settings.local.json" if layout == "local" else "settings.json"
+    settings_path = claude_dir / settings_name
+
+    actions: list[str] = []
+    will_move_mistakes = (root / ".claude" / "mistakes.json").is_file() and not mistakes.exists()
+    migrate_legacy(root, mem_dir, mistakes, actions, args.dry_run)
+    migrate_settings_name(ana_dir, settings, actions, args.dry_run)
+    ensure_settings(settings, actions, args.dry_run)
+    ensure_memory_dir(mem_dir, actions, args.dry_run)
+    if not will_move_mistakes:
+        ensure_mistakes_store(mistakes, root.name, actions, args.dry_run)
+    ensure_learnings(learnings, actions, args.dry_run)
+    merge_settings(settings_path, mem_dir, actions, args.dry_run)
+    ensure_tmp(root, actions, args.dry_run)
+    if layout in ("wrapper", "wrapper-git"):
+        ensure_claude_stub(root, actions, args.dry_run)
+
+    if layout == "local":
+        # Company repo: keep personal files out of its history.
+        ensure_gitignore(root, [".ana/", "tmp/"], actions, args.dry_run)
+    elif layout == "wrapper-git":
+        # Personal wrapper IS a git repo (yours). Version memory/mistakes here;
+        # ignore scratch and each child repo so nested company repos stay decoupled.
+        git_init(root, actions, args.dry_run)
+        children = detect_child_repos(root)
+        ensure_gitignore(root, children + ["tmp/"], actions, args.dry_run)
+
+    print(f"layout: {layout}")
+    print(f"project root: {root}")
+    if not actions:
+        print("already applied — nothing to do")
+    else:
+        prefix = "WOULD " if args.dry_run else ""
+        for a in actions:
+            print(f"  {prefix}{a}")
+
+    print("\nNote: personal instructions do NOT go in a versioned company CLAUDE.md.")
+    if layout == "local":
+        print("      put them in ~/.claude/CLAUDE.md (global).")
+    else:
+        print(f"      put them in {root}/CLAUDE.md (personal) or ~/.claude/CLAUDE.md.")
+    if layout == "wrapper-git":
+        child_note = ", ".join(detect_child_repos(root)) or "(none detected yet — add the company repo dir to .gitignore before `git add`)"
+        print(f"\n  Local git only. Child repos ignored: {child_note}")
+        print("  Remote is NOT set up here. Pushing company-derived memory to a personal")
+        print("  GitHub account is a data-governance decision — clear it under AM SOP first,")
+        print("  then add a remote manually (gh repo create --private / git remote add / push).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

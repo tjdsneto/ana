@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Enable the learnings plugins. The skill text lives once, in skills/ana-project.
+# Each plugin points at that directory. Cursor's install copy materializes it,
+# because Cursor will not follow a symlink out of ~/.cursor/plugins/local.
+#
+#   ./agent-layer/install
+#   ./agent-layer/install --dry-run
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+CANON="$ROOT/skills/ana-project/SKILL.md"
+
+DRY_RUN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        *) echo "unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
+
+if [ ! -f "$CANON" ]; then
+    echo "missing skill: $CANON" >&2
+    exit 1
+fi
+
+echo "plugins:"
+plugin_args=()
+if [ "$DRY_RUN" = true ]; then
+    plugin_args+=(--dry-run)
+fi
+python3 "$ROOT/scripts/install-plugins" "${plugin_args[@]}"

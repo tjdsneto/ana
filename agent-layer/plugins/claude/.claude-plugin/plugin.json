@@ -1,0 +1,5 @@
+{
+  "name": "ana-learnings",
+  "version": "1.0.0",
+  "description": "When a session stops, record the lesson in the learnings file and count it in the mistakes file."
+}
