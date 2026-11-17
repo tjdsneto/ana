@@ -2,7 +2,7 @@
 	"name": "ana",
 	"private": true,
 	"type": "module",
-	"description": "AnA — autonomous-agent engine. Generic autonomy loop (forked from the am-videos production-engine); runs typed task DAGs with a review/approval gate. No brand/product names in code (see CLAUDE.md).",
+	"description": "AnA — autonomous-agent engine. Generic autonomy loop; runs typed task DAGs with a review/approval gate. No brand/product names in code (see CLAUDE.md).",
 	"workspaces": [
 		"shared",
 		"core/services",

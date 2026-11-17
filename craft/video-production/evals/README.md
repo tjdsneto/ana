@@ -2,7 +2,7 @@
 
 The review steps baked into the engine (the `review-*` skills + `final-review`) are **review steps, not evals**: an LLM says pass/revise, but nothing measures whether that verdict tracks real quality. This directory is the first **eval** — the harness that holds a graded reference corpus and measures whether the graders actually tell good from bad.
 
-Why this exists: the full diagnosis (why the baked-in reviews haven't lifted output quality, and the E1–E5 plan) is in `../../../../tmp/evals-analysis/eval-system-design.md`. E1 is step one — build it before tightening anything, because a stricter but un-calibrated grader just fails good work too.
+Why this exists: the baked-in reviews have not lifted output quality. E1 is step one — build it before tightening anything, because a stricter but un-calibrated grader just fails good work too.
 
 ## What's here
 
@@ -21,7 +21,7 @@ python3 craft/video-production/evals/run.py --fake
 # prove the harness catches a bad grader (force every verdict to pass → the known-bad becomes a false-pass):
 python3 craft/video-production/evals/run.py --fake --fake-verdict pass
 # real calibration (needs the videos staged under --videos-root + a `claude` binary):
-python3 craft/video-production/evals/run.py --videos-root /path/to/am-videos/research --model claude-opus-5-5
+python3 craft/video-production/evals/run.py --videos-root /path/to/research --model claude-opus-5-5
 ```
 
 ## The headline metric: false-pass rate

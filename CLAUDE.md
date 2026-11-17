@@ -1,7 +1,8 @@
 # Project understanding — autonomous video-production engine (PoC)
 
-Read before working anywhere in this repo. This is a **self-contained git repo** nested under
-`am-videos/` on purpose: the future product repo. Run git here, commit here.
+Read before working anywhere in this repo. This is a **self-contained git repo**. It keeps the
+history it started with, and it has no remote. Run git here, commit here. Do not add a remote
+that fetches from or pushes to another engine repo.
 
 ## Naming rule — READ FIRST
 

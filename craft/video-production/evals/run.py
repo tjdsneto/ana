@@ -26,8 +26,8 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# research/ lives at the am-videos project root: evals -> video-production -> craft -> repo -> am-videos.
-DEFAULT_VIDEOS_ROOT = HERE.parents[3].parent / "research"
+# Stay inside this repo. evals -> video-production -> craft -> repo root.
+DEFAULT_VIDEOS_ROOT = HERE.parents[2] / "research"
 CRAFT_BAR = HERE.parent / ".claude" / "references" / "CRAFT-BAR.md"
 
 

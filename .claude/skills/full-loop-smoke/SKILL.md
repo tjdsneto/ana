@@ -62,7 +62,7 @@ docker stop smoke-fake-worker && docker compose start engine-worker
 
 A stranded production stays in the DB `in-progress` forever (the worker only re-claims `pending` nodes — project issue log 0001). It's harmless (never re-claimed), but it won't resume; start a fresh one rather than `--production`-resuming a stranded id.
 
-## Known walls (project issue log, at the am-videos root)
+## Known walls
 
 - **0001** — a dispatch that throws strands the node `in-progress`, no error surfaced; the whole production hangs.
 - **0002** — the fake subagent can't drive planner fan-out, so the $0 path can't finish a `video-project`.
