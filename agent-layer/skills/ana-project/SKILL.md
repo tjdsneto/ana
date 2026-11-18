@@ -44,9 +44,34 @@ A lesson about this codebase goes in `.ana/learnings.md`. A lesson that applies 
 
 The ranked counts constrain the work. Do the task the way the highest entry's `text` says. Open the learning with the same slug when you need the story of what was tried.
 
+## Todo, done, and daily notes
+
+These files are separate from the session-start read. Open one when an occasion below applies. Each file is created on the first write.
+
+`.ana/todo.md` is the personal open list. It stays even when the project has a GitHub issue tracker. A GitHub issue can be for other people. A todo is one we manage ourselves. Each line is the day it was added, the item, and why. Take the day from `date +%Y-%m-%d`. Never infer it. A line may link a ticket. The link does not replace the line. The same wording already on the list is not added again. Adding a line does not write a daily note.
+
+Groups are `##` headings. Use one when a split helps, and name it for the split (priority, area, or another name). When groups exist, the line under `# Todo` is the count of each group, updated in the same edit that adds, moves, or removes a line. A flat list has no count line. Put a new item in the group that was named, or the group it belongs to. Leave a flat list flat until a split is useful. After the last item is removed, keep the `# Todo` heading.
+
+`.ana/done.md` is finished todo items. Put the newest line directly under the heading, above older lines. Leave older lines as they are. A GitHub issue that was never a todo does not get a line. A todo that linked an issue still gets a line, and the link stays on it.
+
+`.ana/notes/YYYY-MM-DD.md` is the day's record. The file name and the heading are that date, from `date +%Y-%m-%d`. New bullets go at the end. Worth a line: a decision, an outcome, a blocker, a pick, or a finish.
+
+Suggest a GitHub issue when `origin` is a GitHub remote and someone else might need the ticket. File it only after a yes, then add the URL to the todo line. When the item needs more than a line and should stay personal, write `.ana/issues/NNNN-short-kebab.md`. Four digits. The next number is one higher than the highest `NNNN` already there, including `closed-` and `deferred-` files. Keep `index.md` in the same edit: Open, Deferred, and Closed tables with number, title, severity, and area. Body fields, omitting any that do not apply: Summary, Severity, Area, Repro, Root cause, Impact, Suggested fix, Status, Found via. Summary is the why. Found via is the source. Status is `open`, `in-progress`, `deferred`, or `closed`. Close by renaming to `closed-NNNN-….md`, setting Status closed, and moving the index row. Defer by renaming to `deferred-NNNN-….md`, setting Status deferred with the reason and what would un-defer it, and moving the index row. Reopen the same work by renaming the file back and adding a todo line. Personal notes stay in `.ana/`.
+
+| Occasion | What to do |
+|---|---|
+| Work is named and is not being done now | Add one dated line to `todo.md`, with why. Refresh the count line when groups exist. Suggest GitHub, or write `.ana/issues/`, only under the rules above |
+| A todo is picked | Leave the line in its group. Append `- Picked: item` to today's note. If that Picked line is already there today, do not add another. A local ticket's status becomes `in-progress` |
+| A todo is finished | Remove the line and refresh the count. Insert the dated line at the top of `done.md`. Append `- Done: item` to today's note. Close a linked local ticket, or run `gh issue close` on a linked GitHub issue. The todo still goes to `done.md` |
+| Work finishes that was never a todo | Append one factual line to today's note. Leave `done.md` unchanged |
+| A decision, outcome, or blocker is worth keeping | Append one factual line to today's note |
+| A todo is consciously not-now | Remove the line. Append `- Deferred: item — why` to today's note. Defer a local ticket with the `deferred-` rename |
+
+Read `todo.md` before changing it, when choosing work, or when asked what is open. Read today's note when continuing today's work, or when asked what happened today. Read another day only when that day is the subject. Read `done.md` before inserting a finish, or when asked what we finished. Read a linked issue when the line has one, or the edit needs the body. Read `issues/index.md` when filing, closing, or deferring a local ticket.
+
 ## What introducing `.ana/` creates
 
-- `.ana/settings.json` — `{"version": 1}` until real properties exist. A to-do list and other ana-project behavior will be properties here. Do not invent keys.
+- `.ana/settings.json` — `{"version": 1}` until real properties exist. Do not invent keys.
 - `.ana/learnings.md`
 - `.ana/mistakes.json` — creating it opts the project in. The Claude stop hook then writes project-scoped mistakes here.
 - `.ana/memory/` — Claude's auto-memory, via `autoMemoryDirectory` in `.claude/settings.json` or `.claude/settings.local.json`. Claude does not discover `.ana/` by itself.

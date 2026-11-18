@@ -152,6 +152,10 @@ personal project-management and memory here.
 - `.ana/mistakes.json` — recurring-mistake registry; repeats are counted and the
   most frequent are injected at session start by the `inject-mistakes` hook, and
   `extract-learnings` appends to it automatically at session end.
+- `.ana/todo.md` — personal open work. Created on first use. Each line has the day it was added and why.
+- `.ana/done.md` — finished todo items, newest first. Created on first use.
+- `.ana/notes/` — one `YYYY-MM-DD.md` per day. Created on first use.
+- `.ana/issues/` — a personal ticket that needs more than a line. Created on first use.
 - `tmp/` — scratch (gitignored).
 
 Personal and machine-local. The child repo keeps its own CLAUDE.md untouched.

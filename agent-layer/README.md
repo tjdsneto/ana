@@ -20,6 +20,6 @@ The video engine in this repo does not read `.ana`.
 
 `install` is the publisher. Run it from this repo.
 
-`.ana/settings.json` holds properties for that project. Learnings and mistakes for the project live beside it. A to-do list and further behavior are future properties, not separate protocols.
+`.ana/settings.json` holds properties for that project. Learnings and mistakes for the project live beside it. Personal open work is `.ana/todo.md`, finished todos are `.ana/done.md`, the day's record is `.ana/notes/YYYY-MM-DD.md`, and a personal ticket that needs more than a line is `.ana/issues/`. Those files are created on first use.
 
 The naming rule in this repo's `CLAUDE.md` does not apply inside `agent-layer/`. This folder is allowed to say `.ana`.
